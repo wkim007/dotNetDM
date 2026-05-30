@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const CARD_WIDTH = 280;
 const CARD_MIN_WIDTH = 220;
@@ -142,11 +142,47 @@ export default function DiagramCanvas({
   onSelectEntity,
   onMoveEntity,
   onResizeEntity,
-  onDeleteEntity
+  onDeleteEntity,
+  onViewportChange,
+  viewResetToken
 }) {
   const entityMap = Object.fromEntries(entities.map((entity) => [entity.id, entity]));
   const interactionState = useRef(null);
+  const canvasRef = useRef(null);
   const [draggingId, setDraggingId] = useState(null);
+
+  useEffect(() => {
+    if (!canvasRef.current || !onViewportChange) {
+      return undefined;
+    }
+
+    const element = canvasRef.current;
+    const updateViewport = () => {
+      onViewportChange({
+        width: element.clientWidth,
+        height: element.clientHeight
+      });
+    };
+
+    updateViewport();
+
+    const observer = new ResizeObserver(updateViewport);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [onViewportChange]);
+
+  useEffect(() => {
+    if (!canvasRef.current) {
+      return;
+    }
+
+    canvasRef.current.scrollTo({
+      left: 0,
+      top: 0,
+      behavior: "smooth"
+    });
+  }, [viewResetToken]);
 
   function handlePointerDown(event, entityId) {
     event.preventDefault();
@@ -213,6 +249,7 @@ export default function DiagramCanvas({
 
   return (
     <section
+      ref={canvasRef}
       className={`diagram-canvas ${draggingId ? "dragging" : ""}`}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

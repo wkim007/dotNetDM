@@ -10,7 +10,12 @@ function SelectField({ label, value }) {
   );
 }
 
-export default function LeftSidebar({ project, entityCount, relationshipCount }) {
+export default function LeftSidebar({
+  project,
+  entityCount,
+  relationshipCount,
+  onAutoLayout
+}) {
   return (
     <aside className="left-sidebar">
       <h1>{project.name}</h1>
@@ -33,6 +38,10 @@ export default function LeftSidebar({ project, entityCount, relationshipCount })
             <span>Links</span>
           </div>
         </div>
+
+        <button type="button" className="secondary-button full-width-button" onClick={onAutoLayout}>
+          Auto-layout
+        </button>
 
         <label className="field-group">
           <span>Definition</span>

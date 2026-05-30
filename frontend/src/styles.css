@@ -238,6 +238,11 @@ body.panel-resizing {
   font-weight: 600;
 }
 
+.full-width-button {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
 .subtle-button {
   background: #273548;
   padding: 11px 14px;

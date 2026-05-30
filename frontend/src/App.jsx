@@ -12,6 +12,7 @@ const DEFAULT_LEFT_PANEL_WIDTH = 290;
 const DEFAULT_RIGHT_PANEL_WIDTH = 330;
 const MIN_PANEL_WIDTH = 220;
 const MAX_PANEL_WIDTH = 520;
+const DEFAULT_VIEWPORT = { width: 1200, height: 900 };
 
 function readLocalModel() {
   try {
@@ -47,6 +48,8 @@ export default function App() {
     left: savedPanelWidths?.left ?? DEFAULT_LEFT_PANEL_WIDTH,
     right: savedPanelWidths?.right ?? DEFAULT_RIGHT_PANEL_WIDTH
   }));
+  const [diagramViewport, setDiagramViewport] = useState(DEFAULT_VIEWPORT);
+  const [viewResetToken, setViewResetToken] = useState(0);
   const [providers, setProviders] = useState([
     { id: "sqlserver" },
     { id: "postgresql" },
@@ -138,6 +141,95 @@ export default function App() {
     return JSON.parse(JSON.stringify(sampleModel));
   }
 
+  function getEntitySize(entity) {
+    const width = entity.width ?? 280;
+    const height = Math.max(entity.height ?? 0, 50 + entity.fields.length * 33);
+    return { width, height };
+  }
+
+  function buildAutoLayout(entities, relationships, viewport) {
+    if (entities.length === 0) {
+      return entities;
+    }
+
+    const padding = 48;
+    const gapX = 42;
+    const gapY = 42;
+    const usableWidth = Math.max(viewport.width - padding * 2, 480);
+    const usableHeight = Math.max(viewport.height - padding * 2, 480);
+    const orderedEntities = [...entities].sort((left, right) => {
+      const leftDegree = relationships.filter(
+        (relationship) =>
+          relationship.sourceEntityId === left.id || relationship.targetEntityId === left.id
+      ).length;
+      const rightDegree = relationships.filter(
+        (relationship) =>
+          relationship.sourceEntityId === right.id || relationship.targetEntityId === right.id
+      ).length;
+
+      if (rightDegree !== leftDegree) {
+        return rightDegree - leftDegree;
+      }
+
+      return left.physicalName.localeCompare(right.physicalName);
+    });
+    const averageCardWidth =
+      orderedEntities.reduce((sum, entity) => sum + getEntitySize(entity).width, 0) / orderedEntities.length;
+    const aspectRatio = usableWidth / usableHeight;
+    const estimatedColumns = Math.round(Math.sqrt(orderedEntities.length * aspectRatio));
+    const maxColumnsByWidth = Math.max(1, Math.floor((usableWidth + gapX) / (averageCardWidth + gapX)));
+    const columnCount = Math.max(2, Math.min(orderedEntities.length, maxColumnsByWidth, estimatedColumns || 2));
+    const columns = Array.from({ length: columnCount }, () => ({
+      items: [],
+      height: 0,
+      width: 220
+    }));
+
+    orderedEntities.forEach((entity, index) => {
+      const targetColumn = columns.reduce((bestIndex, column, columnIndex) => {
+        if (column.height < columns[bestIndex].height) {
+          return columnIndex;
+        }
+
+        return bestIndex;
+      }, index % columnCount);
+
+      const size = getEntitySize(entity);
+      columns[targetColumn].items.push(entity);
+      columns[targetColumn].height += (columns[targetColumn].items.length > 1 ? gapY : 0) + size.height;
+      columns[targetColumn].width = Math.max(columns[targetColumn].width, size.width);
+    });
+
+    const totalWidth =
+      columns.reduce((sum, column) => sum + column.width, 0) + gapX * Math.max(0, columns.length - 1);
+    const maxColumnHeight = Math.max(...columns.map((column) => column.height));
+    const horizontalOffset = padding + Math.max(0, Math.floor((usableWidth - totalWidth) / 2));
+    const verticalOffset = padding;
+    const positionedEntities = [];
+    let currentX = horizontalOffset;
+
+    columns.forEach((column, columnIndex) => {
+      const staggerOffset = columnIndex % 2 === 0 ? 0 : Math.min(36, Math.floor(gapY * 0.45));
+      let currentY = verticalOffset + staggerOffset;
+
+      column.items.forEach((entity) => {
+        positionedEntities.push({
+          ...entity,
+          x: currentX,
+          y: currentY
+        });
+
+        currentY += getEntitySize(entity).height + gapY;
+      });
+
+      currentX += column.width + gapX;
+    });
+
+    return orderedEntities.map(
+      (entity) => positionedEntities.find((positionedEntity) => positionedEntity.id === entity.id) ?? entity
+    );
+  }
+
   async function loadProviders() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/modeler/providers`);
@@ -174,7 +266,17 @@ export default function App() {
     setModel(freshSample);
     setSelectedEntityId(freshSample.entities[0]?.id ?? null);
     window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(freshSample));
+    setViewResetToken((current) => current + 1);
     setStatus("Reloaded the original local sample model.");
+  }
+
+  function handleAutoLayout() {
+    setModel((current) => ({
+      ...current,
+      entities: buildAutoLayout(current.entities, current.relationships, diagramViewport)
+    }));
+    setViewResetToken((current) => current + 1);
+    setStatus("Re-laid out entities to fit the current diagram view.");
   }
 
   function updateSelectedEntity(update) {
@@ -400,6 +502,7 @@ export default function App() {
         project={model.project}
         entityCount={model.entities.length}
         relationshipCount={model.relationships.length}
+        onAutoLayout={handleAutoLayout}
       />
 
       {isDesktopLayout ? (
@@ -427,6 +530,8 @@ export default function App() {
           onMoveEntity={handleMoveEntity}
           onResizeEntity={handleResizeEntity}
           onDeleteEntity={handleDeleteEntityById}
+          onViewportChange={setDiagramViewport}
+          viewResetToken={viewResetToken}
         />
       </main>
 
