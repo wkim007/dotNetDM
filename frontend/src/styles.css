@@ -41,12 +41,34 @@ body {
   min-height: 100vh;
 }
 
+body.panel-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
 .app-shell {
   display: grid;
-  grid-template-columns: 290px minmax(760px, 1fr) 330px;
   min-height: 100vh;
   gap: 14px;
   padding: 14px;
+}
+
+.panel-resizer {
+  position: relative;
+  border-radius: 999px;
+  background: rgba(68, 92, 118, 0.18);
+  cursor: col-resize;
+}
+
+.panel-resizer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 4px;
+  height: 72px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(133, 160, 191, 0.18), rgba(133, 160, 191, 0.6), rgba(133, 160, 191, 0.18));
 }
 
 .left-sidebar,
@@ -342,6 +364,7 @@ body {
   overflow: hidden;
   cursor: grab;
   touch-action: none;
+  min-height: 120px;
 }
 
 .entity-card.selected {
@@ -363,13 +386,41 @@ body {
 }
 
 .entity-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
   color: #8ea3bc;
   font-size: 1.4rem;
   line-height: 1;
+  cursor: pointer;
+}
+
+.entity-close:hover {
+  background: rgba(142, 163, 188, 0.12);
+  color: #d9e7f7;
 }
 
 .entity-fields {
   padding: 10px 12px 16px;
+}
+
+.entity-resize-handle {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 4px;
+  background:
+    linear-gradient(135deg, transparent 38%, rgba(201, 219, 241, 0.8) 40%, rgba(201, 219, 241, 0.8) 48%, transparent 50%),
+    linear-gradient(135deg, transparent 58%, rgba(201, 219, 241, 0.55) 60%, rgba(201, 219, 241, 0.55) 68%, transparent 70%);
+  cursor: nwse-resize;
 }
 
 .entity-field-row {
@@ -417,16 +468,6 @@ body {
 .field-badge.col {
   background: rgba(155, 177, 202, 0.14);
   color: #d0dbe9;
-}
-
-.resize-corner {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  background: linear-gradient(180deg, #d5af4d, #a57a22);
 }
 
 .right-inspector {
@@ -494,6 +535,10 @@ body {
     grid-template-columns: 280px minmax(0, 1fr);
   }
 
+  .panel-resizer:last-of-type {
+    display: none;
+  }
+
   .right-inspector {
     grid-column: 1 / -1;
   }
@@ -502,6 +547,10 @@ body {
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
+  }
+
+  .panel-resizer {
+    display: none;
   }
 
   .left-sidebar,
