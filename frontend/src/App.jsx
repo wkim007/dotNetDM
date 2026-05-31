@@ -40,10 +40,41 @@ function readPanelWidths() {
   }
 }
 
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeModel(rawModel) {
+  const baseModel = clone(rawModel ?? sampleModel);
+
+  if (Array.isArray(baseModel.diagrams) && baseModel.diagrams.length > 0) {
+    return {
+      ...baseModel,
+      activeDiagramId: baseModel.activeDiagramId ?? baseModel.diagrams[0].id
+    };
+  }
+
+  const diagramId = "er-diagram-1";
+
+  return {
+    project: baseModel.project ?? sampleModel.project,
+    activeDiagramId: diagramId,
+    diagrams: [
+      {
+        id: diagramId,
+        name: "ER_Diagram_1",
+        entities: baseModel.entities ?? [],
+        relationships: baseModel.relationships ?? []
+      }
+    ]
+  };
+}
+
 export default function App() {
   const savedPanelWidths = readPanelWidths();
-  const [model, setModel] = useState(() => readLocalModel() ?? sampleModel);
-  const [selectedEntityId, setSelectedEntityId] = useState(() => (readLocalModel() ?? sampleModel).entities[0]?.id ?? null);
+  const initialModel = normalizeModel(readLocalModel() ?? sampleModel);
+  const [model, setModel] = useState(initialModel);
+  const [selectedEntityId, setSelectedEntityId] = useState(() => initialModel.diagrams[0]?.entities[0]?.id ?? null);
   const [panelWidths, setPanelWidths] = useState(() => ({
     left: savedPanelWidths?.left ?? DEFAULT_LEFT_PANEL_WIDTH,
     right: savedPanelWidths?.right ?? DEFAULT_RIGHT_PANEL_WIDTH
@@ -63,10 +94,23 @@ export default function App() {
     databaseName: ""
   });
   const resizeState = useRef(null);
+  const activeDiagram = useMemo(
+    () => model.diagrams.find((diagram) => diagram.id === model.activeDiagramId) ?? model.diagrams[0],
+    [model]
+  );
+  const tabs = useMemo(
+    () =>
+      model.diagrams.map((diagram) => ({
+        id: diagram.id,
+        label: diagram.name,
+        active: diagram.id === model.activeDiagramId
+      })),
+    [model]
+  );
 
   const selectedEntity = useMemo(
-    () => model.entities.find((entity) => entity.id === selectedEntityId) ?? null,
-    [model.entities, selectedEntityId]
+    () => activeDiagram?.entities.find((entity) => entity.id === selectedEntityId) ?? null,
+    [activeDiagram, selectedEntityId]
   );
 
   useEffect(() => {
@@ -138,7 +182,7 @@ export default function App() {
   const isDesktopLayout = windowWidth > 1380;
 
   function createFreshSampleModel() {
-    return JSON.parse(JSON.stringify(sampleModel));
+    return normalizeModel(sampleModel);
   }
 
   function getEntitySize(entity) {
@@ -253,8 +297,9 @@ export default function App() {
       }
 
       const data = await response.json();
-      setModel(data);
-      setSelectedEntityId(data.entities[0]?.id ?? null);
+      const normalizedData = normalizeModel(data);
+      setModel(normalizedData);
+      setSelectedEntityId(normalizedData.diagrams[0]?.entities[0]?.id ?? null);
       setStatus("Loaded model from ASP.NET Core Web API.");
     } catch {
       setStatus("Backend unavailable, showing local sample model.");
@@ -264,16 +309,27 @@ export default function App() {
   function handleReloadSample() {
     const freshSample = createFreshSampleModel();
     setModel(freshSample);
-    setSelectedEntityId(freshSample.entities[0]?.id ?? null);
+    setSelectedEntityId(freshSample.diagrams[0]?.entities[0]?.id ?? null);
     window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(freshSample));
     setViewResetToken((current) => current + 1);
     setStatus("Reloaded the original local sample model.");
   }
 
   function handleAutoLayout() {
+    if (!activeDiagram) {
+      return;
+    }
+
     setModel((current) => ({
       ...current,
-      entities: buildAutoLayout(current.entities, current.relationships, diagramViewport)
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: buildAutoLayout(diagram.entities, diagram.relationships, diagramViewport)
+            }
+          : diagram
+      )
     }));
     setViewResetToken((current) => current + 1);
     setStatus("Re-laid out entities to fit the current diagram view.");
@@ -286,8 +342,15 @@ export default function App() {
 
     setModel((current) => ({
       ...current,
-      entities: current.entities.map((entity) =>
-        entity.id === selectedEntityId ? { ...entity, ...update(entity) } : entity
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: diagram.entities.map((entity) =>
+                entity.id === selectedEntityId ? { ...entity, ...update(entity) } : entity
+              )
+            }
+          : diagram
       )
     }));
   }
@@ -320,8 +383,15 @@ export default function App() {
   function handleMoveEntity(entityId, x, y) {
     setModel((current) => ({
       ...current,
-      entities: current.entities.map((entity) =>
-        entity.id === entityId ? { ...entity, x, y } : entity
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: diagram.entities.map((entity) =>
+                entity.id === entityId ? { ...entity, x, y } : entity
+              )
+            }
+          : diagram
       )
     }));
   }
@@ -329,8 +399,15 @@ export default function App() {
   function handleResizeEntity(entityId, width, height) {
     setModel((current) => ({
       ...current,
-      entities: current.entities.map((entity) =>
-        entity.id === entityId ? { ...entity, width, height } : entity
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: diagram.entities.map((entity) =>
+                entity.id === entityId ? { ...entity, width, height } : entity
+              )
+            }
+          : diagram
       )
     }));
   }
@@ -358,10 +435,76 @@ export default function App() {
 
     setModel((current) => ({
       ...current,
-      entities: [...current.entities, newEntity]
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: [...diagram.entities, newEntity]
+            }
+          : diagram
+      )
     }));
     setSelectedEntityId(entityId);
     setStatus("Created a new entity.");
+  }
+
+  function handleAddDiagram() {
+    const nextNumber =
+      model.diagrams.reduce((highest, diagram) => {
+        const match = diagram.name.match(/ER_Diagram_(\d+)/);
+        return Math.max(highest, match ? Number(match[1]) : 0);
+      }, 0) + 1;
+    const newDiagram = {
+      id: `er-diagram-${Date.now()}`,
+      name: `ER_Diagram_${nextNumber}`,
+      entities: [],
+      relationships: []
+    };
+
+    setModel((current) => ({
+      ...current,
+      activeDiagramId: newDiagram.id,
+      diagrams: [...current.diagrams, newDiagram]
+    }));
+    setSelectedEntityId(null);
+    setViewResetToken((current) => current + 1);
+    setStatus(`Created ${newDiagram.name}.`);
+  }
+
+  function handleSelectDiagram(diagramId) {
+    const nextDiagram = model.diagrams.find((diagram) => diagram.id === diagramId);
+    if (!nextDiagram) {
+      return;
+    }
+
+    setModel((current) => ({
+      ...current,
+      activeDiagramId: diagramId
+    }));
+    setSelectedEntityId(nextDiagram.entities[0]?.id ?? null);
+    setViewResetToken((current) => current + 1);
+    setStatus(`Opened ${nextDiagram.name}.`);
+  }
+
+  function handleCloseDiagram(diagramId) {
+    if (model.diagrams.length <= 1) {
+      return;
+    }
+
+    setModel((current) => {
+      const nextDiagrams = current.diagrams.filter((diagram) => diagram.id !== diagramId);
+      const nextActiveId =
+        current.activeDiagramId === diagramId ? nextDiagrams[0]?.id ?? null : current.activeDiagramId;
+      const nextActiveDiagram = nextDiagrams.find((diagram) => diagram.id === nextActiveId);
+      setSelectedEntityId(nextActiveDiagram?.entities[0]?.id ?? null);
+      return {
+        ...current,
+        activeDiagramId: nextActiveId,
+        diagrams: nextDiagrams
+      };
+    });
+
+    setStatus("Closed diagram.");
   }
 
   function handleDeleteEntity() {
@@ -380,16 +523,25 @@ export default function App() {
     let nextSelectedId = null;
 
     setModel((current) => {
-      const nextEntities = current.entities.filter((entity) => entity.id !== entityId);
+      const currentDiagram =
+        current.diagrams.find((diagram) => diagram.id === current.activeDiagramId) ?? current.diagrams[0];
+      const nextEntities = currentDiagram?.entities.filter((entity) => entity.id !== entityId) ?? [];
       nextSelectedId = nextEntities[0]?.id ?? null;
 
       return {
         ...current,
-        entities: nextEntities,
-        relationships: current.relationships.filter(
-          (relationship) =>
-            relationship.sourceEntityId !== entityId &&
-            relationship.targetEntityId !== entityId
+        diagrams: current.diagrams.map((diagram) =>
+          diagram.id === current.activeDiagramId
+            ? {
+                ...diagram,
+                entities: diagram.entities.filter((entity) => entity.id !== entityId),
+                relationships: diagram.relationships.filter(
+                  (relationship) =>
+                    relationship.sourceEntityId !== entityId &&
+                    relationship.targetEntityId !== entityId
+                )
+              }
+            : diagram
         )
       };
     });
@@ -433,12 +585,19 @@ export default function App() {
 
   async function handleSave() {
     try {
+      const savePayload = {
+        project: model.project,
+        tabs,
+        entities: activeDiagram?.entities ?? [],
+        relationships: activeDiagram?.relationships ?? []
+      };
+
       const response = await fetch(`${API_BASE_URL}/api/modeler/diagram`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ diagram: model })
+        body: JSON.stringify({ diagram: savePayload })
       });
 
       if (!response.ok) {
@@ -446,7 +605,10 @@ export default function App() {
       }
 
       const saved = await response.json();
-      setModel(saved);
+      setModel((current) => ({
+        ...current,
+        project: saved.project ?? current.project
+      }));
       setStatus("Saved model to ASP.NET Core Web API.");
     } catch {
       window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(model));
@@ -474,8 +636,20 @@ export default function App() {
       }
 
       const result = await response.json();
-      setModel(result.diagram);
-      setSelectedEntityId(result.diagram.entities[0]?.id ?? null);
+      const importedDiagram = {
+        id: model.activeDiagramId,
+        name: activeDiagram?.name ?? "ER_Diagram_1",
+        entities: result.diagram.entities ?? [],
+        relationships: result.diagram.relationships ?? []
+      };
+      setModel((current) => ({
+        ...current,
+        project: result.diagram.project ?? current.project,
+        diagrams: current.diagrams.map((diagram) =>
+          diagram.id === current.activeDiagramId ? importedDiagram : diagram
+        )
+      }));
+      setSelectedEntityId(importedDiagram.entities[0]?.id ?? null);
       setStatus(result.summary);
     } catch {
       setStatus("Schema import requires the backend to be running with a reachable database.");
@@ -500,8 +674,8 @@ export default function App() {
     >
       <LeftSidebar
         project={model.project}
-        entityCount={model.entities.length}
-        relationshipCount={model.relationships.length}
+        entityCount={activeDiagram?.entities.length ?? 0}
+        relationshipCount={activeDiagram?.relationships.length ?? 0}
         onAutoLayout={handleAutoLayout}
       />
 
@@ -516,15 +690,18 @@ export default function App() {
 
       <main className="workspace-shell">
         <TopTabs
-          tabs={model.tabs}
+          tabs={tabs}
+          onSelectTab={handleSelectDiagram}
+          onCloseTab={handleCloseDiagram}
+          onAddDiagram={handleAddDiagram}
           onAddEntity={handleAddEntity}
           onReload={handleReloadSample}
           onSave={handleSave}
         />
         <div className="workspace-status">{status}</div>
         <DiagramCanvas
-          entities={model.entities}
-          relationships={model.relationships}
+          entities={activeDiagram?.entities ?? []}
+          relationships={activeDiagram?.relationships ?? []}
           selectedEntityId={selectedEntityId}
           onSelectEntity={setSelectedEntityId}
           onMoveEntity={handleMoveEntity}
@@ -546,8 +723,8 @@ export default function App() {
 
       <RightInspector
         selectedEntity={selectedEntity}
-        relationships={model.relationships}
-        allEntities={model.entities}
+        relationships={activeDiagram?.relationships ?? []}
+        allEntities={activeDiagram?.entities ?? []}
         importForm={importForm}
         providers={providers}
         onEntityChange={handleEntityChange}

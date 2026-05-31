@@ -1,4 +1,12 @@
-export default function TopTabs({ tabs, onAddEntity, onReload, onSave }) {
+export default function TopTabs({
+  tabs,
+  onSelectTab,
+  onCloseTab,
+  onAddDiagram,
+  onAddEntity,
+  onReload,
+  onSave
+}) {
   return (
     <div className="top-tabs">
       <div className="tab-list">
@@ -7,14 +15,26 @@ export default function TopTabs({ tabs, onAddEntity, onReload, onSave }) {
             key={tab.id}
             className={`tab-pill ${tab.active ? "active" : ""}`}
             type="button"
+            onClick={() => onSelectTab(tab.id)}
           >
             {tab.label}
-            <span className="pill-close">×</span>
+            <span
+              className="pill-close"
+              onClick={(event) => {
+                event.stopPropagation();
+                onCloseTab(tab.id);
+              }}
+            >
+              ×
+            </span>
           </button>
         ))}
       </div>
 
       <div className="toolbar-actions">
+        <button type="button" className="secondary-button diagram-button" onClick={onAddDiagram}>
+          + Diagram
+        </button>
         <button type="button" className="secondary-button diagram-button" onClick={onAddEntity}>
           + Entity
         </button>
