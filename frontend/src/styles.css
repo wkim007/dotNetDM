@@ -330,6 +330,7 @@ body.panel-resizing {
     linear-gradient(var(--grid) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid) 1px, transparent 1px);
   background-size: 28px 28px;
+  pointer-events: none;
 }
 
 .diagram-svg {

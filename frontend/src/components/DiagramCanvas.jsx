@@ -76,12 +76,18 @@ function DiagramLink({
       <path
         d={path}
         className="diagram-link-hit-area"
-        onClick={() => onSelectRelationship(relationship.id)}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelectRelationship(relationship.id);
+        }}
       />
       <path
         d={path}
         className={`diagram-link ${dashed ? "dashed" : ""} ${isSelected ? "selected" : ""}`}
-        onClick={() => onSelectRelationship(relationship.id)}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelectRelationship(relationship.id);
+        }}
       />
       <text x={midX} y={midY} className="diagram-link-label">
         {relationship.cardinality}
@@ -89,7 +95,10 @@ function DiagramLink({
       {isSelected ? (
         <g
           className="relationship-delete-badge"
-          onClick={() => onDeleteRelationship(relationship.id)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDeleteRelationship(relationship.id);
+          }}
         >
           <rect x={midX - 14} y={midY - 28} rx="8" ry="8" width="28" height="28" />
           <text x={midX} y={midY - 14}>
@@ -280,10 +289,30 @@ export default function DiagramCanvas({
     setDraggingId(null);
   }
 
+  function handleCanvasBackgroundClick(event) {
+    const target = event.target;
+
+    if (
+      target instanceof Element &&
+      (
+        target.closest(".entity-card") ||
+        target.closest(".relationship-delete-badge") ||
+        target.closest(".diagram-link") ||
+        target.closest(".diagram-link-hit-area")
+      )
+    ) {
+      return;
+    }
+
+    onSelectEntity(null);
+    onSelectRelationship(null);
+  }
+
   return (
     <section
       ref={canvasRef}
       className={`diagram-canvas ${draggingId ? "dragging" : ""}`}
+      onClick={handleCanvasBackgroundClick}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
