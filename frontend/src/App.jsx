@@ -13,6 +13,12 @@ const DEFAULT_RIGHT_PANEL_WIDTH = 330;
 const MIN_PANEL_WIDTH = 220;
 const MAX_PANEL_WIDTH = 520;
 const DEFAULT_VIEWPORT = { width: 1200, height: 900 };
+const CARD_BASE_WIDTH = 280;
+const CARD_MIN_WIDTH = 220;
+const CARD_MIN_HEIGHT = 120;
+const CARD_HEADER = 50;
+const ROW_HEIGHT = 33;
+const CARD_MAX_WIDTH = 560;
 
 function readLocalModel() {
   try {
@@ -42,6 +48,28 @@ function readPanelWidths() {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function estimateTextWidth(text, factor = 9.2) {
+  return String(text ?? "").length * factor;
+}
+
+function getPreferredEntitySize(entity) {
+  const fields = entity.fields ?? [];
+  const headerWidth = estimateTextWidth(entity.physicalName ?? entity.name ?? "Entity", 12) + 92;
+  const widestFieldWidth = Math.max(
+    ...fields.map((field) => {
+      const nameWidth = estimateTextWidth(field.name, 10);
+      const typeWidth = estimateTextWidth(field.dataType, 9.1);
+      return 48 + 10 + nameWidth + 18 + typeWidth + 28;
+    }),
+    CARD_BASE_WIDTH
+  );
+
+  return {
+    width: Math.min(CARD_MAX_WIDTH, Math.max(CARD_MIN_WIDTH, Math.ceil(Math.max(headerWidth, widestFieldWidth)))),
+    height: Math.max(CARD_MIN_HEIGHT, CARD_HEADER + fields.length * ROW_HEIGHT + 18)
+  };
 }
 
 function normalizeRelationship(relationship) {
@@ -222,6 +250,23 @@ export default function App() {
       }
 
       if (selectedEntityIds.length === 0) {
+        if (!(event.metaKey && event.key.toLowerCase() === "a")) {
+          return;
+        }
+      }
+
+      if (event.metaKey && event.key.toLowerCase() === "a") {
+        if (!activeDiagram) {
+          return;
+        }
+
+        event.preventDefault();
+        setSelectedEntityIds(activeDiagram.entities.map((entity) => entity.id));
+        setSelectedRelationshipId(null);
+        setLinkDraft(null);
+        setStatus(
+          `Selected ${activeDiagram.entities.length} ${activeDiagram.entities.length === 1 ? "entity" : "entities"}.`
+        );
         return;
       }
 
@@ -271,8 +316,9 @@ export default function App() {
   }
 
   function getEntitySize(entity) {
-    const width = entity.width ?? 280;
-    const height = Math.max(entity.height ?? 0, 50 + entity.fields.length * 33);
+    const preferredSize = getPreferredEntitySize(entity);
+    const width = Math.max(entity.width ?? 0, preferredSize.width);
+    const height = Math.max(entity.height ?? 0, preferredSize.height);
     return { width, height };
   }
 
@@ -342,13 +388,17 @@ export default function App() {
       let currentY = verticalOffset + staggerOffset;
 
       column.items.forEach((entity) => {
+        const size = getEntitySize(entity);
+
         positionedEntities.push({
           ...entity,
           x: currentX,
-          y: currentY
+          y: currentY,
+          width: size.width,
+          height: size.height
         });
 
-        currentY += getEntitySize(entity).height + gapY;
+        currentY += size.height + gapY;
       });
 
       currentX += column.width + gapX;

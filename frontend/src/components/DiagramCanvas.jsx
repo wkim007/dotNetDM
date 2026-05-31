@@ -5,10 +5,33 @@ const CARD_MIN_WIDTH = 220;
 const CARD_MIN_HEIGHT = 120;
 const CARD_HEADER = 50;
 const ROW_HEIGHT = 33;
+const CARD_MAX_WIDTH = 560;
+
+function estimateTextWidth(text, factor = 9.2) {
+  return String(text ?? "").length * factor;
+}
+
+function getPreferredEntitySize(entity) {
+  const headerWidth = estimateTextWidth(entity.physicalName ?? entity.name ?? "Entity", 12) + 92;
+  const widestFieldWidth = Math.max(
+    ...entity.fields.map((field) => {
+      const nameWidth = estimateTextWidth(field.name, 10);
+      const typeWidth = estimateTextWidth(field.dataType, 9.1);
+      return 48 + 10 + nameWidth + 18 + typeWidth + 28;
+    }),
+    CARD_WIDTH
+  );
+
+  return {
+    width: Math.min(CARD_MAX_WIDTH, Math.max(CARD_MIN_WIDTH, Math.ceil(Math.max(headerWidth, widestFieldWidth)))),
+    height: Math.max(CARD_MIN_HEIGHT, CARD_HEADER + entity.fields.length * ROW_HEIGHT + 18)
+  };
+}
 
 function getCardBounds(entity) {
-  const width = entity.width ?? CARD_WIDTH;
-  const height = Math.max(entity.height ?? 0, CARD_HEADER + entity.fields.length * ROW_HEIGHT);
+  const preferredSize = getPreferredEntitySize(entity);
+  const width = Math.max(entity.width ?? 0, preferredSize.width);
+  const height = Math.max(entity.height ?? 0, preferredSize.height);
 
   return {
     left: entity.x,
@@ -122,9 +145,9 @@ function EntityCard({
   onSelect,
   onDelete
 }) {
-  const width = entity.width ?? CARD_WIDTH;
-  const minHeight = CARD_HEADER + entity.fields.length * ROW_HEIGHT;
-  const height = Math.max(entity.height ?? 0, minHeight);
+  const preferredSize = getPreferredEntitySize(entity);
+  const width = Math.max(entity.width ?? 0, preferredSize.width);
+  const height = Math.max(entity.height ?? 0, preferredSize.height);
 
   return (
     <article
@@ -282,9 +305,9 @@ export default function DiagramCanvas({
     event.preventDefault();
     event.stopPropagation();
     const entity = entityMap[entityId];
-    const width = entity.width ?? CARD_WIDTH;
-    const minHeight = CARD_HEADER + entity.fields.length * ROW_HEIGHT;
-    const height = Math.max(entity.height ?? 0, minHeight);
+    const preferredSize = getPreferredEntitySize(entity);
+    const width = Math.max(entity.width ?? 0, preferredSize.width);
+    const height = Math.max(entity.height ?? 0, preferredSize.height);
 
     interactionState.current = {
       mode: "resize",
@@ -293,7 +316,8 @@ export default function DiagramCanvas({
       startY: event.clientY,
       initialWidth: width,
       initialHeight: height,
-      minHeight
+      minHeight: preferredSize.height,
+      minWidth: preferredSize.width
     };
 
     setDraggingId(entityId);
@@ -360,8 +384,8 @@ export default function DiagramCanvas({
       return;
     }
 
-    const { entityId, startX, startY, initialWidth, initialHeight, minHeight } = interactionState.current;
-    const width = Math.max(CARD_MIN_WIDTH, Math.round(initialWidth + (event.clientX - startX)));
+    const { entityId, startX, startY, initialWidth, initialHeight, minHeight, minWidth } = interactionState.current;
+    const width = Math.max(minWidth, Math.round(initialWidth + (event.clientX - startX)));
     const height = Math.max(minHeight, CARD_MIN_HEIGHT, Math.round(initialHeight + (event.clientY - startY)));
     onResizeEntity(entityId, width, height);
   }
