@@ -131,7 +131,16 @@ function EntityCard({
       className={`entity-card ${isSelected ? "selected" : ""}`}
       style={{ left: entity.x, top: entity.y, width, height }}
       onPointerDown={(event) => onPointerDown(event, entity.id)}
-      onClick={() => onSelect(entity.id)}
+      onClick={(event) => {
+        if (event.metaKey) {
+          return;
+        }
+
+        onSelect(entity.id, {
+          additive: false,
+          toggle: false
+        });
+      }}
     >
       <header className="entity-card-header">
         <h3>{entity.physicalName}</h3>
@@ -175,11 +184,13 @@ function EntityCard({
 export default function DiagramCanvas({
   entities,
   relationships,
-  selectedEntityId,
+  selectedEntityIds,
   selectedRelationshipId,
   onSelectEntity,
+  onSelectEntities,
   onSelectRelationship,
   onMoveEntity,
+  onMoveEntities,
   onResizeEntity,
   onDeleteEntity,
   onDeleteRelationship,
@@ -189,7 +200,19 @@ export default function DiagramCanvas({
   const entityMap = Object.fromEntries(entities.map((entity) => [entity.id, entity]));
   const interactionState = useRef(null);
   const canvasRef = useRef(null);
+  const suppressBackgroundClickRef = useRef(false);
   const [draggingId, setDraggingId] = useState(null);
+  const [marqueeRect, setMarqueeRect] = useState(null);
+
+  function getCanvasPoint(event) {
+    const element = canvasRef.current;
+    const bounds = element.getBoundingClientRect();
+
+    return {
+      x: event.clientX - bounds.left + element.scrollLeft,
+      y: event.clientY - bounds.top + element.scrollTop
+    };
+  }
 
   useEffect(() => {
     if (!canvasRef.current || !onViewportChange) {
@@ -227,16 +250,30 @@ export default function DiagramCanvas({
   function handlePointerDown(event, entityId) {
     event.preventDefault();
     const entity = entityMap[entityId];
+    const currentSelection = selectedEntityIds.includes(entityId) ? selectedEntityIds : [entityId];
+
+    if (event.metaKey) {
+      onSelectEntity(entityId, { toggle: true });
+      return;
+    }
 
     interactionState.current = {
       mode: "drag",
-      entityId,
-      offsetX: event.clientX - entity.x,
-      offsetY: event.clientY - entity.y
+      entityIds: currentSelection,
+      anchorEntityId: entityId,
+      pointerStart: getCanvasPoint(event),
+      initialPositions: currentSelection.map((id) => {
+        const selectedEntity = entityMap[id];
+        return {
+          id,
+          x: selectedEntity.x,
+          y: selectedEntity.y
+        };
+      })
     };
 
     setDraggingId(entityId);
-    onSelectEntity(entityId);
+    onSelectEntities(currentSelection);
     onSelectRelationship(null);
     event.currentTarget.setPointerCapture(event.pointerId);
   }
@@ -271,10 +308,55 @@ export default function DiagramCanvas({
     }
 
     if (interactionState.current.mode === "drag") {
-      const { entityId, offsetX, offsetY } = interactionState.current;
-      const x = Math.max(24, Math.round(event.clientX - offsetX));
-      const y = Math.max(24, Math.round(event.clientY - offsetY));
-      onMoveEntity(entityId, x, y);
+      const { entityIds, anchorEntityId, pointerStart, initialPositions } = interactionState.current;
+      const point = getCanvasPoint(event);
+      const deltaX = point.x - pointerStart.x;
+      const deltaY = point.y - pointerStart.y;
+      const updates = initialPositions.map((position) => ({
+        id: position.id,
+        x: Math.max(24, Math.round(position.x + deltaX)),
+        y: Math.max(24, Math.round(position.y + deltaY))
+      }));
+
+      if (entityIds.length > 1) {
+        onMoveEntities(entityIds, updates);
+      } else {
+        const anchorUpdate = updates.find((update) => update.id === anchorEntityId);
+        if (anchorUpdate) {
+          onMoveEntity(anchorEntityId, anchorUpdate.x, anchorUpdate.y);
+        }
+      }
+      return;
+    }
+
+    if (interactionState.current.mode === "select") {
+      const point = getCanvasPoint(event);
+      const rect = {
+        left: Math.min(interactionState.current.start.x, point.x),
+        top: Math.min(interactionState.current.start.y, point.y),
+        right: Math.max(interactionState.current.start.x, point.x),
+        bottom: Math.max(interactionState.current.start.y, point.y)
+      };
+      setMarqueeRect(rect);
+
+      const hits = entities
+        .filter((entity) => {
+          const width = entity.width ?? CARD_WIDTH;
+          const height = Math.max(entity.height ?? 0, CARD_HEADER + entity.fields.length * ROW_HEIGHT);
+
+          return !(
+            entity.x + width < rect.left ||
+            entity.x > rect.right ||
+            entity.y + height < rect.top ||
+            entity.y > rect.bottom
+          );
+        })
+        .map((entity) => entity.id);
+
+      const nextSelection = interactionState.current.additive
+        ? Array.from(new Set([...interactionState.current.baseSelection, ...hits]))
+        : hits;
+      onSelectEntities(nextSelection);
       return;
     }
 
@@ -285,11 +367,21 @@ export default function DiagramCanvas({
   }
 
   function handlePointerUp() {
+    if (interactionState.current?.mode === "select") {
+      suppressBackgroundClickRef.current = true;
+    }
+
     interactionState.current = null;
     setDraggingId(null);
+    setMarqueeRect(null);
   }
 
   function handleCanvasBackgroundClick(event) {
+    if (suppressBackgroundClickRef.current) {
+      suppressBackgroundClickRef.current = false;
+      return;
+    }
+
     const target = event.target;
 
     if (
@@ -308,11 +400,40 @@ export default function DiagramCanvas({
     onSelectRelationship(null);
   }
 
+  function handleCanvasPointerDown(event) {
+    const target = event.target;
+
+    if (
+      target instanceof Element &&
+      (
+        target.closest(".entity-card") ||
+        target.closest(".diagram-link") ||
+        target.closest(".diagram-link-hit-area") ||
+        target.closest(".relationship-delete-badge")
+      )
+    ) {
+      return;
+    }
+
+    const start = getCanvasPoint(event);
+    interactionState.current = {
+      mode: "select",
+      start,
+      additive: event.metaKey,
+      baseSelection: event.metaKey ? selectedEntityIds : []
+    };
+
+    if (!event.metaKey) {
+      onSelectRelationship(null);
+    }
+  }
+
   return (
     <section
       ref={canvasRef}
       className={`diagram-canvas ${draggingId ? "dragging" : ""}`}
       onClick={handleCanvasBackgroundClick}
+      onPointerDown={handleCanvasPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
@@ -347,13 +468,25 @@ export default function DiagramCanvas({
         <EntityCard
           key={entity.id}
           entity={entity}
-          isSelected={entity.id === selectedEntityId}
+          isSelected={selectedEntityIds.includes(entity.id)}
           onPointerDown={handlePointerDown}
           onResizeStart={handleResizeStart}
           onSelect={onSelectEntity}
           onDelete={onDeleteEntity}
         />
       ))}
+
+      {marqueeRect ? (
+        <div
+          className="marquee-selection"
+          style={{
+            left: marqueeRect.left,
+            top: marqueeRect.top,
+            width: marqueeRect.right - marqueeRect.left,
+            height: marqueeRect.bottom - marqueeRect.top
+          }}
+        />
+      ) : null}
     </section>
   );
 }

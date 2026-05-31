@@ -91,7 +91,9 @@ export default function App() {
   const savedPanelWidths = readPanelWidths();
   const initialModel = normalizeModel(readLocalModel() ?? sampleModel);
   const [model, setModel] = useState(initialModel);
-  const [selectedEntityId, setSelectedEntityId] = useState(() => initialModel.diagrams[0]?.entities[0]?.id ?? null);
+  const [selectedEntityIds, setSelectedEntityIds] = useState(() =>
+    initialModel.diagrams[0]?.entities[0]?.id ? [initialModel.diagrams[0].entities[0].id] : []
+  );
   const [selectedRelationshipId, setSelectedRelationshipId] = useState(null);
   const [linkDraft, setLinkDraft] = useState(null);
   const [panelWidths, setPanelWidths] = useState(() => ({
@@ -126,6 +128,7 @@ export default function App() {
       })),
     [model]
   );
+  const selectedEntityId = selectedEntityIds.at(-1) ?? null;
 
   const selectedEntity = useMemo(
     () => activeDiagram?.entities.find((entity) => entity.id === selectedEntityId) ?? null,
@@ -201,6 +204,65 @@ export default function App() {
       window.removeEventListener("pointerup", handlePointerUp);
     };
   }, []);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      const target = event.target;
+
+      if (
+        target instanceof HTMLElement &&
+        (
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable
+        )
+      ) {
+        return;
+      }
+
+      if (selectedEntityIds.length === 0) {
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        handleDeleteEntitiesByIds(selectedEntityIds);
+        return;
+      }
+
+      const step = event.shiftKey ? 10 : 1;
+      const deltaByKey = {
+        ArrowLeft: { x: -step, y: 0 },
+        ArrowRight: { x: step, y: 0 },
+        ArrowUp: { x: 0, y: -step },
+        ArrowDown: { x: 0, y: step }
+      };
+
+      const delta = deltaByKey[event.key];
+
+      if (!delta || !activeDiagram) {
+        return;
+      }
+
+      event.preventDefault();
+      const updates = activeDiagram.entities
+        .filter((entity) => selectedEntityIds.includes(entity.id))
+        .map((entity) => ({
+          id: entity.id,
+          x: Math.max(24, entity.x + delta.x),
+          y: Math.max(24, entity.y + delta.y)
+        }));
+
+      handleMoveEntities(selectedEntityIds, updates);
+      setStatus(
+        `Moved ${selectedEntityIds.length} selected ${selectedEntityIds.length === 1 ? "entity" : "entities"}.`
+      );
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeDiagram, selectedEntityIds]);
 
   const isDesktopLayout = windowWidth > 1380;
 
@@ -322,7 +384,7 @@ export default function App() {
       const data = await response.json();
       const normalizedData = normalizeModel(data);
       setModel(normalizedData);
-      setSelectedEntityId(normalizedData.diagrams[0]?.entities[0]?.id ?? null);
+      setSelectedEntityIds(normalizedData.diagrams[0]?.entities[0]?.id ? [normalizedData.diagrams[0].entities[0].id] : []);
       setSelectedRelationshipId(null);
       setStatus("Loaded model from ASP.NET Core Web API.");
     } catch {
@@ -333,7 +395,7 @@ export default function App() {
   function handleReloadSample() {
     const freshSample = createFreshSampleModel();
     setModel(freshSample);
-    setSelectedEntityId(freshSample.diagrams[0]?.entities[0]?.id ?? null);
+    setSelectedEntityIds(freshSample.diagrams[0]?.entities[0]?.id ? [freshSample.diagrams[0].entities[0].id] : []);
     setSelectedRelationshipId(null);
     window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(freshSample));
     setViewResetToken((current) => current + 1);
@@ -384,13 +446,35 @@ export default function App() {
 
   function handleSelectRelationship(relationshipId) {
     setSelectedRelationshipId(relationshipId);
-    setSelectedEntityId(null);
+    setSelectedEntityIds([]);
     setLinkDraft(null);
   }
 
-  function handleSelectEntity(entityId) {
+  function handleSetSelectedEntities(entityIds) {
+    setSelectedEntityIds(entityIds);
+  }
+
+  function handleSelectEntity(entityId, options = {}) {
+    const { additive = false, toggle = false } = options;
+
     if (!linkDraft) {
-      setSelectedEntityId(entityId);
+      setSelectedEntityIds((current) => {
+        if (!entityId) {
+          return [];
+        }
+
+        if (toggle) {
+          return current.includes(entityId)
+            ? current.filter((id) => id !== entityId)
+            : [...current, entityId];
+        }
+
+        if (additive) {
+          return current.includes(entityId) ? current : [...current, entityId];
+        }
+
+        return [entityId];
+      });
       setSelectedRelationshipId(null);
       return;
     }
@@ -401,7 +485,7 @@ export default function App() {
 
     if (!linkDraft.sourceEntityId) {
       setLinkDraft({ sourceEntityId: entityId });
-      setSelectedEntityId(entityId);
+      setSelectedEntityIds(entityId ? [entityId] : []);
       setSelectedRelationshipId(null);
       setStatus("Select the second entity to create a relationship.");
       return;
@@ -439,13 +523,13 @@ export default function App() {
     }));
 
     setLinkDraft(null);
-    setSelectedEntityId(null);
+    setSelectedEntityIds([]);
     setSelectedRelationshipId(relationshipId);
     setStatus(`Created relationship ${newRelationship.name}.`);
   }
 
   function handleStartRelationshipLink() {
-    if (!selectedEntityId) {
+    if (!selectedEntityId || selectedEntityIds.length !== 1) {
       setStatus("Select the first entity, then click Link.");
       return;
     }
@@ -516,6 +600,25 @@ export default function App() {
     }));
   }
 
+  function handleMoveEntities(entityIds, updates) {
+    const updatesMap = new Map(updates.map((update) => [update.id, update]));
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: diagram.entities.map((entity) => {
+                const update = updatesMap.get(entity.id);
+                return update ? { ...entity, x: update.x, y: update.y } : entity;
+              })
+            }
+          : diagram
+      )
+    }));
+  }
+
   function handleResizeEntity(entityId, width, height) {
     setModel((current) => ({
       ...current,
@@ -564,7 +667,7 @@ export default function App() {
           : diagram
       )
     }));
-    setSelectedEntityId(entityId);
+    setSelectedEntityIds([entityId]);
     setSelectedRelationshipId(null);
     setLinkDraft(null);
     setStatus("Created a new entity.");
@@ -588,7 +691,7 @@ export default function App() {
       activeDiagramId: newDiagram.id,
       diagrams: [...current.diagrams, newDiagram]
     }));
-    setSelectedEntityId(null);
+    setSelectedEntityIds([]);
     setSelectedRelationshipId(null);
     setLinkDraft(null);
     setViewResetToken((current) => current + 1);
@@ -605,7 +708,7 @@ export default function App() {
       ...current,
       activeDiagramId: diagramId
     }));
-    setSelectedEntityId(nextDiagram.entities[0]?.id ?? null);
+    setSelectedEntityIds(nextDiagram.entities[0]?.id ? [nextDiagram.entities[0].id] : []);
     setSelectedRelationshipId(null);
     setLinkDraft(null);
     setViewResetToken((current) => current + 1);
@@ -622,7 +725,7 @@ export default function App() {
       const nextActiveId =
         current.activeDiagramId === diagramId ? nextDiagrams[0]?.id ?? null : current.activeDiagramId;
       const nextActiveDiagram = nextDiagrams.find((diagram) => diagram.id === nextActiveId);
-      setSelectedEntityId(nextActiveDiagram?.entities[0]?.id ?? null);
+      setSelectedEntityIds(nextActiveDiagram?.entities[0]?.id ? [nextActiveDiagram.entities[0].id] : []);
       setSelectedRelationshipId(null);
       setLinkDraft(null);
       return {
@@ -636,6 +739,11 @@ export default function App() {
   }
 
   function handleDeleteEntity() {
+    if (selectedEntityIds.length > 1) {
+      handleDeleteEntitiesByIds(selectedEntityIds);
+      return;
+    }
+
     if (!selectedEntityId) {
       return;
     }
@@ -643,18 +751,19 @@ export default function App() {
     handleDeleteEntityById(selectedEntityId);
   }
 
-  function handleDeleteEntityById(entityId) {
-    if (!entityId) {
+  function handleDeleteEntitiesByIds(entityIds) {
+    if (!entityIds || entityIds.length === 0) {
       return;
     }
 
-    let nextSelectedId = null;
+    const idsToDelete = new Set(entityIds);
+    let nextSelectedIds = [];
 
     setModel((current) => {
       const currentDiagram =
         current.diagrams.find((diagram) => diagram.id === current.activeDiagramId) ?? current.diagrams[0];
-      const nextEntities = currentDiagram?.entities.filter((entity) => entity.id !== entityId) ?? [];
-      nextSelectedId = nextEntities[0]?.id ?? null;
+      const nextEntities = currentDiagram?.entities.filter((entity) => !idsToDelete.has(entity.id)) ?? [];
+      nextSelectedIds = nextEntities[0]?.id ? [nextEntities[0].id] : [];
 
       return {
         ...current,
@@ -662,11 +771,11 @@ export default function App() {
           diagram.id === current.activeDiagramId
             ? {
                 ...diagram,
-                entities: diagram.entities.filter((entity) => entity.id !== entityId),
+                entities: diagram.entities.filter((entity) => !idsToDelete.has(entity.id)),
                 relationships: diagram.relationships.filter(
                   (relationship) =>
-                    relationship.sourceEntityId !== entityId &&
-                    relationship.targetEntityId !== entityId
+                    !idsToDelete.has(relationship.sourceEntityId) &&
+                    !idsToDelete.has(relationship.targetEntityId)
                 )
               }
             : diagram
@@ -674,10 +783,19 @@ export default function App() {
       };
     });
 
-    setSelectedEntityId(nextSelectedId);
+    setSelectedEntityIds(nextSelectedIds);
     setSelectedRelationshipId(null);
     setLinkDraft(null);
-    setStatus("Deleted entity.");
+    setStatus(
+      `Deleted ${entityIds.length} ${entityIds.length === 1 ? "entity" : "entities"}.`
+    );
+  }
+
+  function handleDeleteEntityById(entityId) {
+    if (!entityId) {
+      return;
+    }
+    handleDeleteEntitiesByIds([entityId]);
   }
 
   function handleDeleteRelationship() {
@@ -805,7 +923,7 @@ export default function App() {
           diagram.id === current.activeDiagramId ? importedDiagram : diagram
         )
       }));
-      setSelectedEntityId(importedDiagram.entities[0]?.id ?? null);
+      setSelectedEntityIds(importedDiagram.entities[0]?.id ? [importedDiagram.entities[0].id] : []);
       setSelectedRelationshipId(null);
       setLinkDraft(null);
       setStatus(result.summary);
@@ -860,11 +978,13 @@ export default function App() {
         <DiagramCanvas
           entities={activeDiagram?.entities ?? []}
           relationships={activeDiagram?.relationships ?? []}
-          selectedEntityId={selectedEntityId}
+          selectedEntityIds={selectedEntityIds}
           selectedRelationshipId={selectedRelationshipId}
           onSelectEntity={handleSelectEntity}
+          onSelectEntities={handleSetSelectedEntities}
           onSelectRelationship={handleSelectRelationship}
           onMoveEntity={handleMoveEntity}
+          onMoveEntities={handleMoveEntities}
           onResizeEntity={handleResizeEntity}
           onDeleteEntity={handleDeleteEntityById}
           onDeleteRelationship={handleDeleteRelationship}
