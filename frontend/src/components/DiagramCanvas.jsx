@@ -48,7 +48,15 @@ function getAnchor(entity, target) {
   };
 }
 
-function DiagramLink({ source, target, label, dashed }) {
+function DiagramLink({
+  relationship,
+  source,
+  target,
+  dashed,
+  isSelected,
+  onSelectRelationship,
+  onDeleteRelationship
+}) {
   const start = getAnchor(source, target);
   const end = getAnchor(target, source);
   const deltaX = end.x - start.x;
@@ -65,10 +73,30 @@ function DiagramLink({ source, target, label, dashed }) {
 
   return (
     <>
-      <path d={path} className={`diagram-link ${dashed ? "dashed" : ""}`} />
+      <path
+        d={path}
+        className="diagram-link-hit-area"
+        onClick={() => onSelectRelationship(relationship.id)}
+      />
+      <path
+        d={path}
+        className={`diagram-link ${dashed ? "dashed" : ""} ${isSelected ? "selected" : ""}`}
+        onClick={() => onSelectRelationship(relationship.id)}
+      />
       <text x={midX} y={midY} className="diagram-link-label">
-        {label}
+        {relationship.cardinality}
       </text>
+      {isSelected ? (
+        <g
+          className="relationship-delete-badge"
+          onClick={() => onDeleteRelationship(relationship.id)}
+        >
+          <rect x={midX - 14} y={midY - 28} rx="8" ry="8" width="28" height="28" />
+          <text x={midX} y={midY - 14}>
+            ×
+          </text>
+        </g>
+      ) : null}
     </>
   );
 }
@@ -139,10 +167,13 @@ export default function DiagramCanvas({
   entities,
   relationships,
   selectedEntityId,
+  selectedRelationshipId,
   onSelectEntity,
+  onSelectRelationship,
   onMoveEntity,
   onResizeEntity,
   onDeleteEntity,
+  onDeleteRelationship,
   onViewportChange,
   viewResetToken
 }) {
@@ -197,6 +228,7 @@ export default function DiagramCanvas({
 
     setDraggingId(entityId);
     onSelectEntity(entityId);
+    onSelectRelationship(null);
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
@@ -220,6 +252,7 @@ export default function DiagramCanvas({
 
     setDraggingId(entityId);
     onSelectEntity(entityId);
+    onSelectRelationship(null);
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
@@ -269,10 +302,13 @@ export default function DiagramCanvas({
           return (
             <DiagramLink
               key={relationship.id}
+              relationship={relationship}
               source={source}
               target={target}
-              label={relationship.cardinality}
               dashed={relationship.style === "dashed"}
+              isSelected={relationship.id === selectedRelationshipId}
+              onSelectRelationship={onSelectRelationship}
+              onDeleteRelationship={onDeleteRelationship}
             />
           );
         })}

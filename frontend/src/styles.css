@@ -338,7 +338,6 @@ body.panel-resizing {
   width: 1600px;
   height: 1200px;
   overflow: visible;
-  pointer-events: none;
 }
 
 .diagram-link {
@@ -346,6 +345,7 @@ body.panel-resizing {
   stroke: var(--accent);
   stroke-width: 2.5px;
   opacity: 0.95;
+  cursor: pointer;
 }
 
 .diagram-link.dashed {
@@ -353,11 +353,45 @@ body.panel-resizing {
   opacity: 0.85;
 }
 
+.diagram-link.selected {
+  stroke: #f1df77;
+  stroke-width: 3.5px;
+  opacity: 1;
+  filter: drop-shadow(0 0 10px rgba(241, 223, 119, 0.18));
+}
+
+.diagram-link-hit-area {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 20px;
+  cursor: pointer;
+  pointer-events: stroke;
+}
+
 .diagram-link-label {
   fill: #b4d8ef;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.relationship-delete-badge {
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.relationship-delete-badge rect {
+  fill: #f06d82;
+}
+
+.relationship-delete-badge text {
+  fill: #07111b;
+  font-size: 18px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
 }
 
 .entity-card {
@@ -504,6 +538,24 @@ body.panel-resizing {
   padding: 10px 12px;
   border-radius: 12px;
   background: rgba(12, 20, 30, 0.66);
+}
+
+.relationship-list-card {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  border: 1px solid rgba(141, 162, 188, 0.18);
+  border-radius: 16px;
+  background: rgba(12, 20, 30, 0.72);
+  color: var(--text);
+  padding: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.relationship-list-card.active {
+  border-color: rgba(241, 223, 119, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(241, 223, 119, 0.38);
 }
 
 .editable-mini-list-item {

@@ -28,21 +28,33 @@ function TextField({ label, value, onChange, tall = false }) {
 
 export default function RightInspector({
   selectedEntity,
+  selectedRelationship,
   relationships,
   allEntities,
   importForm,
   providers,
   onEntityChange,
   onAddAttribute,
+  onStartRelationshipLink,
   onDeleteEntity,
   onDeleteAttribute,
+  onRelationshipChange,
+  onDeleteRelationship,
+  onSelectRelationship,
   onImportFormChange,
-  onImportSchema
+  onImportSchema,
+  isLinkingRelationship
 }) {
   const selectedName = selectedEntity?.id ?? "";
   const relationshipList = relationships.filter(
     (relationship) =>
       relationship.sourceEntityId === selectedName || relationship.targetEntityId === selectedName
+  );
+  const selectedRelationshipSource = allEntities.find(
+    (entity) => entity.id === selectedRelationship?.sourceEntityId
+  );
+  const selectedRelationshipTarget = allEntities.find(
+    (entity) => entity.id === selectedRelationship?.targetEntityId
   );
 
   return (
@@ -79,6 +91,97 @@ export default function RightInspector({
 
       <section className="panel">
         <div className="panel-heading">
+          <span className="panel-label">Relationships</span>
+        </div>
+        <div className="mini-list">
+          {relationships.length > 0 ? (
+            relationships.map((relationship) => {
+              const source = allEntities.find((entity) => entity.id === relationship.sourceEntityId);
+              const target = allEntities.find((entity) => entity.id === relationship.targetEntityId);
+
+              return (
+                <button
+                  key={relationship.id}
+                  type="button"
+                  className={`relationship-list-card ${selectedRelationship?.id === relationship.id ? "active" : ""}`}
+                  onClick={() => onSelectRelationship(relationship.id)}
+                >
+                  <strong>{relationship.physicalName ?? relationship.id}</strong>
+                  <span>{source?.physicalName} → {target?.physicalName}</span>
+                </button>
+              );
+            })
+          ) : (
+            <div className="mini-list-item">
+              <span>No relationships in this diagram.</span>
+            </div>
+          )}
+        </div>
+
+        {selectedRelationship ? (
+          <>
+            <div className="divider" />
+            <div className="panel-heading">
+              <span className="panel-label">
+                {selectedRelationshipSource?.physicalName} → {selectedRelationshipTarget?.physicalName}
+              </span>
+            </div>
+            <TextField
+              label="Name"
+              value={selectedRelationship.name ?? ""}
+              onChange={(value) => onRelationshipChange("name", value)}
+            />
+            <TextField
+              label="Physical Name"
+              value={selectedRelationship.physicalName ?? ""}
+              onChange={(value) => onRelationshipChange("physicalName", value)}
+            />
+            <TextField
+              label="Description"
+              value={selectedRelationship.description ?? ""}
+              onChange={(value) => onRelationshipChange("description", value)}
+            />
+            <SelectField
+              label="Parent Attribute"
+              value={selectedRelationship.parentAttribute ?? "Entity header"}
+              options={["Entity header"]}
+              onChange={(value) => onRelationshipChange("parentAttribute", value)}
+            />
+            <SelectField
+              label="Child Attribute"
+              value={selectedRelationship.childAttribute ?? "Entity header"}
+              options={["Entity header"]}
+              onChange={(value) => onRelationshipChange("childAttribute", value)}
+            />
+            <SelectField
+              label="Migrated Key/Index"
+              value={selectedRelationship.migratedKeyIndex ?? "Select parent index"}
+              options={["Select parent index"]}
+              onChange={(value) => onRelationshipChange("migratedKeyIndex", value)}
+            />
+            <SelectField
+              label="Cardinality"
+              value={selectedRelationship.cardinality}
+              options={["1:1", "1:N", "N:1", "N:N"]}
+              onChange={(value) => onRelationshipChange("cardinality", value)}
+            />
+            <SelectField
+              label="Relationship Type"
+              value={selectedRelationship.relationshipType ?? "Non-Identifying"}
+              options={["Non-Identifying", "Identifying"]}
+              onChange={(value) => onRelationshipChange("relationshipType", value)}
+            />
+            <div className="button-row">
+              <button className="danger-button" type="button" onClick={onDeleteRelationship}>
+                Delete Relationship
+              </button>
+            </div>
+          </>
+        ) : null}
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
           <span className="panel-label">Entity</span>
         </div>
 
@@ -104,6 +207,9 @@ export default function RightInspector({
             <div className="button-row">
               <button className="secondary-button" type="button" onClick={onAddAttribute}>
                 Add Attribute
+              </button>
+              <button className="secondary-button" type="button" onClick={onStartRelationshipLink}>
+                {isLinkingRelationship ? "Pick Entities..." : "Link"}
               </button>
               <button className="danger-button" type="button" onClick={onDeleteEntity}>
                 Delete Entity

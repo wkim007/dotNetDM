@@ -44,12 +44,29 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function normalizeRelationship(relationship) {
+  return {
+    name: relationship.name ?? relationship.id,
+    physicalName: relationship.physicalName ?? relationship.id,
+    description: relationship.description ?? "relates_to",
+    parentAttribute: relationship.parentAttribute ?? "Entity header",
+    childAttribute: relationship.childAttribute ?? "Entity header",
+    migratedKeyIndex: relationship.migratedKeyIndex ?? "Select parent index",
+    relationshipType: relationship.relationshipType ?? "Non-Identifying",
+    ...relationship
+  };
+}
+
 function normalizeModel(rawModel) {
   const baseModel = clone(rawModel ?? sampleModel);
 
   if (Array.isArray(baseModel.diagrams) && baseModel.diagrams.length > 0) {
     return {
       ...baseModel,
+      diagrams: baseModel.diagrams.map((diagram) => ({
+        ...diagram,
+        relationships: (diagram.relationships ?? []).map(normalizeRelationship)
+      })),
       activeDiagramId: baseModel.activeDiagramId ?? baseModel.diagrams[0].id
     };
   }
@@ -75,6 +92,8 @@ export default function App() {
   const initialModel = normalizeModel(readLocalModel() ?? sampleModel);
   const [model, setModel] = useState(initialModel);
   const [selectedEntityId, setSelectedEntityId] = useState(() => initialModel.diagrams[0]?.entities[0]?.id ?? null);
+  const [selectedRelationshipId, setSelectedRelationshipId] = useState(null);
+  const [linkDraft, setLinkDraft] = useState(null);
   const [panelWidths, setPanelWidths] = useState(() => ({
     left: savedPanelWidths?.left ?? DEFAULT_LEFT_PANEL_WIDTH,
     right: savedPanelWidths?.right ?? DEFAULT_RIGHT_PANEL_WIDTH
@@ -111,6 +130,10 @@ export default function App() {
   const selectedEntity = useMemo(
     () => activeDiagram?.entities.find((entity) => entity.id === selectedEntityId) ?? null,
     [activeDiagram, selectedEntityId]
+  );
+  const selectedRelationship = useMemo(
+    () => activeDiagram?.relationships.find((relationship) => relationship.id === selectedRelationshipId) ?? null,
+    [activeDiagram, selectedRelationshipId]
   );
 
   useEffect(() => {
@@ -300,6 +323,7 @@ export default function App() {
       const normalizedData = normalizeModel(data);
       setModel(normalizedData);
       setSelectedEntityId(normalizedData.diagrams[0]?.entities[0]?.id ?? null);
+      setSelectedRelationshipId(null);
       setStatus("Loaded model from ASP.NET Core Web API.");
     } catch {
       setStatus("Backend unavailable, showing local sample model.");
@@ -310,6 +334,7 @@ export default function App() {
     const freshSample = createFreshSampleModel();
     setModel(freshSample);
     setSelectedEntityId(freshSample.diagrams[0]?.entities[0]?.id ?? null);
+    setSelectedRelationshipId(null);
     window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(freshSample));
     setViewResetToken((current) => current + 1);
     setStatus("Reloaded the original local sample model.");
@@ -333,6 +358,101 @@ export default function App() {
     }));
     setViewResetToken((current) => current + 1);
     setStatus("Re-laid out entities to fit the current diagram view.");
+  }
+
+  function handleRelationshipChange(field, value) {
+    if (!selectedRelationshipId) {
+      return;
+    }
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              relationships: diagram.relationships.map((relationship) =>
+                relationship.id === selectedRelationshipId
+                  ? { ...relationship, [field]: value }
+                  : relationship
+              )
+            }
+          : diagram
+      )
+    }));
+  }
+
+  function handleSelectRelationship(relationshipId) {
+    setSelectedRelationshipId(relationshipId);
+    setSelectedEntityId(null);
+    setLinkDraft(null);
+  }
+
+  function handleSelectEntity(entityId) {
+    if (!linkDraft) {
+      setSelectedEntityId(entityId);
+      setSelectedRelationshipId(null);
+      return;
+    }
+
+    if (!activeDiagram) {
+      return;
+    }
+
+    if (!linkDraft.sourceEntityId) {
+      setLinkDraft({ sourceEntityId: entityId });
+      setSelectedEntityId(entityId);
+      setSelectedRelationshipId(null);
+      setStatus("Select the second entity to create a relationship.");
+      return;
+    }
+
+    if (linkDraft.sourceEntityId === entityId) {
+      setStatus("Choose a different target entity.");
+      return;
+    }
+
+    const source = activeDiagram.entities.find((entity) => entity.id === linkDraft.sourceEntityId);
+    const target = activeDiagram.entities.find((entity) => entity.id === entityId);
+    const relationshipId = `relationship-${Date.now()}`;
+    const newRelationship = normalizeRelationship({
+      id: relationshipId,
+      sourceEntityId: linkDraft.sourceEntityId,
+      targetEntityId: entityId,
+      name: `${source?.physicalName ?? "Entity"} -> ${target?.physicalName ?? "Entity"}`,
+      physicalName: `${linkDraft.sourceEntityId}-${entityId}`,
+      description: "relates_to",
+      cardinality: "1:N",
+      style: "solid"
+    });
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              relationships: [...diagram.relationships, newRelationship]
+            }
+          : diagram
+      )
+    }));
+
+    setLinkDraft(null);
+    setSelectedEntityId(null);
+    setSelectedRelationshipId(relationshipId);
+    setStatus(`Created relationship ${newRelationship.name}.`);
+  }
+
+  function handleStartRelationshipLink() {
+    if (!selectedEntityId) {
+      setStatus("Select the first entity, then click Link.");
+      return;
+    }
+
+    setLinkDraft({ sourceEntityId: selectedEntityId });
+    setSelectedRelationshipId(null);
+    setStatus("Select the second entity to create a relationship.");
   }
 
   function updateSelectedEntity(update) {
@@ -445,6 +565,8 @@ export default function App() {
       )
     }));
     setSelectedEntityId(entityId);
+    setSelectedRelationshipId(null);
+    setLinkDraft(null);
     setStatus("Created a new entity.");
   }
 
@@ -467,6 +589,8 @@ export default function App() {
       diagrams: [...current.diagrams, newDiagram]
     }));
     setSelectedEntityId(null);
+    setSelectedRelationshipId(null);
+    setLinkDraft(null);
     setViewResetToken((current) => current + 1);
     setStatus(`Created ${newDiagram.name}.`);
   }
@@ -482,6 +606,8 @@ export default function App() {
       activeDiagramId: diagramId
     }));
     setSelectedEntityId(nextDiagram.entities[0]?.id ?? null);
+    setSelectedRelationshipId(null);
+    setLinkDraft(null);
     setViewResetToken((current) => current + 1);
     setStatus(`Opened ${nextDiagram.name}.`);
   }
@@ -497,6 +623,8 @@ export default function App() {
         current.activeDiagramId === diagramId ? nextDiagrams[0]?.id ?? null : current.activeDiagramId;
       const nextActiveDiagram = nextDiagrams.find((diagram) => diagram.id === nextActiveId);
       setSelectedEntityId(nextActiveDiagram?.entities[0]?.id ?? null);
+      setSelectedRelationshipId(null);
+      setLinkDraft(null);
       return {
         ...current,
         activeDiagramId: nextActiveId,
@@ -547,7 +675,35 @@ export default function App() {
     });
 
     setSelectedEntityId(nextSelectedId);
+    setSelectedRelationshipId(null);
+    setLinkDraft(null);
     setStatus("Deleted entity.");
+  }
+
+  function handleDeleteRelationship() {
+    if (!selectedRelationshipId) {
+      return;
+    }
+
+    const relationshipId = selectedRelationshipId;
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              relationships: diagram.relationships.filter(
+                (relationship) => relationship.id !== relationshipId
+              )
+            }
+          : diagram
+      )
+    }));
+
+    setSelectedRelationshipId(null);
+    setLinkDraft(null);
+    setStatus("Deleted relationship.");
   }
 
   function handleAddAttribute() {
@@ -640,7 +796,7 @@ export default function App() {
         id: model.activeDiagramId,
         name: activeDiagram?.name ?? "ER_Diagram_1",
         entities: result.diagram.entities ?? [],
-        relationships: result.diagram.relationships ?? []
+        relationships: (result.diagram.relationships ?? []).map(normalizeRelationship)
       };
       setModel((current) => ({
         ...current,
@@ -650,6 +806,8 @@ export default function App() {
         )
       }));
       setSelectedEntityId(importedDiagram.entities[0]?.id ?? null);
+      setSelectedRelationshipId(null);
+      setLinkDraft(null);
       setStatus(result.summary);
     } catch {
       setStatus("Schema import requires the backend to be running with a reachable database.");
@@ -703,10 +861,13 @@ export default function App() {
           entities={activeDiagram?.entities ?? []}
           relationships={activeDiagram?.relationships ?? []}
           selectedEntityId={selectedEntityId}
-          onSelectEntity={setSelectedEntityId}
+          selectedRelationshipId={selectedRelationshipId}
+          onSelectEntity={handleSelectEntity}
+          onSelectRelationship={handleSelectRelationship}
           onMoveEntity={handleMoveEntity}
           onResizeEntity={handleResizeEntity}
           onDeleteEntity={handleDeleteEntityById}
+          onDeleteRelationship={handleDeleteRelationship}
           onViewportChange={setDiagramViewport}
           viewResetToken={viewResetToken}
         />
@@ -723,16 +884,22 @@ export default function App() {
 
       <RightInspector
         selectedEntity={selectedEntity}
+        selectedRelationship={selectedRelationship}
         relationships={activeDiagram?.relationships ?? []}
         allEntities={activeDiagram?.entities ?? []}
         importForm={importForm}
         providers={providers}
         onEntityChange={handleEntityChange}
         onAddAttribute={handleAddAttribute}
+        onStartRelationshipLink={handleStartRelationshipLink}
         onDeleteEntity={handleDeleteEntity}
         onDeleteAttribute={handleDeleteAttribute}
+        onRelationshipChange={handleRelationshipChange}
+        onDeleteRelationship={handleDeleteRelationship}
+        onSelectRelationship={handleSelectRelationship}
         onImportFormChange={handleImportFormChange}
         onImportSchema={handleImportSchema}
+        isLinkingRelationship={Boolean(linkDraft)}
       />
     </div>
   );

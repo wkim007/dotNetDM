@@ -119,11 +119,76 @@ export const sampleModel = {
         }
       ],
       relationships: [
-        { id: "store-orders", sourceEntityId: "store", targetEntityId: "order", cardinality: "1:N", style: "solid" },
-        { id: "job-employees", sourceEntityId: "job", targetEntityId: "employee", cardinality: "1:N", style: "solid" },
-        { id: "orders-items", sourceEntityId: "order", targetEntityId: "order-item", cardinality: "1:N", style: "solid" },
-        { id: "books-items", sourceEntityId: "book", targetEntityId: "order-item", cardinality: "1:N", style: "dashed" },
-        { id: "authors-books", sourceEntityId: "author", targetEntityId: "book", cardinality: "1:N", style: "dashed" }
+        {
+          id: "store-orders",
+          sourceEntityId: "store",
+          targetEntityId: "order",
+          name: "Store -> PurchaseOrder",
+          physicalName: "store-orders",
+          description: "relates_to",
+          parentAttribute: "Entity header",
+          childAttribute: "Entity header",
+          migratedKeyIndex: "Select parent index",
+          cardinality: "1:N",
+          relationshipType: "Non-Identifying",
+          style: "solid"
+        },
+        {
+          id: "job-employees",
+          sourceEntityId: "job",
+          targetEntityId: "employee",
+          name: "Job -> Employee",
+          physicalName: "job-employees",
+          description: "relates_to",
+          parentAttribute: "Entity header",
+          childAttribute: "Entity header",
+          migratedKeyIndex: "Select parent index",
+          cardinality: "1:N",
+          relationshipType: "Non-Identifying",
+          style: "solid"
+        },
+        {
+          id: "orders-items",
+          sourceEntityId: "order",
+          targetEntityId: "order-item",
+          name: "PurchaseOrder -> OrderItem",
+          physicalName: "orders-items",
+          description: "contains",
+          parentAttribute: "Entity header",
+          childAttribute: "Entity header",
+          migratedKeyIndex: "Select parent index",
+          cardinality: "1:N",
+          relationshipType: "Identifying",
+          style: "solid"
+        },
+        {
+          id: "books-items",
+          sourceEntityId: "book",
+          targetEntityId: "order-item",
+          name: "Book -> OrderItem",
+          physicalName: "books-items",
+          description: "relates_to",
+          parentAttribute: "Entity header",
+          childAttribute: "Entity header",
+          migratedKeyIndex: "Select parent index",
+          cardinality: "1:N",
+          relationshipType: "Non-Identifying",
+          style: "dashed"
+        },
+        {
+          id: "authors-books",
+          sourceEntityId: "author",
+          targetEntityId: "book",
+          name: "Author -> Book",
+          physicalName: "authors-books",
+          description: "writes",
+          parentAttribute: "Entity header",
+          childAttribute: "Entity header",
+          migratedKeyIndex: "Select parent index",
+          cardinality: "1:N",
+          relationshipType: "Non-Identifying",
+          style: "dashed"
+        }
       ]
     }
   ]
