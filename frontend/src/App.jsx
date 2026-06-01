@@ -29,6 +29,77 @@ const DB_META_MAP = {
   mariadb: { db: "1075859190", label: "MariaDB", schema: "public" },
   oracle: { db: "1075858979", label: "Oracle", schema: "dbo" }
 };
+const VIEW_MODE_OPTIONS = ["Physical View", "Logical View"];
+const DATABASE_OPTIONS = [
+  "AlloyDB",
+  "ArangoDB",
+  "Avro",
+  "Azure Synapse",
+  "BigQuery",
+  "Cassandra",
+  "Couchbase",
+  "Databricks",
+  "Db2 for i",
+  "Db2 for LUW",
+  "Db2 for z/OS",
+  "DynamoDB",
+  "Google BigQuery",
+  "Hive",
+  "Informix",
+  "JSON",
+  "MariaDB",
+  "MongoDB",
+  "MS SQL Server",
+  "MySQL",
+  "Neo4j",
+  "Netezza",
+  "ODBC",
+  "Oracle",
+  "Parquet",
+  "PostgreSQL",
+  "Progress",
+  "Redshift",
+  "SAP ASE",
+  "SAP IQ",
+  "SAS",
+  "Snowflake",
+  "Teradata"
+];
+const DATABASE_VERSION_OPTIONS = {
+  AlloyDB: ["1.1"],
+  ArangoDB: ["3.0"],
+  Avro: ["1.x"],
+  "Azure Synapse": ["10.0"],
+  BigQuery: ["2.0"],
+  Cassandra: ["3.x", "4.x"],
+  Couchbase: ["7.x"],
+  Databricks: ["1.0"],
+  "Db2 for i": ["5.x", "6.x", "7.x"],
+  "Db2 for LUW": ["11.1", "11.5"],
+  "Db2 for z/OS": ["12", "13"],
+  DynamoDB: ["19.0"],
+  "Google BigQuery": ["2.0"],
+  Hive: ["2.1.x"],
+  Informix: ["10.x", "11.x", "12.x"],
+  JSON: ["1.x"],
+  MariaDB: ["10.4.x"],
+  MongoDB: ["6.x"],
+  "MS SQL Server": ["2019", "2022", "Azure"],
+  MySQL: ["8.x"],
+  Neo4j: ["4.3.x", "4.4.x"],
+  Netezza: ["7.2"],
+  ODBC: ["3.x"],
+  Oracle: ["21c"],
+  Parquet: ["2.x"],
+  PostgreSQL: ["16.x"],
+  Progress: ["9.x", "10.x", "11.x"],
+  Redshift: ["1.0"],
+  "SAP ASE": ["15.x", "16"],
+  "SAP IQ": ["15.x", "16"],
+  SAS: ["1.0"],
+  Snowflake: ["4.10"],
+  Teradata: ["17.x"]
+};
 
 function CopyIcon() {
   return (
@@ -121,10 +192,55 @@ function slugify(value) {
 
 function normalizeDbEngine(databaseName) {
   const normalized = String(databaseName ?? "").trim().toLowerCase();
+  if (normalized.includes("bigquery")) {
+    return "bigquery";
+  }
+  if (normalized.includes("alloy")) {
+    return "alloydb";
+  }
+  if (normalized.includes("arangodb")) {
+    return "arangodb";
+  }
+  if (normalized.includes("avro")) {
+    return "avro";
+  }
+  if (normalized.includes("synapse")) {
+    return "azuresynapse";
+  }
+  if (normalized.includes("cassandra")) {
+    return "cassandra";
+  }
+  if (normalized.includes("couch")) {
+    return "couchbase";
+  }
+  if (normalized.includes("databricks")) {
+    return "databricks";
+  }
+  if (normalized.includes("db2 for i")) {
+    return "db2i";
+  }
+  if (normalized.includes("db2 for luw")) {
+    return "db2luw";
+  }
+  if (normalized.includes("db2 for z")) {
+    return "db2zos";
+  }
+  if (normalized.includes("dynamo")) {
+    return "dynamodb";
+  }
+  if (normalized.includes("hive")) {
+    return "hive";
+  }
+  if (normalized.includes("informix")) {
+    return "informix";
+  }
+  if (normalized === "json") {
+    return "json";
+  }
   if (normalized.includes("postgres")) {
     return "postgresql";
   }
-  if (normalized.includes("sql server") || normalized === "mssql") {
+  if (normalized.includes("sql server") || normalized === "mssql" || normalized.includes("ms sql")) {
     return "sqlserver";
   }
   if (normalized.includes("mongo")) {
@@ -136,8 +252,41 @@ function normalizeDbEngine(databaseName) {
   if (normalized.includes("mysql")) {
     return "mysql";
   }
+  if (normalized.includes("neo4j")) {
+    return "neo4j";
+  }
+  if (normalized.includes("netezza")) {
+    return "netezza";
+  }
+  if (normalized.includes("odbc")) {
+    return "odbc";
+  }
   if (normalized.includes("oracle")) {
     return "oracle";
+  }
+  if (normalized.includes("parquet")) {
+    return "parquet";
+  }
+  if (normalized.includes("progress")) {
+    return "progress";
+  }
+  if (normalized.includes("redshift")) {
+    return "redshift";
+  }
+  if (normalized.includes("sap ase")) {
+    return "sapase";
+  }
+  if (normalized.includes("sap iq")) {
+    return "sapiq";
+  }
+  if (normalized === "sas") {
+    return "sas";
+  }
+  if (normalized.includes("snowflake")) {
+    return "snowflake";
+  }
+  if (normalized.includes("teradata")) {
+    return "teradata";
   }
   return normalized || "postgresql";
 }
@@ -707,6 +856,7 @@ export default function App() {
   }, [activeDiagram, selectedEntityIds]);
 
   const isDesktopLayout = windowWidth > 1380;
+  const databaseVersionOptions = DATABASE_VERSION_OPTIONS[model.project.database] ?? ["1.0"];
 
   function createFreshSampleModel() {
     return normalizeModel(sampleModel);
@@ -850,6 +1000,53 @@ export default function App() {
     setStatus("Reloaded the original local sample model.");
   }
 
+  function handleProjectChange(field, value) {
+    setModel((current) => {
+      const nextProject = { ...current.project };
+
+      if (field === "database") {
+        nextProject.database = value;
+        const nextVersions = DATABASE_VERSION_OPTIONS[value] ?? ["1.0"];
+        nextProject.databaseVersion = nextVersions.includes(nextProject.databaseVersion)
+          ? nextProject.databaseVersion
+          : nextVersions[0];
+        return {
+          ...current,
+          project: nextProject
+        };
+      }
+
+      if (field === "viewMode") {
+        nextProject.viewMode = value;
+        nextProject.displayLevel = value === "Logical View" ? "Attribute" : "Column";
+        return {
+          ...current,
+          project: nextProject
+        };
+      }
+
+      nextProject[field] = value;
+      return {
+        ...current,
+        project: nextProject
+      };
+    });
+
+    if (field === "database") {
+      setStatus(`Changed database to ${value}.`);
+      return;
+    }
+
+    if (field === "viewMode") {
+      setStatus(`Changed view mode to ${value}.`);
+      return;
+    }
+
+    if (field === "databaseVersion") {
+      setStatus(`Changed database version to ${value}.`);
+    }
+  }
+
   function handleExportJson() {
     const exportedJson = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
     setJsonDraft(exportedJson);
@@ -943,6 +1140,12 @@ export default function App() {
               description: "JSON Files",
               accept: {
                 "application/json": [".json"]
+              }
+            },
+            {
+              description: "Erwin JSON Files",
+              accept: {
+                "text/plain": [".erwin_json"]
               }
             }
           ]
@@ -1559,9 +1762,13 @@ export default function App() {
         project={model.project}
         entityCount={activeDiagram?.entities.length ?? 0}
         relationshipCount={activeDiagram?.relationships.length ?? 0}
+        databaseOptions={DATABASE_OPTIONS}
+        databaseVersionOptions={databaseVersionOptions}
+        viewModeOptions={VIEW_MODE_OPTIONS}
         jsonDraft={jsonDraft}
         onJsonDraftChange={setJsonDraft}
         onAutoLayout={handleAutoLayout}
+        onProjectChange={handleProjectChange}
         onExportJson={handleExportJson}
         onImportJson={handleImportJson}
         onClearJson={handleClearJson}
