@@ -22,6 +22,7 @@ html,
 body,
 #root {
   margin: 0;
+  height: 100%;
   min-height: 100%;
   background:
     radial-gradient(circle at top left, rgba(54, 94, 126, 0.35), transparent 28%),
@@ -39,6 +40,7 @@ textarea {
 
 body {
   min-height: 100vh;
+  overflow: hidden;
 }
 
 body.panel-resizing {
@@ -52,9 +54,10 @@ body.panel-resizing {
 
 .app-shell {
   display: grid;
-  min-height: 100vh;
+  height: 100vh;
   gap: 14px;
   padding: 14px;
+  overflow: hidden;
 }
 
 .panel-resizer {
@@ -78,6 +81,7 @@ body.panel-resizing {
 .left-sidebar,
 .right-inspector,
 .workspace-shell {
+  min-height: 0;
   min-height: calc(100vh - 28px);
 }
 
@@ -87,6 +91,8 @@ body.panel-resizing {
   background: linear-gradient(180deg, rgba(15, 23, 33, 0.98), rgba(17, 28, 39, 0.9));
   border: 1px solid var(--panel-border);
   box-shadow: var(--shadow);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .left-sidebar h1 {
@@ -651,6 +657,8 @@ body.panel-resizing {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .helper-panel p {
