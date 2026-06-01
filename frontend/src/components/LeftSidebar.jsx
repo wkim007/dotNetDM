@@ -3,11 +3,17 @@ function SelectField({ label, value, options, onChange, disabled = false }) {
     <label className="field-group">
       <span>{label}</span>
       <select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled}>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
+        {options.map((option) => {
+          const resolvedOption = typeof option === "string"
+            ? { value: option, label: option }
+            : option;
+
+          return (
+            <option key={resolvedOption.value} value={resolvedOption.value}>
+              {resolvedOption.label}
+            </option>
+          );
+        })}
       </select>
     </label>
   );
@@ -22,6 +28,7 @@ export default function LeftSidebar({
   cachedViewUiName,
   databaseOptions,
   databaseVersionOptions,
+  displayLevelOptions,
   viewModeOptions,
   jsonDraft,
   onJsonDraftChange,
@@ -96,9 +103,8 @@ export default function LeftSidebar({
         <SelectField
           label="Diagram Display Level"
           value={project.displayLevel}
-          options={[project.displayLevel]}
-          onChange={() => {}}
-          disabled
+          options={displayLevelOptions}
+          onChange={(value) => onProjectChange("displayLevel", value)}
         />
 
         <div className="field-group diagram-box-field">

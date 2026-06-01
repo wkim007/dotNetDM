@@ -3,9 +3,12 @@ import { useEffect, useRef, useState } from "react";
 const CARD_WIDTH = 280;
 const CARD_MIN_WIDTH = 220;
 const CARD_MIN_HEIGHT = 120;
+const CARD_COMPACT_MIN_HEIGHT = 58;
+const CARD_COMMENT_MIN_HEIGHT = 92;
 const CARD_HEADER = 50;
 const ROW_HEIGHT = 33;
 const CARD_MAX_WIDTH = 560;
+const CARD_COMMENT_MAX_WIDTH = 980;
 const WORLD_WIDTH = 1600;
 const WORLD_HEIGHT = 1200;
 const WORLD_PADDING = 220;
@@ -14,27 +17,91 @@ function estimateTextWidth(text, factor = 9.2) {
   return String(text ?? "").length * factor;
 }
 
-function getPreferredEntitySize(entity) {
+function normalizeDisplayLevel(displayLevel) {
+  return String(displayLevel ?? "Column").trim().toLowerCase();
+}
+
+function isCommentDisplayLevel(displayLevel) {
+  return normalizeDisplayLevel(displayLevel) === "comment";
+}
+
+function getCommentText(entity) {
+  return String(entity.comment ?? "").trim();
+}
+
+function getVisibleFields(entity, displayLevel) {
+  const normalizedDisplayLevel = normalizeDisplayLevel(displayLevel);
+  const fields = entity.fields ?? [];
+
+  if (
+    normalizedDisplayLevel === "table" ||
+    normalizedDisplayLevel === "entity" ||
+    normalizedDisplayLevel === "comment"
+  ) {
+    return [];
+  }
+
+  if (normalizedDisplayLevel === "key" || normalizedDisplayLevel === "primarykey") {
+    return fields.filter((field) => field.kind === "PK" || field.kind === "FK");
+  }
+
+  return fields;
+}
+
+function getPreferredEntitySize(entity, displayLevel) {
   const headerWidth = estimateTextWidth(entity.physicalName ?? entity.name ?? "Entity", 12) + 92;
+  const commentMode = isCommentDisplayLevel(displayLevel);
+
+  if (commentMode) {
+    const commentText = getCommentText(entity);
+    const commentWidth = commentText ? estimateTextWidth(commentText, 8.6) + 34 : 0;
+
+    return {
+      width: Math.min(
+        CARD_COMMENT_MAX_WIDTH,
+        Math.max(CARD_MIN_WIDTH, Math.ceil(Math.max(headerWidth, commentWidth)))
+      ),
+      height: CARD_COMMENT_MIN_HEIGHT
+    };
+  }
+
+  const visibleFields = getVisibleFields(entity, displayLevel);
   const widestFieldWidth = Math.max(
-    ...entity.fields.map((field) => {
+    ...visibleFields.map((field) => {
       const nameWidth = estimateTextWidth(field.name, 10);
       const typeWidth = estimateTextWidth(field.dataType, 9.1);
       return 48 + 10 + nameWidth + 18 + typeWidth + 28;
     }),
     CARD_WIDTH
   );
+  const rowCount = visibleFields.length;
+  const minHeight = rowCount > 0 ? CARD_MIN_HEIGHT : CARD_COMPACT_MIN_HEIGHT;
 
   return {
     width: Math.min(CARD_MAX_WIDTH, Math.max(CARD_MIN_WIDTH, Math.ceil(Math.max(headerWidth, widestFieldWidth)))),
-    height: Math.max(CARD_MIN_HEIGHT, CARD_HEADER + entity.fields.length * ROW_HEIGHT + 18)
+    height: Math.max(minHeight, CARD_HEADER + rowCount * ROW_HEIGHT + 18)
   };
 }
 
-function getCardBounds(entity) {
-  const preferredSize = getPreferredEntitySize(entity);
-  const width = Math.max(entity.width ?? 0, preferredSize.width);
-  const height = Math.max(entity.height ?? 0, preferredSize.height);
+function getRenderedEntitySize(entity, displayLevel) {
+  const preferredSize = getPreferredEntitySize(entity, displayLevel);
+  const visibleFields = getVisibleFields(entity, displayLevel);
+  const totalFields = entity.fields?.length ?? 0;
+  const shouldPreserveManualHeight =
+    !isCommentDisplayLevel(displayLevel) &&
+    visibleFields.length > 0 &&
+    visibleFields.length === totalFields;
+
+  return {
+    width: Math.max(entity.width ?? 0, preferredSize.width),
+    height: shouldPreserveManualHeight
+      ? Math.max(entity.height ?? 0, preferredSize.height)
+      : preferredSize.height
+  };
+}
+
+function getCardBounds(entity, displayLevel) {
+  const { width, height } = getRenderedEntitySize(entity, displayLevel);
 
   return {
     left: entity.x,
@@ -48,7 +115,7 @@ function getCardBounds(entity) {
   };
 }
 
-function getWorldSize(entities) {
+function getWorldSize(entities, displayLevel) {
   if (entities.length === 0) {
     return {
       width: WORLD_WIDTH,
@@ -56,8 +123,8 @@ function getWorldSize(entities) {
     };
   }
 
-  const furthestRight = Math.max(...entities.map((entity) => getCardBounds(entity).right));
-  const furthestBottom = Math.max(...entities.map((entity) => getCardBounds(entity).bottom));
+  const furthestRight = Math.max(...entities.map((entity) => getCardBounds(entity, displayLevel).right));
+  const furthestBottom = Math.max(...entities.map((entity) => getCardBounds(entity, displayLevel).bottom));
 
   return {
     width: Math.max(WORLD_WIDTH, Math.ceil(furthestRight + WORLD_PADDING)),
@@ -69,9 +136,9 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-function getAnchor(entity, target) {
-  const bounds = getCardBounds(entity);
-  const targetBounds = getCardBounds(target);
+function getAnchor(entity, target, displayLevel) {
+  const bounds = getCardBounds(entity, displayLevel);
+  const targetBounds = getCardBounds(target, displayLevel);
   const horizontalGap = targetBounds.centerX - bounds.centerX;
   const verticalGap = targetBounds.centerY - bounds.centerY;
   const horizontalBias = Math.abs(horizontalGap) / bounds.width;
@@ -95,13 +162,14 @@ function DiagramLink({
   relationship,
   source,
   target,
+  displayLevel,
   dashed,
   isSelected,
   onSelectRelationship,
   onDeleteRelationship
 }) {
-  const start = getAnchor(source, target);
-  const end = getAnchor(target, source);
+  const start = getAnchor(source, target, displayLevel);
+  const end = getAnchor(target, source, displayLevel);
   const deltaX = end.x - start.x;
   const deltaY = end.y - start.y;
   const curveStrength = Math.max(36, Math.min(140, Math.abs(deltaX) * 0.35 + Math.abs(deltaY) * 0.1));
@@ -171,15 +239,18 @@ function getEntityCardVariant(entity) {
 
 function EntityCard({
   entity,
+  displayLevel,
   isSelected,
   onPointerDown,
   onResizeStart,
   onSelect,
   onDelete
 }) {
-  const preferredSize = getPreferredEntitySize(entity);
-  const width = Math.max(entity.width ?? 0, preferredSize.width);
-  const height = Math.max(entity.height ?? 0, preferredSize.height);
+  const commentMode = isCommentDisplayLevel(displayLevel);
+  const commentText = getCommentText(entity);
+  const visibleFields = getVisibleFields(entity, displayLevel);
+  const preferredSize = getPreferredEntitySize(entity, displayLevel);
+  const { width, height } = getRenderedEntitySize(entity, displayLevel);
   const variantClass = getEntityCardVariant(entity);
 
   return (
@@ -216,15 +287,19 @@ function EntityCard({
         </button>
       </header>
 
-      <div className="entity-fields">
-        {entity.fields.map((field) => (
-          <div key={field.id} className="entity-field-row">
-            <FieldBadge kind={field.kind} />
-            <span className="entity-field-name">{field.name}</span>
-            <span className="entity-field-type">{field.dataType}</span>
-          </div>
-        ))}
-      </div>
+      {commentMode ? (
+        <div className={`entity-comment ${commentText ? "" : "empty"}`}>{commentText || " "}</div>
+      ) : visibleFields.length > 0 ? (
+        <div className="entity-fields">
+          {visibleFields.map((field) => (
+            <div key={field.id} className="entity-field-row">
+              <FieldBadge kind={field.kind} />
+              <span className="entity-field-name">{field.name}</span>
+              <span className="entity-field-type">{field.dataType}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <button
         type="button"
@@ -242,6 +317,7 @@ export default function DiagramCanvas({
   relationships,
   selectedEntityIds,
   selectedRelationshipId,
+  displayLevel,
   zoom,
   onSelectEntity,
   onSelectEntities,
@@ -255,7 +331,7 @@ export default function DiagramCanvas({
   viewResetToken
 }) {
   const entityMap = Object.fromEntries(entities.map((entity) => [entity.id, entity]));
-  const worldSize = getWorldSize(entities);
+  const worldSize = getWorldSize(entities, displayLevel);
   const interactionState = useRef(null);
   const canvasRef = useRef(null);
   const suppressBackgroundClickRef = useRef(false);
@@ -340,9 +416,8 @@ export default function DiagramCanvas({
     event.preventDefault();
     event.stopPropagation();
     const entity = entityMap[entityId];
-    const preferredSize = getPreferredEntitySize(entity);
-    const width = Math.max(entity.width ?? 0, preferredSize.width);
-    const height = Math.max(entity.height ?? 0, preferredSize.height);
+    const preferredSize = getPreferredEntitySize(entity, displayLevel);
+    const { width, height } = getRenderedEntitySize(entity, displayLevel);
 
     interactionState.current = {
       mode: "resize",
@@ -400,7 +475,7 @@ export default function DiagramCanvas({
 
       const hits = entities
         .filter((entity) => {
-          const bounds = getCardBounds(entity);
+          const bounds = getCardBounds(entity, displayLevel);
 
           return !(
             bounds.right < rect.left ||
@@ -533,6 +608,7 @@ export default function DiagramCanvas({
                   relationship={relationship}
                   source={source}
                   target={target}
+                  displayLevel={displayLevel}
                   dashed={relationship.style === "dashed"}
                   isSelected={relationship.id === selectedRelationshipId}
                   onSelectRelationship={onSelectRelationship}
@@ -546,6 +622,7 @@ export default function DiagramCanvas({
             <EntityCard
               key={entity.id}
               entity={entity}
+              displayLevel={displayLevel}
               isSelected={selectedEntityIds.includes(entity.id)}
               onPointerDown={handlePointerDown}
               onResizeStart={handleResizeStart}

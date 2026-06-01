@@ -671,6 +671,20 @@ body.panel-resizing {
   padding: 10px 12px 16px;
 }
 
+.entity-comment {
+  padding: 11px 14px 15px;
+  color: #a9b7ca;
+  font-size: 0.98rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.entity-comment.empty {
+  min-height: 16px;
+}
+
 .entity-resize-handle {
   position: absolute;
   right: 8px;

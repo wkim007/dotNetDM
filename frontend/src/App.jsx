@@ -104,6 +104,25 @@ const DATABASE_VERSION_OPTIONS = {
   Snowflake: ["4.10"],
   Teradata: ["17.x"]
 };
+const DISPLAY_LEVEL_OPTIONS_PHYSICAL = [
+  { value: "0", label: "Table" },
+  { value: "1", label: "Column" },
+  { value: "12", label: "Key" },
+  { value: "13", label: "Graph" },
+  { value: "3", label: "Comment" },
+  { value: "5", label: "PrimaryKey" },
+  { value: "6", label: "Order" },
+  { value: "7", label: "Icon" }
+];
+const DISPLAY_LEVEL_OPTIONS_LOGICAL = [
+  { value: "0", label: "Entity" },
+  { value: "1", label: "Attribute" },
+  { value: "12", label: "Key" },
+  { value: "13", label: "Graph" },
+  { value: "3", label: "Definition" },
+  { value: "5", label: "PrimaryKey" },
+  { value: "7", label: "Icon" }
+];
 
 function supportsViewObjects(engineId) {
   return !["neo4j", "amazonkeyspaces", "cassandra", "dynamodb", "parquet", "json"].includes(
@@ -128,6 +147,63 @@ function supportsCachedViews(engineId) {
     "teradata",
     "cassandra"
   ].includes(String(engineId || "").toLowerCase());
+}
+
+function getDisplayLevelOptionsForViewMode(viewMode) {
+  return viewMode === "Logical View"
+    ? DISPLAY_LEVEL_OPTIONS_LOGICAL
+    : DISPLAY_LEVEL_OPTIONS_PHYSICAL;
+}
+
+function getDefaultDisplayLevelForViewMode(viewMode) {
+  return viewMode === "Logical View" ? "Attribute" : "Column";
+}
+
+function getDisplayLevelValueForViewMode(viewMode, label) {
+  const normalizedLabel = String(label ?? "").trim().toLowerCase();
+  const match = getDisplayLevelOptionsForViewMode(viewMode).find(
+    (option) => option.label.toLowerCase() === normalizedLabel
+  );
+
+  return match?.value ?? "1";
+}
+
+function getDisplayLevelLabelForViewMode(viewMode, value) {
+  const normalizedValue = String(value ?? "").trim();
+  const options = getDisplayLevelOptionsForViewMode(viewMode);
+  const matchByValue = options.find((option) => option.value === normalizedValue);
+
+  if (matchByValue) {
+    return matchByValue.label;
+  }
+
+  const normalizedLabel = normalizedValue.toLowerCase();
+  const matchByLabel = options.find((option) => option.label.toLowerCase() === normalizedLabel);
+  return matchByLabel?.label ?? getDefaultDisplayLevelForViewMode(viewMode);
+}
+
+function getDiagramDisplayLevelValue(diagram, viewMode) {
+  return viewMode === "Logical View"
+    ? String(diagram?.displayLevelLogical ?? "1")
+    : String(diagram?.displayLevelPhysical ?? "1");
+}
+
+function syncProjectWithActiveDiagram(modelLike, nextProject = modelLike.project, nextActiveDiagramId = modelLike.activeDiagramId) {
+  const activeDiagram =
+    modelLike.diagrams.find((diagram) => diagram.id === nextActiveDiagramId) ?? modelLike.diagrams[0];
+
+  return {
+    ...modelLike,
+    activeDiagramId: nextActiveDiagramId,
+    project: {
+      ...nextProject,
+      diagramDefinition: activeDiagram?.definition ?? "",
+      displayLevel: getDisplayLevelLabelForViewMode(
+        nextProject.viewMode,
+        getDiagramDisplayLevelValue(activeDiagram, nextProject.viewMode)
+      )
+    }
+  };
 }
 
 function CopyIcon() {
@@ -336,16 +412,6 @@ function resolveDbMeta(databaseName, databaseVersion) {
   };
 }
 
-function displayLevelToValue(level) {
-  if (String(level ?? "").toLowerCase() === "column") {
-    return "1";
-  }
-  if (String(level ?? "").toLowerCase() === "attribute") {
-    return "1";
-  }
-  return "1";
-}
-
 function getRelationshipName(relationship, source, target) {
   return relationship.name ?? `${source?.physicalName ?? source?.name ?? "Entity"} -> ${target?.physicalName ?? target?.name ?? "Entity"}`;
 }
@@ -503,8 +569,14 @@ function exportModelToWorkspaceJson(model) {
           id: String(diagram.id),
           name: diagram.name,
           definition: diagram.definition ?? model.project?.diagramDefinition ?? "",
-          displayLevelLogical: displayLevelToValue(model.project?.displayLevel),
-          displayLevelPhysical: displayLevelToValue(model.project?.displayLevel),
+          displayLevelLogical: String(
+            diagram.displayLevelLogical ??
+              getDisplayLevelValueForViewMode("Logical View", getDefaultDisplayLevelForViewMode("Logical View"))
+          ),
+          displayLevelPhysical: String(
+            diagram.displayLevelPhysical ??
+              getDisplayLevelValueForViewMode("Physical View", getDefaultDisplayLevelForViewMode("Physical View"))
+          ),
           modelShapes: {
             entities: diagram.entities
               .filter((entity) => getEntityObjectType(entity) === "entity")
@@ -668,25 +740,31 @@ function importWorkspaceModel(payload) {
       id: String(diagram.id),
       name: diagram.name ?? `ER_Diagram_${diagramIndex + 1}`,
       definition: diagram.definition ?? "",
+      displayLevelLogical: String(diagram.displayLevelLogical ?? "1"),
+      displayLevelPhysical: String(diagram.displayLevelPhysical ?? "1"),
       entities,
       relationships
     };
   });
 
   const activeDiagram = diagrams.find((diagram) => diagram.id === activeDiagramId) ?? diagrams[0];
+  const viewMode = String(payload?.meta?.viewMode ?? "physical").toLowerCase() === "logical"
+    ? "Logical View"
+    : "Physical View";
 
   return {
     project: {
       name: "Data Modeler",
-      viewMode: String(payload?.meta?.viewMode ?? "physical").toLowerCase() === "logical"
-        ? "Logical View"
-        : "Physical View",
+      viewMode,
       database: dbMeta.label,
       databaseVersion: `${dbMeta.major}${dbMeta.minor ? `.${dbMeta.minor}` : ""}`,
       subjectArea: activeSubjectArea.name ?? "<model>",
       definition: "Drag entities, define attributes, and wire relationships.",
       diagramDefinition: activeDiagram?.definition ?? "",
-      displayLevel: String(payload?.meta?.viewMode ?? "physical").toLowerCase() === "logical" ? "Attribute" : "Column"
+      displayLevel: getDisplayLevelLabelForViewMode(
+        viewMode,
+        getDiagramDisplayLevelValue(activeDiagram, viewMode)
+      )
     },
     activeDiagramId: activeDiagram?.id ?? diagrams[0]?.id ?? "1",
     diagrams
@@ -736,14 +814,22 @@ function normalizeModel(rawModel) {
   }
 
   if (Array.isArray(baseModel.diagrams) && baseModel.diagrams.length > 0) {
-    return {
+    return syncProjectWithActiveDiagram({
       ...baseModel,
       diagrams: baseModel.diagrams.map((diagram) => ({
         ...diagram,
+        displayLevelLogical: String(
+          diagram.displayLevelLogical ??
+            getDisplayLevelValueForViewMode("Logical View", getDefaultDisplayLevelForViewMode("Logical View"))
+        ),
+        displayLevelPhysical: String(
+          diagram.displayLevelPhysical ??
+            getDisplayLevelValueForViewMode("Physical View", getDefaultDisplayLevelForViewMode("Physical View"))
+        ),
         relationships: (diagram.relationships ?? []).map(normalizeRelationship)
       })),
       activeDiagramId: baseModel.activeDiagramId ?? baseModel.diagrams[0].id
-    };
+    });
   }
 
   const diagramId = "er-diagram-1";
@@ -966,6 +1052,7 @@ export default function App() {
 
   const isDesktopLayout = windowWidth > 1380;
   const databaseVersionOptions = DATABASE_VERSION_OPTIONS[model.project.database] ?? ["1.0"];
+  const displayLevelOptions = getDisplayLevelOptionsForViewMode(model.project.viewMode);
   const dbEngine = normalizeDbEngine(model.project.database);
   const showViewObjectsUi = supportsViewObjects(dbEngine);
   const showCachedViewObjectsUi = supportsCachedViews(dbEngine);
@@ -985,6 +1072,17 @@ export default function App() {
     const width = Math.max(entity.width ?? 0, preferredSize.width);
     const height = Math.max(entity.height ?? 0, preferredSize.height);
     return { width, height };
+  }
+
+  function autoLayoutDiagramForProject(diagram, project, viewport = diagramViewport) {
+    return {
+      ...diagram,
+      entities: buildAutoLayout(
+        diagram.entities ?? [],
+        diagram.relationships ?? [],
+        viewport
+      )
+    };
   }
 
   function buildAutoLayout(entities, relationships, viewport) {
@@ -1098,10 +1196,21 @@ export default function App() {
 
       const data = await response.json();
       const normalizedData = normalizeModel(data);
-      setModel(normalizedData);
-      setSelectedEntityIds(normalizedData.diagrams[0]?.entities[0]?.id ? [normalizedData.diagrams[0].entities[0].id] : []);
+      const relaidOutData = {
+        ...normalizedData,
+        diagrams: normalizedData.diagrams.map((diagram) =>
+          diagram.id === normalizedData.activeDiagramId
+            ? autoLayoutDiagramForProject(diagram, normalizedData.project)
+            : diagram
+        )
+      };
+      const normalizedActiveDiagram =
+        relaidOutData.diagrams.find((diagram) => diagram.id === relaidOutData.activeDiagramId) ??
+        relaidOutData.diagrams[0];
+      setModel(relaidOutData);
+      setSelectedEntityIds(normalizedActiveDiagram?.entities[0]?.id ? [normalizedActiveDiagram.entities[0].id] : []);
       setSelectedRelationshipId(null);
-      setStatus("Loaded model from ASP.NET Core Web API.");
+      setStatus("Loaded model from ASP.NET Core Web API and applied auto-layout.");
     } catch {
       setStatus("Backend unavailable, showing local sample model.");
     }
@@ -1109,8 +1218,11 @@ export default function App() {
 
   function handleReloadSample() {
     const freshSample = createFreshSampleModel();
+    const freshActiveDiagram =
+      freshSample.diagrams.find((diagram) => diagram.id === freshSample.activeDiagramId) ??
+      freshSample.diagrams[0];
     setModel(freshSample);
-    setSelectedEntityIds(freshSample.diagrams[0]?.entities[0]?.id ? [freshSample.diagrams[0].entities[0].id] : []);
+    setSelectedEntityIds(freshActiveDiagram?.entities[0]?.id ? [freshActiveDiagram.entities[0].id] : []);
     setSelectedRelationshipId(null);
     window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(freshSample));
     setJsonDraft("");
@@ -1136,10 +1248,30 @@ export default function App() {
 
       if (field === "viewMode") {
         nextProject.viewMode = value;
-        nextProject.displayLevel = value === "Logical View" ? "Attribute" : "Column";
+        return syncProjectWithActiveDiagram(
+          {
+            ...current,
+            project: nextProject
+          },
+          nextProject
+        );
+      }
+
+      if (field === "displayLevel") {
+        nextProject.displayLevel = value;
         return {
           ...current,
-          project: nextProject
+          project: nextProject,
+          diagrams: current.diagrams.map((diagram) =>
+            diagram.id === current.activeDiagramId
+              ? {
+                  ...diagram,
+                  ...(nextProject.viewMode === "Logical View"
+                    ? { displayLevelLogical: getDisplayLevelValueForViewMode("Logical View", value) }
+                    : { displayLevelPhysical: getDisplayLevelValueForViewMode("Physical View", value) })
+                }
+              : diagram
+          )
         };
       }
 
@@ -1181,12 +1313,26 @@ export default function App() {
   function importJsonText(jsonText, sourceLabel = "JSON") {
     const parsed = JSON.parse(jsonText);
     const importedModel = normalizeModel(parsed);
+    const importedActiveDiagram =
+      importedModel.diagrams.find((diagram) => diagram.id === importedModel.activeDiagramId) ??
+      importedModel.diagrams[0];
+    const relaidOutModel = {
+      ...importedModel,
+      diagrams: importedModel.diagrams.map((diagram) =>
+        diagram.id === importedModel.activeDiagramId
+          ? autoLayoutDiagramForProject(diagram, importedModel.project)
+          : diagram
+      )
+    };
+    const relaidOutActiveDiagram =
+      relaidOutModel.diagrams.find((diagram) => diagram.id === relaidOutModel.activeDiagramId) ??
+      relaidOutModel.diagrams[0];
     setJsonDraft(jsonText);
-    setModel(importedModel);
-    setSelectedEntityIds(importedModel.diagrams[0]?.entities[0]?.id ? [importedModel.diagrams[0].entities[0].id] : []);
+    setModel(relaidOutModel);
+    setSelectedEntityIds(relaidOutActiveDiagram?.entities[0]?.id ? [relaidOutActiveDiagram.entities[0].id] : []);
     setSelectedRelationshipId(null);
     setLinkDraft(null);
-    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(importedModel));
+    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(relaidOutModel));
     setViewResetToken((current) => current + 1);
     setStatus(`Imported model JSON from ${sourceLabel}.`);
   }
@@ -1696,15 +1842,24 @@ export default function App() {
     const newDiagram = {
       id: `er-diagram-${Date.now()}`,
       name: `ER_Diagram_${nextNumber}`,
+      definition: "",
+      displayLevelLogical: getDisplayLevelValueForViewMode("Logical View", getDefaultDisplayLevelForViewMode("Logical View")),
+      displayLevelPhysical: getDisplayLevelValueForViewMode("Physical View", getDefaultDisplayLevelForViewMode("Physical View")),
       entities: [],
       relationships: []
     };
 
-    setModel((current) => ({
-      ...current,
-      activeDiagramId: newDiagram.id,
-      diagrams: [...current.diagrams, newDiagram]
-    }));
+    setModel((current) =>
+      syncProjectWithActiveDiagram(
+        {
+          ...current,
+          activeDiagramId: newDiagram.id,
+          diagrams: [...current.diagrams, newDiagram]
+        },
+        current.project,
+        newDiagram.id
+      )
+    );
     setSelectedEntityIds([]);
     setSelectedRelationshipId(null);
     setLinkDraft(null);
@@ -1718,15 +1873,23 @@ export default function App() {
       return;
     }
 
-    setModel((current) => ({
-      ...current,
-      activeDiagramId: diagramId
-    }));
-    setSelectedEntityIds(nextDiagram.entities[0]?.id ? [nextDiagram.entities[0].id] : []);
+    setModel((current) => {
+      const nextModel = syncProjectWithActiveDiagram(current, current.project, diagramId);
+      return {
+        ...nextModel,
+        diagrams: nextModel.diagrams.map((diagram) =>
+          diagram.id === diagramId
+            ? autoLayoutDiagramForProject(diagram, nextModel.project)
+            : diagram
+        )
+      };
+    });
+    const relaidOutDiagram = autoLayoutDiagramForProject(nextDiagram, model.project);
+    setSelectedEntityIds(relaidOutDiagram.entities[0]?.id ? [relaidOutDiagram.entities[0].id] : []);
     setSelectedRelationshipId(null);
     setLinkDraft(null);
     setViewResetToken((current) => current + 1);
-    setStatus(`Opened ${nextDiagram.name}.`);
+    setStatus(`Opened ${nextDiagram.name} and applied auto-layout.`);
   }
 
   function handleCloseDiagram(diagramId) {
@@ -1742,11 +1905,15 @@ export default function App() {
       setSelectedEntityIds(nextActiveDiagram?.entities[0]?.id ? [nextActiveDiagram.entities[0].id] : []);
       setSelectedRelationshipId(null);
       setLinkDraft(null);
-      return {
+      return syncProjectWithActiveDiagram(
+        {
         ...current,
-        activeDiagramId: nextActiveId,
-        diagrams: nextDiagrams
-      };
+          activeDiagramId: nextActiveId,
+          diagrams: nextDiagrams
+        },
+        current.project,
+        nextActiveId
+      );
     });
 
     setStatus("Closed diagram.");
@@ -1979,6 +2146,7 @@ export default function App() {
         cachedViewUiName={cachedViewUiName}
         databaseOptions={DATABASE_OPTIONS}
         databaseVersionOptions={databaseVersionOptions}
+        displayLevelOptions={displayLevelOptions}
         viewModeOptions={VIEW_MODE_OPTIONS}
         jsonDraft={jsonDraft}
         onJsonDraftChange={setJsonDraft}
@@ -2017,6 +2185,7 @@ export default function App() {
           relationships={activeDiagram?.relationships ?? []}
           selectedEntityIds={selectedEntityIds}
           selectedRelationshipId={selectedRelationshipId}
+          displayLevel={model.project.displayLevel}
           zoom={zoom}
           onSelectEntity={handleSelectEntity}
           onSelectEntities={handleSetSelectedEntities}
