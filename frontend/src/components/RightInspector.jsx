@@ -33,6 +33,8 @@ export default function RightInspector({
   allEntities,
   importForm,
   providers,
+  status,
+  zoom,
   onEntityChange,
   onAddAttribute,
   onStartRelationshipLink,
@@ -43,6 +45,8 @@ export default function RightInspector({
   onSelectRelationship,
   onImportFormChange,
   onImportSchema,
+  onZoomIn,
+  onZoomOut,
   isLinkingRelationship
 }) {
   const selectedName = selectedEntity?.id ?? "";
@@ -277,6 +281,24 @@ export default function RightInspector({
         ) : (
           <p className="empty-state">Select an entity to edit its fields.</p>
         )}
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <span className="panel-label">Status</span>
+        </div>
+        <div className="mini-list-item status-panel-card">
+          <strong>{status}</strong>
+          <span>Zoom: {Math.round(zoom * 100)}%</span>
+        </div>
+        <div className="button-row">
+          <button className="secondary-button" type="button" onClick={onZoomIn}>
+            Zoom In
+          </button>
+          <button className="secondary-button" type="button" onClick={onZoomOut}>
+            Zoom Out
+          </button>
+        </div>
       </section>
     </aside>
   );

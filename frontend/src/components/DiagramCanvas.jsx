@@ -6,6 +6,8 @@ const CARD_MIN_HEIGHT = 120;
 const CARD_HEADER = 50;
 const ROW_HEIGHT = 33;
 const CARD_MAX_WIDTH = 560;
+const WORLD_WIDTH = 1600;
+const WORLD_HEIGHT = 1200;
 
 function estimateTextWidth(text, factor = 9.2) {
   return String(text ?? "").length * factor;
@@ -209,6 +211,7 @@ export default function DiagramCanvas({
   relationships,
   selectedEntityIds,
   selectedRelationshipId,
+  zoom,
   onSelectEntity,
   onSelectEntities,
   onSelectRelationship,
@@ -232,8 +235,8 @@ export default function DiagramCanvas({
     const bounds = element.getBoundingClientRect();
 
     return {
-      x: event.clientX - bounds.left + element.scrollLeft,
-      y: event.clientY - bounds.top + element.scrollTop
+      x: (event.clientX - bounds.left + element.scrollLeft) / zoom,
+      y: (event.clientY - bounds.top + element.scrollTop) / zoom
     };
   }
 
@@ -365,14 +368,13 @@ export default function DiagramCanvas({
 
       const hits = entities
         .filter((entity) => {
-          const width = entity.width ?? CARD_WIDTH;
-          const height = Math.max(entity.height ?? 0, CARD_HEADER + entity.fields.length * ROW_HEIGHT);
+          const bounds = getCardBounds(entity);
 
           return !(
-            entity.x + width < rect.left ||
-            entity.x > rect.right ||
-            entity.y + height < rect.top ||
-            entity.y > rect.bottom
+            bounds.right < rect.left ||
+            bounds.left > rect.right ||
+            bounds.bottom < rect.top ||
+            bounds.top > rect.bottom
           );
         })
         .map((entity) => entity.id);
@@ -462,55 +464,69 @@ export default function DiagramCanvas({
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
     >
-      <div className="diagram-grid" />
-
-      <svg className="diagram-svg" viewBox="0 0 1600 1200" preserveAspectRatio="none">
-        {relationships.map((relationship) => {
-          const source = entityMap[relationship.sourceEntityId];
-          const target = entityMap[relationship.targetEntityId];
-
-          if (!source || !target) {
-            return null;
-          }
-
-          return (
-            <DiagramLink
-              key={relationship.id}
-              relationship={relationship}
-              source={source}
-              target={target}
-              dashed={relationship.style === "dashed"}
-              isSelected={relationship.id === selectedRelationshipId}
-              onSelectRelationship={onSelectRelationship}
-              onDeleteRelationship={onDeleteRelationship}
-            />
-          );
-        })}
-      </svg>
-
-      {entities.map((entity) => (
-        <EntityCard
-          key={entity.id}
-          entity={entity}
-          isSelected={selectedEntityIds.includes(entity.id)}
-          onPointerDown={handlePointerDown}
-          onResizeStart={handleResizeStart}
-          onSelect={onSelectEntity}
-          onDelete={onDeleteEntity}
-        />
-      ))}
-
-      {marqueeRect ? (
+      <div
+        className="diagram-stage-shell"
+        style={{ width: WORLD_WIDTH * zoom, height: WORLD_HEIGHT * zoom }}
+      >
         <div
-          className="marquee-selection"
+          className="diagram-stage"
           style={{
-            left: marqueeRect.left,
-            top: marqueeRect.top,
-            width: marqueeRect.right - marqueeRect.left,
-            height: marqueeRect.bottom - marqueeRect.top
+            width: WORLD_WIDTH,
+            height: WORLD_HEIGHT,
+            transform: `scale(${zoom})`
           }}
-        />
-      ) : null}
+        >
+          <div className="diagram-grid" />
+
+          <svg className="diagram-svg" viewBox={`0 0 ${WORLD_WIDTH} ${WORLD_HEIGHT}`} preserveAspectRatio="none">
+            {relationships.map((relationship) => {
+              const source = entityMap[relationship.sourceEntityId];
+              const target = entityMap[relationship.targetEntityId];
+
+              if (!source || !target) {
+                return null;
+              }
+
+              return (
+                <DiagramLink
+                  key={relationship.id}
+                  relationship={relationship}
+                  source={source}
+                  target={target}
+                  dashed={relationship.style === "dashed"}
+                  isSelected={relationship.id === selectedRelationshipId}
+                  onSelectRelationship={onSelectRelationship}
+                  onDeleteRelationship={onDeleteRelationship}
+                />
+              );
+            })}
+          </svg>
+
+          {entities.map((entity) => (
+            <EntityCard
+              key={entity.id}
+              entity={entity}
+              isSelected={selectedEntityIds.includes(entity.id)}
+              onPointerDown={handlePointerDown}
+              onResizeStart={handleResizeStart}
+              onSelect={onSelectEntity}
+              onDelete={onDeleteEntity}
+            />
+          ))}
+
+          {marqueeRect ? (
+            <div
+              className="marquee-selection"
+              style={{
+                left: marqueeRect.left,
+                top: marqueeRect.top,
+                width: marqueeRect.right - marqueeRect.left,
+                height: marqueeRect.bottom - marqueeRect.top
+              }}
+            />
+          ) : null}
+        </div>
+      </div>
     </section>
   );
 }

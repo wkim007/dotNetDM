@@ -14,6 +14,10 @@ const DEFAULT_RIGHT_PANEL_WIDTH = 330;
 const MIN_PANEL_WIDTH = 220;
 const MAX_PANEL_WIDTH = 520;
 const DEFAULT_VIEWPORT = { width: 1200, height: 900 };
+const DEFAULT_ZOOM = 1;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 1.8;
+const ZOOM_STEP = 0.1;
 const CARD_BASE_WIDTH = 280;
 const CARD_MIN_WIDTH = 220;
 const CARD_MIN_HEIGHT = 120;
@@ -660,6 +664,7 @@ export default function App() {
   const [model, setModel] = useState(initialModel);
   const [jsonDraft, setJsonDraft] = useState(() => readJsonDraft());
   const [isJsonViewerOpen, setIsJsonViewerOpen] = useState(false);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [selectedEntityIds, setSelectedEntityIds] = useState(() =>
     initialModel.diagrams[0]?.entities[0]?.id ? [initialModel.diagrams[0].entities[0].id] : []
   );
@@ -1222,6 +1227,22 @@ export default function App() {
     }));
     setViewResetToken((current) => current + 1);
     setStatus("Re-laid out entities to fit the current diagram view.");
+  }
+
+  function handleZoomIn() {
+    setZoom((current) => {
+      const nextZoom = Math.min(MAX_ZOOM, Number((current + ZOOM_STEP).toFixed(2)));
+      setStatus(`Zoomed in to ${Math.round(nextZoom * 100)}%.`);
+      return nextZoom;
+    });
+  }
+
+  function handleZoomOut() {
+    setZoom((current) => {
+      const nextZoom = Math.max(MIN_ZOOM, Number((current - ZOOM_STEP).toFixed(2)));
+      setStatus(`Zoomed out to ${Math.round(nextZoom * 100)}%.`);
+      return nextZoom;
+    });
   }
 
   function handleRelationshipChange(field, value) {
@@ -1800,6 +1821,7 @@ export default function App() {
           relationships={activeDiagram?.relationships ?? []}
           selectedEntityIds={selectedEntityIds}
           selectedRelationshipId={selectedRelationshipId}
+          zoom={zoom}
           onSelectEntity={handleSelectEntity}
           onSelectEntities={handleSetSelectedEntities}
           onSelectRelationship={handleSelectRelationship}
@@ -1829,6 +1851,8 @@ export default function App() {
         allEntities={activeDiagram?.entities ?? []}
         importForm={importForm}
         providers={providers}
+        status={status}
+        zoom={zoom}
         onEntityChange={handleEntityChange}
         onAddAttribute={handleAddAttribute}
         onStartRelationshipLink={handleStartRelationshipLink}
@@ -1839,6 +1863,8 @@ export default function App() {
         onSelectRelationship={handleSelectRelationship}
         onImportFormChange={handleImportFormChange}
         onImportSchema={handleImportSchema}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
         isLinkingRelationship={Boolean(linkDraft)}
       />
 

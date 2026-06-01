@@ -437,6 +437,15 @@ body.panel-resizing {
   overflow: auto;
 }
 
+.diagram-stage-shell {
+  position: relative;
+}
+
+.diagram-stage {
+  position: relative;
+  transform-origin: top left;
+}
+
 .diagram-canvas.dragging,
 .diagram-canvas.dragging * {
   cursor: grabbing;
@@ -445,8 +454,8 @@ body.panel-resizing {
 .diagram-grid {
   position: absolute;
   inset: 0;
-  min-width: 1600px;
-  min-height: 1200px;
+  width: 1600px;
+  height: 1200px;
   background-image:
     linear-gradient(var(--grid) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid) 1px, transparent 1px);
@@ -714,6 +723,10 @@ body.panel-resizing {
 .mini-list-item span {
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+.status-panel-card {
+  margin-bottom: 14px;
 }
 
 @media (max-width: 1380px) {
