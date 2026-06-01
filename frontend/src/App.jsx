@@ -8,6 +8,7 @@ import { sampleModel } from "./data/sampleModel";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "https://localhost:7248";
 const LOCAL_STORAGE_KEY = "dotnetdm-model";
 const PANEL_STORAGE_KEY = "dotnetdm-panel-widths";
+const JSON_DRAFT_STORAGE_KEY = "dotnetdm-json-draft";
 const DEFAULT_LEFT_PANEL_WIDTH = 290;
 const DEFAULT_RIGHT_PANEL_WIDTH = 330;
 const MIN_PANEL_WIDTH = 220;
@@ -19,6 +20,54 @@ const CARD_MIN_HEIGHT = 120;
 const CARD_HEADER = 50;
 const ROW_HEIGHT = 33;
 const CARD_MAX_WIDTH = 560;
+const DB_META_MAP = {
+  postgresql: { db: "1075859235", label: "PostgreSQL", schema: "public" },
+  sqlserver: { db: "1075859016", label: "SQL Server", schema: "dbo" },
+  mssql: { db: "1075859016", label: "SQL Server", schema: "dbo" },
+  mongodb: { db: "1075859196", label: "MongoDB", schema: "public" },
+  mysql: { db: "1075859129", label: "MySQL", schema: "public" },
+  mariadb: { db: "1075859190", label: "MariaDB", schema: "public" },
+  oracle: { db: "1075858979", label: "Oracle", schema: "dbo" }
+};
+
+function CopyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9 9h9v9H9z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SaveIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 4h11l3 3v13H5z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M8 4h7v5H8z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M8 15h8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function OpenIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h5l2 2h9v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M4 9V7a2 2 0 0 1 2-2h3l2 2h3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function JsonActionButton({ label, onClick, children }) {
+  return (
+    <div className="tooltip-shell">
+      <button type="button" className="icon-button json-action-button" onClick={onClick} aria-label={label} title={label}>
+        {children}
+      </button>
+      <span className="tooltip-bubble">{label}</span>
+    </div>
+  );
+}
 
 function readLocalModel() {
   try {
@@ -46,8 +95,345 @@ function readPanelWidths() {
   }
 }
 
+function readJsonDraft() {
+  try {
+    return window.localStorage.getItem(JSON_DRAFT_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function toIdMap(items) {
+  return new Map(items.map((item) => [String(item.id), item]));
+}
+
+function slugify(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function normalizeDbEngine(databaseName) {
+  const normalized = String(databaseName ?? "").trim().toLowerCase();
+  if (normalized.includes("postgres")) {
+    return "postgresql";
+  }
+  if (normalized.includes("sql server") || normalized === "mssql") {
+    return "sqlserver";
+  }
+  if (normalized.includes("mongo")) {
+    return "mongodb";
+  }
+  if (normalized.includes("maria")) {
+    return "mariadb";
+  }
+  if (normalized.includes("mysql")) {
+    return "mysql";
+  }
+  if (normalized.includes("oracle")) {
+    return "oracle";
+  }
+  return normalized || "postgresql";
+}
+
+function resolveDbMeta(databaseName, databaseVersion) {
+  const engine = normalizeDbEngine(databaseName);
+  const resolved = DB_META_MAP[engine] ?? DB_META_MAP.postgresql;
+  const version = String(databaseVersion ?? "").trim();
+  const [major = "1", minor = "0"] = version.split(/[^\d]+/).filter(Boolean);
+
+  return {
+    engine,
+    db: resolved.db,
+    label: resolved.label,
+    schema: resolved.schema,
+    major,
+    minor
+  };
+}
+
+function displayLevelToValue(level) {
+  if (String(level ?? "").toLowerCase() === "column") {
+    return "1";
+  }
+  if (String(level ?? "").toLowerCase() === "attribute") {
+    return "1";
+  }
+  return "1";
+}
+
+function getRelationshipName(relationship, source, target) {
+  return relationship.name ?? `${source?.physicalName ?? source?.name ?? "Entity"} -> ${target?.physicalName ?? target?.name ?? "Entity"}`;
+}
+
+function exportModelToWorkspaceJson(model) {
+  const dbMeta = resolveDbMeta(model.project?.database, model.project?.databaseVersion);
+  const activeSubjectAreaId = "1";
+  const allEntities = [];
+  const entityIds = new Set();
+  const allRelationships = [];
+  const relationshipIds = new Set();
+
+  model.diagrams.forEach((diagram) => {
+    diagram.entities.forEach((entity) => {
+      if (entityIds.has(entity.id)) {
+        return;
+      }
+
+      entityIds.add(entity.id);
+      allEntities.push({
+        id: String(entity.id),
+        name: entity.name ?? entity.physicalName ?? "Entity",
+        physicalName: entity.physicalName ?? "",
+        definition: entity.definition ?? "",
+        comment: entity.comment ?? "",
+        physicalOnly: false,
+        logicalOnly: false,
+        indexes: entity.indexes ?? [],
+        attributes: (entity.fields ?? []).map((field) => ({
+          id: String(field.id),
+          name: field.name ?? "",
+          physicalName: field.physicalName ?? "",
+          definition: field.definition ?? "",
+          datatype: field.dataType ?? "",
+          comment: field.comment ?? "",
+          isPrimary: field.kind === "PK",
+          isFK: field.kind === "FK",
+          isNullable: field.isNullable ?? true,
+          physicalOnly: false,
+          logicalOnly: false
+        })),
+        props: {
+          pParentRelationshipsRef: [],
+          pChildRelationshipsRef: []
+        }
+      });
+    });
+
+    diagram.relationships.forEach((relationship) => {
+      if (relationshipIds.has(relationship.id)) {
+        return;
+      }
+
+      relationshipIds.add(relationship.id);
+      allRelationships.push({
+        id: String(relationship.id),
+        name: relationship.name ?? relationship.physicalName ?? relationship.id,
+        physicalName: relationship.physicalName ?? relationship.id,
+        definition: relationship.definition ?? "",
+        comment: relationship.comment ?? "",
+        description: relationship.description ?? "relates_to",
+        parent: String(relationship.sourceEntityId),
+        child: String(relationship.targetEntityId),
+        cardinality: relationship.cardinality ?? "1:N",
+        relationshipType: relationship.relationshipType ?? "Non-Identifying",
+        physicalOnly: false,
+        logicalOnly: false,
+        parentToChildVerbPhrase: relationship.parentToChildVerbPhrase ?? "",
+        childToParentVerbPhrase: relationship.childToParentVerbPhrase ?? ""
+      });
+    });
+  });
+
+  const relationshipRefsByEntityId = new Map(
+    allEntities.map((entity) => [String(entity.id), { parents: [], children: [] }])
+  );
+
+  allRelationships.forEach((relationship) => {
+    relationshipRefsByEntityId.get(String(relationship.parent))?.children.push(String(relationship.id));
+    relationshipRefsByEntityId.get(String(relationship.child))?.parents.push(String(relationship.id));
+  });
+
+  allEntities.forEach((entity) => {
+    const refs = relationshipRefsByEntityId.get(String(entity.id));
+    entity.props = {
+      pParentRelationshipsRef: refs?.parents ?? [],
+      pChildRelationshipsRef: refs?.children ?? []
+    };
+  });
+
+  const workspace = {
+    entities: allEntities,
+    views: [],
+    cachedViews: [],
+    relationships: allRelationships,
+    schemas: [
+      {
+        id: "schema-1",
+        name: dbMeta.schema,
+        comment: ""
+      }
+    ],
+    subjectAreas: [
+      {
+        id: activeSubjectAreaId,
+        name: model.project?.subjectArea ?? "<model>",
+        locked: true,
+        diagrams: model.diagrams.map((diagram) => ({
+          id: String(diagram.id),
+          name: diagram.name,
+          definition: diagram.definition ?? model.project?.diagramDefinition ?? "",
+          displayLevelLogical: displayLevelToValue(model.project?.displayLevel),
+          displayLevelPhysical: displayLevelToValue(model.project?.displayLevel),
+          modelShapes: {
+            entities: diagram.entities.map((entity) => ({
+              id: String(entity.id),
+              name: entity.name ?? entity.physicalName ?? "Entity",
+              physicalName: entity.physicalName ?? "",
+              displayLevelLogical: "-1",
+              displayLevelPhysical: "-1",
+              x: entity.x ?? 160,
+              y: entity.y ?? 120,
+              width: entity.width ?? 0,
+              height: entity.height ?? 0
+            })),
+            views: [],
+            cachedViews: [],
+            relationships: diagram.relationships.map((relationship) => ({
+              id: String(relationship.id),
+              name: relationship.name ?? relationship.physicalName ?? relationship.id,
+              physicalName: relationship.physicalName ?? relationship.id
+            }))
+          }
+        }))
+      }
+    ]
+  };
+
+  const highestDiagramSeq = model.diagrams.reduce((highest, diagram) => {
+    const match = String(diagram.name ?? "").match(/ER_Diagram_(\d+)/);
+    return Math.max(highest, match ? Number(match[1]) : 0);
+  }, 0);
+
+  return {
+    meta: {
+      db: dbMeta.db,
+      dbMajorVersion: dbMeta.major,
+      dbMinorVersion: dbMeta.minor,
+      modelType: "3",
+      viewMode: String(model.project?.viewMode ?? "Physical View").toLowerCase().includes("logical")
+        ? "logical"
+        : "physical",
+      activeSubjectAreaId,
+      activeDiagramId: String(model.activeDiagramId ?? model.diagrams[0]?.id ?? "1"),
+      nextDiagramSeq: highestDiagramSeq + 1,
+      nextSubjectAreaSeq: 1
+    },
+    workspace
+  };
+}
+
+function importWorkspaceModel(payload) {
+  const workspace = payload?.workspace ?? payload?.data ?? payload;
+  const subjectAreas = Array.isArray(workspace?.subjectAreas) ? workspace.subjectAreas : [];
+  const activeSubjectAreaId = String(payload?.meta?.activeSubjectAreaId ?? subjectAreas[0]?.id ?? "1");
+  const activeSubjectArea =
+    subjectAreas.find((subjectArea) => String(subjectArea.id) === activeSubjectAreaId) ?? subjectAreas[0];
+
+  if (!activeSubjectArea || !Array.isArray(activeSubjectArea.diagrams) || activeSubjectArea.diagrams.length === 0) {
+    throw new Error("Imported JSON is missing subject area diagrams.");
+  }
+
+  const entityMap = toIdMap(workspace.entities ?? []);
+  const relationshipMap = toIdMap(workspace.relationships ?? []);
+  const activeDiagramId = String(payload?.meta?.activeDiagramId ?? activeSubjectArea.diagrams[0]?.id ?? "");
+  const dbMeta = resolveDbMeta(
+    DB_META_MAP[normalizeDbEngine(payload?.meta?.dbEngine)]?.label ??
+      Object.values(DB_META_MAP).find((item) => item.db === String(payload?.meta?.db))?.label ??
+      "PostgreSQL",
+    `${payload?.meta?.dbMajorVersion ?? "16"}${payload?.meta?.dbMinorVersion != null ? `.${payload.meta.dbMinorVersion}` : ""}`
+  );
+
+  const diagrams = activeSubjectArea.diagrams.map((diagram, diagramIndex) => {
+    const entityShapes = diagram.modelShapes?.entities ?? [];
+    const shapeEntityIds = new Set(entityShapes.map((shape) => String(shape.id)));
+    const entities = entityShapes.map((shape) => {
+      const sourceEntity = entityMap.get(String(shape.id));
+      const fallbackName = shape.physicalName || shape.name || `Entity_${diagramIndex + 1}`;
+      const attributes = sourceEntity?.attributes ?? [];
+
+      return {
+        id: String(sourceEntity?.id ?? shape.id ?? `${diagram.id}-${slugify(fallbackName) || "entity"}`),
+        name: sourceEntity?.name ?? shape.name ?? fallbackName,
+        physicalName: sourceEntity?.physicalName || shape.physicalName || sourceEntity?.name || shape.name || fallbackName,
+        definition: sourceEntity?.definition ?? "",
+        comment: sourceEntity?.comment ?? "",
+        x: Number(shape.x ?? 160),
+        y: Number(shape.y ?? 120),
+        ...(shape.width != null ? { width: Number(shape.width) } : {}),
+        ...(shape.height != null ? { height: Number(shape.height) } : {}),
+        indexes: sourceEntity?.indexes ?? [],
+        fields: attributes.map((attribute, attributeIndex) => ({
+          id: String(attribute.id ?? `${shape.id}-field-${attributeIndex + 1}`),
+          kind: attribute.isPrimary ? "PK" : attribute.isFK ? "FK" : "COL",
+          name: attribute.name ?? `Column${attributeIndex + 1}`,
+          dataType: attribute.datatype ?? attribute.dataType ?? "varchar(50)"
+        }))
+      };
+    });
+
+    const relationshipShapeIds = new Set((diagram.modelShapes?.relationships ?? []).map((shape) => String(shape.id)));
+    const relationships = (workspace.relationships ?? [])
+      .filter((relationship) => {
+        if (relationshipShapeIds.size > 0) {
+          return relationshipShapeIds.has(String(relationship.id));
+        }
+
+        return (
+          shapeEntityIds.has(String(relationship.parent ?? relationship.sourceEntityId)) &&
+          shapeEntityIds.has(String(relationship.child ?? relationship.targetEntityId))
+        );
+      })
+      .map((relationship) => {
+        const source = entityMap.get(String(relationship.parent ?? relationship.sourceEntityId));
+        const target = entityMap.get(String(relationship.child ?? relationship.targetEntityId));
+
+        return normalizeRelationship({
+          id: String(relationship.id),
+          sourceEntityId: String(relationship.parent ?? relationship.sourceEntityId),
+          targetEntityId: String(relationship.child ?? relationship.targetEntityId),
+          name: relationship.name ?? getRelationshipName(relationship, source, target),
+          physicalName: relationship.physicalName ?? relationship.name ?? relationship.id,
+          description: relationship.description ?? relationship.comment ?? "relates_to",
+          cardinality: relationship.cardinality ?? "1:N",
+          relationshipType: relationship.relationshipType ?? "Non-Identifying",
+          style: relationship.style ?? "solid"
+        });
+      });
+
+    return {
+      id: String(diagram.id),
+      name: diagram.name ?? `ER_Diagram_${diagramIndex + 1}`,
+      definition: diagram.definition ?? "",
+      entities,
+      relationships
+    };
+  });
+
+  const activeDiagram = diagrams.find((diagram) => diagram.id === activeDiagramId) ?? diagrams[0];
+
+  return {
+    project: {
+      name: "Data Modeler",
+      viewMode: String(payload?.meta?.viewMode ?? "physical").toLowerCase() === "logical"
+        ? "Logical View"
+        : "Physical View",
+      database: dbMeta.label,
+      databaseVersion: `${dbMeta.major}${dbMeta.minor ? `.${dbMeta.minor}` : ""}`,
+      subjectArea: activeSubjectArea.name ?? "<model>",
+      definition: "Drag entities, define attributes, and wire relationships.",
+      diagramDefinition: activeDiagram?.definition ?? "",
+      displayLevel: String(payload?.meta?.viewMode ?? "physical").toLowerCase() === "logical" ? "Attribute" : "Column"
+    },
+    activeDiagramId: activeDiagram?.id ?? diagrams[0]?.id ?? "1",
+    diagrams
+  };
 }
 
 function estimateTextWidth(text, factor = 9.2) {
@@ -88,6 +474,10 @@ function normalizeRelationship(relationship) {
 function normalizeModel(rawModel) {
   const baseModel = clone(rawModel ?? sampleModel);
 
+  if (baseModel?.workspace?.subjectAreas || baseModel?.data?.subjectAreas || baseModel?.subjectAreas) {
+    return importWorkspaceModel(baseModel);
+  }
+
   if (Array.isArray(baseModel.diagrams) && baseModel.diagrams.length > 0) {
     return {
       ...baseModel,
@@ -119,6 +509,8 @@ export default function App() {
   const savedPanelWidths = readPanelWidths();
   const initialModel = normalizeModel(readLocalModel() ?? sampleModel);
   const [model, setModel] = useState(initialModel);
+  const [jsonDraft, setJsonDraft] = useState(() => readJsonDraft());
+  const [isJsonViewerOpen, setIsJsonViewerOpen] = useState(false);
   const [selectedEntityIds, setSelectedEntityIds] = useState(() =>
     initialModel.diagrams[0]?.entities[0]?.id ? [initialModel.diagrams[0].entities[0].id] : []
   );
@@ -143,6 +535,7 @@ export default function App() {
     databaseName: ""
   });
   const resizeState = useRef(null);
+  const jsonFileInputRef = useRef(null);
   const activeDiagram = useMemo(
     () => model.diagrams.find((diagram) => diagram.id === model.activeDiagramId) ?? model.diagrams[0],
     [model]
@@ -174,6 +567,10 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(panelWidths));
   }, [panelWidths]);
+
+  useEffect(() => {
+    window.localStorage.setItem(JSON_DRAFT_STORAGE_KEY, jsonDraft);
+  }, [jsonDraft]);
 
   useEffect(() => {
     loadProviders();
@@ -448,8 +845,160 @@ export default function App() {
     setSelectedEntityIds(freshSample.diagrams[0]?.entities[0]?.id ? [freshSample.diagrams[0].entities[0].id] : []);
     setSelectedRelationshipId(null);
     window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(freshSample));
+    setJsonDraft("");
     setViewResetToken((current) => current + 1);
     setStatus("Reloaded the original local sample model.");
+  }
+
+  function handleExportJson() {
+    const exportedJson = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
+    setJsonDraft(exportedJson);
+    setStatus("Exported the current model to the JSON box.");
+  }
+
+  function handleViewJson() {
+    const exportedJson = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
+    setJsonDraft(exportedJson);
+    setIsJsonViewerOpen(true);
+    setStatus("Opened the model JSON viewer.");
+  }
+
+  function importJsonText(jsonText, sourceLabel = "JSON") {
+    const parsed = JSON.parse(jsonText);
+    const importedModel = normalizeModel(parsed);
+    setJsonDraft(jsonText);
+    setModel(importedModel);
+    setSelectedEntityIds(importedModel.diagrams[0]?.entities[0]?.id ? [importedModel.diagrams[0].entities[0].id] : []);
+    setSelectedRelationshipId(null);
+    setLinkDraft(null);
+    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(importedModel));
+    setViewResetToken((current) => current + 1);
+    setStatus(`Imported model JSON from ${sourceLabel}.`);
+  }
+
+  async function handleCopyJson() {
+    const exportedJson = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
+    setJsonDraft(exportedJson);
+
+    try {
+      await navigator.clipboard.writeText(exportedJson);
+      setStatus("Copied model JSON to the clipboard.");
+    } catch {
+      setStatus("Copy failed. Your browser blocked clipboard access.");
+    }
+  }
+
+  async function handleSaveJsonToFile() {
+    const exportedJson = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
+    setJsonDraft(exportedJson);
+    const suggestedName = `${activeDiagram?.name ?? "ER_Diagram_1"}.json`;
+
+    try {
+      if (window.isSecureContext && typeof window.showSaveFilePicker === "function") {
+        const handle = await window.showSaveFilePicker({
+          suggestedName,
+          types: [
+            {
+              description: "JSON Files",
+              accept: {
+                "application/json": [".json"]
+              }
+            }
+          ]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(exportedJson);
+        await writable.close();
+        setStatus("Saved model JSON to a file.");
+        return;
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setStatus("Save cancelled.");
+        return;
+      }
+
+      setStatus(`Save dialog failed, falling back to download. ${error instanceof Error ? error.message : ""}`.trim());
+    }
+
+    const blob = new Blob([exportedJson], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = suggestedName;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setStatus("Downloaded model JSON.");
+  }
+
+  async function handleOpenJsonFile() {
+    try {
+      if (window.isSecureContext && typeof window.showOpenFilePicker === "function") {
+        const [handle] = await window.showOpenFilePicker({
+          multiple: false,
+          types: [
+            {
+              description: "JSON Files",
+              accept: {
+                "application/json": [".json"]
+              }
+            }
+          ]
+        });
+
+        if (!handle) {
+          return;
+        }
+
+        const file = await handle.getFile();
+        const text = await file.text();
+        importJsonText(text, "an opened file");
+        return;
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setStatus("Open cancelled.");
+        return;
+      }
+    }
+
+    jsonFileInputRef.current?.click();
+  }
+
+  function handleClearJson() {
+    setJsonDraft("");
+    setStatus("Cleared the JSON box.");
+  }
+
+  function handleImportJson() {
+    if (!jsonDraft.trim()) {
+      setStatus("Paste model JSON into the JSON box before importing.");
+      return;
+    }
+
+    try {
+      importJsonText(jsonDraft, "the JSON box");
+    } catch (error) {
+      setStatus(`Import failed: ${error instanceof Error ? error.message : "Invalid JSON."}`);
+    }
+  }
+
+  async function handleJsonFileInputChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      importJsonText(text, file.name);
+    } catch (error) {
+      setStatus(`Open failed: ${error instanceof Error ? error.message : "Unable to read the file."}`);
+    } finally {
+      event.target.value = "";
+    }
   }
 
   function handleAutoLayout() {
@@ -998,11 +1547,25 @@ export default function App() {
           : undefined
       }
     >
+      <input
+        ref={jsonFileInputRef}
+        className="hidden-file-input"
+        type="file"
+        accept=".json,.erwin_json,application/json"
+        onChange={handleJsonFileInputChange}
+      />
+
       <LeftSidebar
         project={model.project}
         entityCount={activeDiagram?.entities.length ?? 0}
         relationshipCount={activeDiagram?.relationships.length ?? 0}
+        jsonDraft={jsonDraft}
+        onJsonDraftChange={setJsonDraft}
         onAutoLayout={handleAutoLayout}
+        onExportJson={handleExportJson}
+        onImportJson={handleImportJson}
+        onClearJson={handleClearJson}
+        onViewJson={handleViewJson}
       />
 
       {isDesktopLayout ? (
@@ -1071,6 +1634,48 @@ export default function App() {
         onImportSchema={handleImportSchema}
         isLinkingRelationship={Boolean(linkDraft)}
       />
+
+      {isJsonViewerOpen ? (
+        <div
+          className="json-modal-backdrop"
+          onClick={() => setIsJsonViewerOpen(false)}
+          role="presentation"
+        >
+          <section
+            className="json-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="json-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="json-modal-header">
+              <h2 id="json-modal-title">Model JSON</h2>
+              <div className="button-row">
+                <JsonActionButton label="Copy JSON" onClick={handleCopyJson}>
+                  <CopyIcon />
+                </JsonActionButton>
+                <JsonActionButton label="Save JSON File" onClick={handleSaveJsonToFile}>
+                  <SaveIcon />
+                </JsonActionButton>
+                <JsonActionButton label="Open JSON File" onClick={handleOpenJsonFile}>
+                  <OpenIcon />
+                </JsonActionButton>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setIsJsonViewerOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="json-modal-body">
+              <pre>{jsonDraft}</pre>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

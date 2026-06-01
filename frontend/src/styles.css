@@ -46,6 +46,10 @@ body.panel-resizing {
   user-select: none;
 }
 
+.hidden-file-input {
+  display: none;
+}
+
 .app-shell {
   display: grid;
   min-height: 100vh;
@@ -116,6 +120,109 @@ body.panel-resizing {
   padding: 0 8px;
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+.json-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(4, 10, 16, 0.66);
+  backdrop-filter: blur(6px);
+}
+
+.json-modal {
+  width: min(980px, 100%);
+  max-height: min(78vh, 860px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(24, 35, 47, 0.98), rgba(16, 25, 36, 0.96));
+  border: 1px solid rgba(113, 145, 185, 0.28);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.46);
+}
+
+.json-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.json-modal-header h2 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.tooltip-shell {
+  position: relative;
+  display: inline-flex;
+}
+
+.tooltip-bubble {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 3;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(13, 19, 28, 0.96);
+  border: 1px solid rgba(124, 155, 188, 0.22);
+  color: #e5edf9;
+  font-size: 0.78rem;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.tooltip-shell:hover .tooltip-bubble,
+.tooltip-shell:focus-within .tooltip-bubble {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.json-action-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: rgba(42, 58, 79, 0.82);
+  border: 1px solid rgba(124, 155, 188, 0.16);
+}
+
+.json-action-button:hover {
+  background: rgba(58, 79, 105, 0.94);
+}
+
+.json-action-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.json-modal-body {
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(124, 155, 188, 0.18);
+  background: rgba(8, 15, 24, 0.96);
+}
+
+.json-modal-body pre {
+  margin: 0;
+  padding: 18px 20px;
+  color: #dfe7f4;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  font-family: "SFMono-Regular", "Consolas", "Menlo", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .panel {

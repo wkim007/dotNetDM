@@ -14,7 +14,13 @@ export default function LeftSidebar({
   project,
   entityCount,
   relationshipCount,
-  onAutoLayout
+  jsonDraft,
+  onJsonDraftChange,
+  onAutoLayout,
+  onExportJson,
+  onImportJson,
+  onClearJson,
+  onViewJson
 }) {
   return (
     <aside className="left-sidebar">
@@ -54,6 +60,34 @@ export default function LeftSidebar({
         </label>
 
         <SelectField label="Diagram Display Level" value={project.displayLevel} />
+      </section>
+
+      <section className="panel">
+        <div className="panel-label">Import / Export JSON</div>
+
+        <div className="button-stack">
+          <button type="button" className="secondary-button" onClick={onImportJson}>
+            Import JSON
+          </button>
+          <button type="button" className="secondary-button" onClick={onExportJson}>
+            Export JSON
+          </button>
+          <button type="button" className="secondary-button" onClick={onViewJson}>
+            View JSON
+          </button>
+          <button type="button" className="subtle-button" onClick={onClearJson}>
+            Clear JSON
+          </button>
+        </div>
+
+        <label className="field-group">
+          <span>Workspace JSON</span>
+          <textarea
+            value={jsonDraft}
+            onChange={(event) => onJsonDraftChange(event.target.value)}
+            placeholder="Paste model JSON here"
+          />
+        </label>
       </section>
     </aside>
   );
