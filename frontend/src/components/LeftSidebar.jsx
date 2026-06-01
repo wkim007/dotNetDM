@@ -17,12 +17,18 @@ export default function LeftSidebar({
   project,
   entityCount,
   relationshipCount,
+  showViewObjectsUi,
+  showCachedViewObjectsUi,
+  cachedViewUiName,
   databaseOptions,
   databaseVersionOptions,
   viewModeOptions,
   jsonDraft,
   onJsonDraftChange,
   onAutoLayout,
+  onAddEntity,
+  onAddView,
+  onAddMaterializedView,
   onProjectChange,
   onExportJson,
   onImportJson,
@@ -94,6 +100,58 @@ export default function LeftSidebar({
           onChange={() => {}}
           disabled
         />
+
+        <div className="field-group diagram-box-field">
+          <span>Diagram Box</span>
+          <div className="diagram-box-grid">
+            <button type="button" className="secondary-button diagram-box-item active" onClick={onAddEntity} title="Add Entity">
+              <span className="diagram-box-icon">▦</span>
+              <span>Entity</span>
+            </button>
+
+            {showViewObjectsUi ? (
+              <button type="button" className="secondary-button diagram-box-item" onClick={onAddView} title="Add View">
+                <span className="diagram-box-icon diagram-box-icon-svg">
+                  <svg viewBox="0 0 64 64" aria-hidden="true">
+                    <g fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="14" y="6" width="36" height="10" rx="1.5" />
+                      <path d="M32 16v8M10 24h44M14 24v7M32 24v7M50 24v7" />
+                      <rect x="6" y="31" width="12" height="14" rx="1.5" />
+                      <rect x="26" y="31" width="12" height="10" rx="1.5" />
+                      <rect x="46" y="31" width="12" height="10" rx="1.5" />
+                      <path d="M26 48c3.5-6.5 9-10 16-10s12.5 3.5 16 10c-3.5 6.5-9 10-16 10s-12.5-3.5-16-10z" />
+                      <circle cx="42" cy="48" r="4.2" />
+                    </g>
+                  </svg>
+                </span>
+                <span>View</span>
+              </button>
+            ) : null}
+
+            {showCachedViewObjectsUi ? (
+              <button
+                type="button"
+                className="secondary-button diagram-box-item"
+                onClick={onAddMaterializedView}
+                title={`Add ${cachedViewUiName}`}
+              >
+                <span className="diagram-box-icon diagram-box-icon-svg">
+                  <svg viewBox="0 0 64 64" aria-hidden="true">
+                    <g fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                      <ellipse cx="20" cy="14" rx="10" ry="5" />
+                      <path d="M10 14v12c0 2.8 4.5 5 10 5s10-2.2 10-5V14" />
+                      <ellipse cx="44" cy="44" rx="10" ry="5" />
+                      <path d="M34 44v10c0 2.8 4.5 5 10 5s10-2.2 10-5V44" />
+                      <path d="M28 24h14M34 20l-6 4 6 4" />
+                      <path d="M36 40H22M30 36l6 4-6 4" />
+                    </g>
+                  </svg>
+                </span>
+                <span>{cachedViewUiName}</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
       </section>
 
       <section className="panel">

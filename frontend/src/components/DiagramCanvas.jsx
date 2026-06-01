@@ -139,6 +139,18 @@ function FieldBadge({ kind }) {
   return <span className={`field-badge ${kind.toLowerCase()}`}>{kind}</span>;
 }
 
+function getEntityCardVariant(entity) {
+  if (entity?.objectType === "materializedView") {
+    return "materialized-view";
+  }
+
+  if (entity?.objectType === "view") {
+    return "view";
+  }
+
+  return "entity";
+}
+
 function EntityCard({
   entity,
   isSelected,
@@ -150,10 +162,11 @@ function EntityCard({
   const preferredSize = getPreferredEntitySize(entity);
   const width = Math.max(entity.width ?? 0, preferredSize.width);
   const height = Math.max(entity.height ?? 0, preferredSize.height);
+  const variantClass = getEntityCardVariant(entity);
 
   return (
     <article
-      className={`entity-card ${isSelected ? "selected" : ""}`}
+      className={`entity-card ${variantClass} ${isSelected ? "selected" : ""}`}
       style={{ left: entity.x, top: entity.y, width, height }}
       onPointerDown={(event) => onPointerDown(event, entity.id)}
       onClick={(event) => {

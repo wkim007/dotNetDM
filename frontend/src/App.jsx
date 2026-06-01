@@ -14,7 +14,7 @@ const DEFAULT_RIGHT_PANEL_WIDTH = 330;
 const MIN_PANEL_WIDTH = 220;
 const MAX_PANEL_WIDTH = 520;
 const DEFAULT_VIEWPORT = { width: 1200, height: 900 };
-const DEFAULT_ZOOM = 1;
+const DEFAULT_ZOOM = 0.82;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 1.8;
 const ZOOM_STEP = 0.1;
@@ -104,6 +104,31 @@ const DATABASE_VERSION_OPTIONS = {
   Snowflake: ["4.10"],
   Teradata: ["17.x"]
 };
+
+function supportsViewObjects(engineId) {
+  return !["neo4j", "amazonkeyspaces", "cassandra", "dynamodb", "parquet", "json"].includes(
+    String(engineId || "").toLowerCase()
+  );
+}
+
+function supportsCachedViews(engineId) {
+  return [
+    "alloydb",
+    "netezza",
+    "redshift",
+    "bigquery",
+    "oracle",
+    "azuresynapse",
+    "db2luw",
+    "db2zos",
+    "databricks",
+    "hive",
+    "snowflake",
+    "postgresql",
+    "teradata",
+    "cassandra"
+  ].includes(String(engineId || "").toLowerCase());
+}
 
 function CopyIcon() {
   return (
@@ -325,10 +350,24 @@ function getRelationshipName(relationship, source, target) {
   return relationship.name ?? `${source?.physicalName ?? source?.name ?? "Entity"} -> ${target?.physicalName ?? target?.name ?? "Entity"}`;
 }
 
+function getEntityObjectType(entity) {
+  if (entity?.objectType === "materializedView") {
+    return "materializedView";
+  }
+
+  if (entity?.objectType === "view") {
+    return "view";
+  }
+
+  return "entity";
+}
+
 function exportModelToWorkspaceJson(model) {
   const dbMeta = resolveDbMeta(model.project?.database, model.project?.databaseVersion);
   const activeSubjectAreaId = "1";
   const allEntities = [];
+  const allViews = [];
+  const allCachedViews = [];
   const entityIds = new Set();
   const allRelationships = [];
   const relationshipIds = new Set();
@@ -340,7 +379,7 @@ function exportModelToWorkspaceJson(model) {
       }
 
       entityIds.add(entity.id);
-      allEntities.push({
+      const serializedEntity = {
         id: String(entity.id),
         name: entity.name ?? entity.physicalName ?? "Entity",
         physicalName: entity.physicalName ?? "",
@@ -366,7 +405,32 @@ function exportModelToWorkspaceJson(model) {
           pParentRelationshipsRef: [],
           pChildRelationshipsRef: []
         }
-      });
+      };
+
+      const objectType = getEntityObjectType(entity);
+      if (objectType === "view") {
+        allViews.push({
+          ...serializedEntity,
+          indexes: undefined,
+          props: {
+            pChildRelationshipsRef: []
+          }
+        });
+        return;
+      }
+
+      if (objectType === "materializedView") {
+        allCachedViews.push({
+          ...serializedEntity,
+          indexes: undefined,
+          props: {
+            pChildRelationshipsRef: []
+          }
+        });
+        return;
+      }
+
+      allEntities.push(serializedEntity);
     });
 
     diagram.relationships.forEach((relationship) => {
@@ -395,7 +459,7 @@ function exportModelToWorkspaceJson(model) {
   });
 
   const relationshipRefsByEntityId = new Map(
-    allEntities.map((entity) => [String(entity.id), { parents: [], children: [] }])
+    [...allEntities, ...allViews, ...allCachedViews].map((entity) => [String(entity.id), { parents: [], children: [] }])
   );
 
   allRelationships.forEach((relationship) => {
@@ -403,18 +467,23 @@ function exportModelToWorkspaceJson(model) {
     relationshipRefsByEntityId.get(String(relationship.child))?.parents.push(String(relationship.id));
   });
 
-  allEntities.forEach((entity) => {
+  [...allEntities, ...allViews, ...allCachedViews].forEach((entity) => {
     const refs = relationshipRefsByEntityId.get(String(entity.id));
-    entity.props = {
-      pParentRelationshipsRef: refs?.parents ?? [],
-      pChildRelationshipsRef: refs?.children ?? []
-    };
+    const objectType = allEntities.includes(entity) ? "entity" : "view";
+    entity.props = objectType === "entity"
+      ? {
+          pParentRelationshipsRef: refs?.parents ?? [],
+          pChildRelationshipsRef: refs?.children ?? []
+        }
+      : {
+          pChildRelationshipsRef: refs?.children ?? []
+        };
   });
 
   const workspace = {
     entities: allEntities,
-    views: [],
-    cachedViews: [],
+    views: allViews,
+    cachedViews: allCachedViews,
     relationships: allRelationships,
     schemas: [
       {
@@ -423,6 +492,8 @@ function exportModelToWorkspaceJson(model) {
         comment: ""
       }
     ],
+    databases: [],
+    catalogs: [],
     subjectAreas: [
       {
         id: activeSubjectAreaId,
@@ -435,7 +506,22 @@ function exportModelToWorkspaceJson(model) {
           displayLevelLogical: displayLevelToValue(model.project?.displayLevel),
           displayLevelPhysical: displayLevelToValue(model.project?.displayLevel),
           modelShapes: {
-            entities: diagram.entities.map((entity) => ({
+            entities: diagram.entities
+              .filter((entity) => getEntityObjectType(entity) === "entity")
+              .map((entity) => ({
+                id: String(entity.id),
+                name: entity.name ?? entity.physicalName ?? "Entity",
+                physicalName: entity.physicalName ?? "",
+                displayLevelLogical: "-1",
+                displayLevelPhysical: "-1",
+                x: entity.x ?? 160,
+                y: entity.y ?? 120,
+                width: entity.width ?? 0,
+                height: entity.height ?? 0
+              })),
+            views: diagram.entities
+              .filter((entity) => getEntityObjectType(entity) === "view")
+              .map((entity) => ({
               id: String(entity.id),
               name: entity.name ?? entity.physicalName ?? "Entity",
               physicalName: entity.physicalName ?? "",
@@ -446,8 +532,19 @@ function exportModelToWorkspaceJson(model) {
               width: entity.width ?? 0,
               height: entity.height ?? 0
             })),
-            views: [],
-            cachedViews: [],
+            cachedViews: diagram.entities
+              .filter((entity) => getEntityObjectType(entity) === "materializedView")
+              .map((entity) => ({
+                id: String(entity.id),
+                name: entity.name ?? entity.physicalName ?? "Entity",
+                physicalName: entity.physicalName ?? "",
+                displayLevelLogical: "-1",
+                displayLevelPhysical: "-1",
+                x: entity.x ?? 160,
+                y: entity.y ?? 120,
+                width: entity.width ?? 0,
+                height: entity.height ?? 0
+              })),
             relationships: diagram.relationships.map((relationship) => ({
               id: String(relationship.id),
               name: relationship.name ?? relationship.physicalName ?? relationship.id,
@@ -494,7 +591,8 @@ function importWorkspaceModel(payload) {
   }
 
   const entityMap = toIdMap(workspace.entities ?? []);
-  const relationshipMap = toIdMap(workspace.relationships ?? []);
+  const viewMap = toIdMap(workspace.views ?? []);
+  const cachedViewMap = toIdMap(workspace.cachedViews ?? []);
   const activeDiagramId = String(payload?.meta?.activeDiagramId ?? activeSubjectArea.diagrams[0]?.id ?? "");
   const dbMeta = resolveDbMeta(
     DB_META_MAP[normalizeDbEngine(payload?.meta?.dbEngine)]?.label ??
@@ -505,9 +603,14 @@ function importWorkspaceModel(payload) {
 
   const diagrams = activeSubjectArea.diagrams.map((diagram, diagramIndex) => {
     const entityShapes = diagram.modelShapes?.entities ?? [];
-    const shapeEntityIds = new Set(entityShapes.map((shape) => String(shape.id)));
-    const entities = entityShapes.map((shape) => {
-      const sourceEntity = entityMap.get(String(shape.id));
+    const viewShapes = diagram.modelShapes?.views ?? [];
+    const cachedViewShapes = diagram.modelShapes?.cachedViews ?? [];
+    const shapeEntityIds = new Set([...entityShapes, ...viewShapes, ...cachedViewShapes].map((shape) => String(shape.id)));
+    const entities = [
+      ...entityShapes.map((shape) => ({ shape, sourceEntity: entityMap.get(String(shape.id)), objectType: "entity" })),
+      ...viewShapes.map((shape) => ({ shape, sourceEntity: viewMap.get(String(shape.id)), objectType: "view" })),
+      ...cachedViewShapes.map((shape) => ({ shape, sourceEntity: cachedViewMap.get(String(shape.id)), objectType: "materializedView" }))
+    ].map(({ shape, sourceEntity, objectType }) => {
       const fallbackName = shape.physicalName || shape.name || `Entity_${diagramIndex + 1}`;
       const attributes = sourceEntity?.attributes ?? [];
 
@@ -517,6 +620,7 @@ function importWorkspaceModel(payload) {
         physicalName: sourceEntity?.physicalName || shape.physicalName || sourceEntity?.name || shape.name || fallbackName,
         definition: sourceEntity?.definition ?? "",
         comment: sourceEntity?.comment ?? "",
+        objectType,
         x: Number(shape.x ?? 160),
         y: Number(shape.y ?? 120),
         ...(shape.width != null ? { width: Number(shape.width) } : {}),
@@ -862,6 +966,15 @@ export default function App() {
 
   const isDesktopLayout = windowWidth > 1380;
   const databaseVersionOptions = DATABASE_VERSION_OPTIONS[model.project.database] ?? ["1.0"];
+  const dbEngine = normalizeDbEngine(model.project.database);
+  const showViewObjectsUi = supportsViewObjects(dbEngine);
+  const showCachedViewObjectsUi = supportsCachedViews(dbEngine);
+  const cachedViewUiName =
+    dbEngine === "teradata"
+      ? "Join Index"
+      : ["redshift", "bigquery", "databricks", "hive"].includes(dbEngine)
+        ? "CTAS"
+        : "Materialized View";
 
   function createFreshSampleModel() {
     return normalizeModel(sampleModel);
@@ -1496,6 +1609,84 @@ export default function App() {
     setStatus("Created a new entity.");
   }
 
+  function handleAddView() {
+    const entityId = `view-${Date.now()}`;
+    const newView = {
+      id: entityId,
+      name: "New View",
+      physicalName: "NewView",
+      comment: "Describe this view.",
+      objectType: "view",
+      x: 180,
+      y: 160,
+      width: 280,
+      height: 120,
+      fields: [
+        {
+          id: `${entityId}-column`,
+          kind: "COL",
+          name: "Column1",
+          dataType: "varchar(50)"
+        }
+      ]
+    };
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: [...diagram.entities, newView]
+            }
+          : diagram
+      )
+    }));
+    setSelectedEntityIds([entityId]);
+    setSelectedRelationshipId(null);
+    setLinkDraft(null);
+    setStatus("Created a new view.");
+  }
+
+  function handleAddMaterializedView() {
+    const entityId = `cached-view-${Date.now()}`;
+    const newMaterializedView = {
+      id: entityId,
+      name: cachedViewUiName,
+      physicalName: String(cachedViewUiName).replace(/\s+/g, ""),
+      comment: `Describe this ${cachedViewUiName.toLowerCase()}.`,
+      objectType: "materializedView",
+      x: 200,
+      y: 180,
+      width: 300,
+      height: 120,
+      fields: [
+        {
+          id: `${entityId}-column`,
+          kind: "COL",
+          name: "Column1",
+          dataType: "varchar(50)"
+        }
+      ]
+    };
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: [...diagram.entities, newMaterializedView]
+            }
+          : diagram
+      )
+    }));
+    setSelectedEntityIds([entityId]);
+    setSelectedRelationshipId(null);
+    setLinkDraft(null);
+    setStatus(`Created a new ${cachedViewUiName.toLowerCase()}.`);
+  }
+
   function handleAddDiagram() {
     const nextNumber =
       model.diagrams.reduce((highest, diagram) => {
@@ -1783,12 +1974,18 @@ export default function App() {
         project={model.project}
         entityCount={activeDiagram?.entities.length ?? 0}
         relationshipCount={activeDiagram?.relationships.length ?? 0}
+        showViewObjectsUi={showViewObjectsUi}
+        showCachedViewObjectsUi={showCachedViewObjectsUi}
+        cachedViewUiName={cachedViewUiName}
         databaseOptions={DATABASE_OPTIONS}
         databaseVersionOptions={databaseVersionOptions}
         viewModeOptions={VIEW_MODE_OPTIONS}
         jsonDraft={jsonDraft}
         onJsonDraftChange={setJsonDraft}
         onAutoLayout={handleAutoLayout}
+        onAddEntity={handleAddEntity}
+        onAddView={handleAddView}
+        onAddMaterializedView={handleAddMaterializedView}
         onProjectChange={handleProjectChange}
         onExportJson={handleExportJson}
         onImportJson={handleImportJson}

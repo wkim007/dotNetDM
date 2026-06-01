@@ -266,6 +266,50 @@ body.panel-resizing {
   font-size: 0.9rem;
 }
 
+.diagram-box-field {
+  margin-top: 6px;
+}
+
+.diagram-box-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.diagram-box-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 106px;
+  gap: 10px;
+  padding: 14px 10px;
+  text-align: center;
+  background: #30425c;
+}
+
+.diagram-box-item.active {
+  box-shadow: inset 0 0 0 1px rgba(150, 255, 183, 0.4), 0 0 18px rgba(81, 236, 146, 0.16);
+}
+
+.diagram-box-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(13, 22, 34, 0.72);
+  color: #eff5ff;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.diagram-box-icon-svg svg {
+  width: 22px;
+  height: 22px;
+}
+
 .select-shell,
 .field-group select,
 .field-group input,
@@ -551,9 +595,41 @@ body.panel-resizing {
   min-height: 120px;
 }
 
+.entity-card.view {
+  border-style: dashed;
+  border-color: rgba(88, 232, 242, 0.9);
+  box-shadow:
+    inset 0 0 0 1px rgba(88, 232, 242, 0.14),
+    0 18px 34px rgba(0, 0, 0, 0.28);
+}
+
+.entity-card.materialized-view {
+  border-style: dashed;
+  border-color: rgba(241, 184, 63, 0.95);
+  box-shadow:
+    inset 0 0 0 1px rgba(241, 184, 63, 0.12),
+    0 18px 34px rgba(0, 0, 0, 0.28);
+}
+
 .entity-card.selected {
   border-color: var(--warning);
   box-shadow: 0 0 0 1px rgba(241, 191, 82, 0.75), 0 18px 36px rgba(0, 0, 0, 0.36);
+}
+
+.entity-card.view.selected {
+  border-color: rgba(88, 232, 242, 1);
+  box-shadow:
+    0 0 0 1px rgba(88, 232, 242, 0.65),
+    0 0 18px rgba(88, 232, 242, 0.14),
+    0 18px 36px rgba(0, 0, 0, 0.36);
+}
+
+.entity-card.materialized-view.selected {
+  border-color: rgba(241, 184, 63, 1);
+  box-shadow:
+    0 0 0 1px rgba(241, 184, 63, 0.72),
+    0 0 18px rgba(241, 184, 63, 0.14),
+    0 18px 36px rgba(0, 0, 0, 0.36);
 }
 
 .entity-card-header {
