@@ -156,30 +156,21 @@ function getDisplayLevelOptionsForViewMode(viewMode) {
 }
 
 function getDefaultDisplayLevelForViewMode(viewMode) {
-  return viewMode === "Logical View" ? "Attribute" : "Column";
+  return "1";
 }
 
-function getDisplayLevelValueForViewMode(viewMode, label) {
-  const normalizedLabel = String(label ?? "").trim().toLowerCase();
-  const match = getDisplayLevelOptionsForViewMode(viewMode).find(
-    (option) => option.label.toLowerCase() === normalizedLabel
-  );
-
-  return match?.value ?? "1";
-}
-
-function getDisplayLevelLabelForViewMode(viewMode, value) {
-  const normalizedValue = String(value ?? "").trim();
+function getDisplayLevelValueForViewMode(viewMode, valueOrLabel) {
+  const normalizedValue = String(valueOrLabel ?? "").trim();
   const options = getDisplayLevelOptionsForViewMode(viewMode);
   const matchByValue = options.find((option) => option.value === normalizedValue);
 
   if (matchByValue) {
-    return matchByValue.label;
+    return matchByValue.value;
   }
 
   const normalizedLabel = normalizedValue.toLowerCase();
   const matchByLabel = options.find((option) => option.label.toLowerCase() === normalizedLabel);
-  return matchByLabel?.label ?? getDefaultDisplayLevelForViewMode(viewMode);
+  return matchByLabel?.value ?? getDefaultDisplayLevelForViewMode(viewMode);
 }
 
 function getDiagramDisplayLevelValue(diagram, viewMode) {
@@ -198,10 +189,7 @@ function syncProjectWithActiveDiagram(modelLike, nextProject = modelLike.project
     project: {
       ...nextProject,
       diagramDefinition: activeDiagram?.definition ?? "",
-      displayLevel: getDisplayLevelLabelForViewMode(
-        nextProject.viewMode,
-        getDiagramDisplayLevelValue(activeDiagram, nextProject.viewMode)
-      )
+      displayLevel: getDisplayLevelValueForViewMode(nextProject.viewMode, getDiagramDisplayLevelValue(activeDiagram, nextProject.viewMode))
     }
   };
 }
@@ -761,10 +749,7 @@ function importWorkspaceModel(payload) {
       subjectArea: activeSubjectArea.name ?? "<model>",
       definition: "Drag entities, define attributes, and wire relationships.",
       diagramDefinition: activeDiagram?.definition ?? "",
-      displayLevel: getDisplayLevelLabelForViewMode(
-        viewMode,
-        getDiagramDisplayLevelValue(activeDiagram, viewMode)
-      )
+      displayLevel: getDisplayLevelValueForViewMode(viewMode, getDiagramDisplayLevelValue(activeDiagram, viewMode))
     },
     activeDiagramId: activeDiagram?.id ?? diagrams[0]?.id ?? "1",
     diagrams

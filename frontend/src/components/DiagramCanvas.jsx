@@ -18,7 +18,41 @@ function estimateTextWidth(text, factor = 9.2) {
 }
 
 function normalizeDisplayLevel(displayLevel) {
-  return String(displayLevel ?? "Column").trim().toLowerCase();
+  const normalized = String(displayLevel ?? "Column").trim().toLowerCase();
+
+  if (normalized === "0") {
+    return "table";
+  }
+
+  if (normalized === "1") {
+    return "column";
+  }
+
+  if (normalized === "12") {
+    return "key";
+  }
+
+  if (normalized === "13") {
+    return "graph";
+  }
+
+  if (normalized === "3") {
+    return "comment";
+  }
+
+  if (normalized === "5") {
+    return "primarykey";
+  }
+
+  if (normalized === "6") {
+    return "order";
+  }
+
+  if (normalized === "7") {
+    return "icon";
+  }
+
+  return normalized;
 }
 
 function isCommentDisplayLevel(displayLevel) {
