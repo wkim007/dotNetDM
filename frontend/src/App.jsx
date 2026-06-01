@@ -2008,7 +2008,6 @@ export default function App() {
           onSelectTab={handleSelectDiagram}
           onCloseTab={handleCloseDiagram}
           onAddDiagram={handleAddDiagram}
-          onAddEntity={handleAddEntity}
           onReload={handleReloadSample}
           onSave={handleSave}
         />

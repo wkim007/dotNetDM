@@ -3,7 +3,6 @@ export default function TopTabs({
   onSelectTab,
   onCloseTab,
   onAddDiagram,
-  onAddEntity,
   onReload,
   onSave
 }) {
@@ -34,9 +33,6 @@ export default function TopTabs({
       <div className="toolbar-actions">
         <button type="button" className="secondary-button diagram-button" onClick={onAddDiagram}>
           + Diagram
-        </button>
-        <button type="button" className="secondary-button diagram-button" onClick={onAddEntity}>
-          + Entity
         </button>
         <button type="button" className="secondary-button diagram-button" onClick={onReload}>
           Reload
