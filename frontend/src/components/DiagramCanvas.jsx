@@ -8,6 +8,7 @@ const ROW_HEIGHT = 33;
 const CARD_MAX_WIDTH = 560;
 const WORLD_WIDTH = 1600;
 const WORLD_HEIGHT = 1200;
+const WORLD_PADDING = 220;
 
 function estimateTextWidth(text, factor = 9.2) {
   return String(text ?? "").length * factor;
@@ -44,6 +45,23 @@ function getCardBounds(entity) {
     height,
     centerX: entity.x + width / 2,
     centerY: entity.y + height / 2
+  };
+}
+
+function getWorldSize(entities) {
+  if (entities.length === 0) {
+    return {
+      width: WORLD_WIDTH,
+      height: WORLD_HEIGHT
+    };
+  }
+
+  const furthestRight = Math.max(...entities.map((entity) => getCardBounds(entity).right));
+  const furthestBottom = Math.max(...entities.map((entity) => getCardBounds(entity).bottom));
+
+  return {
+    width: Math.max(WORLD_WIDTH, Math.ceil(furthestRight + WORLD_PADDING)),
+    height: Math.max(WORLD_HEIGHT, Math.ceil(furthestBottom + WORLD_PADDING))
   };
 }
 
@@ -237,6 +255,7 @@ export default function DiagramCanvas({
   viewResetToken
 }) {
   const entityMap = Object.fromEntries(entities.map((entity) => [entity.id, entity]));
+  const worldSize = getWorldSize(entities);
   const interactionState = useRef(null);
   const canvasRef = useRef(null);
   const suppressBackgroundClickRef = useRef(false);
@@ -479,19 +498,27 @@ export default function DiagramCanvas({
     >
       <div
         className="diagram-stage-shell"
-        style={{ width: WORLD_WIDTH * zoom, height: WORLD_HEIGHT * zoom }}
+        style={{ width: worldSize.width * zoom, height: worldSize.height * zoom }}
       >
         <div
           className="diagram-stage"
           style={{
-            width: WORLD_WIDTH,
-            height: WORLD_HEIGHT,
+            width: worldSize.width,
+            height: worldSize.height,
             transform: `scale(${zoom})`
           }}
         >
-          <div className="diagram-grid" />
+          <div
+            className="diagram-grid"
+            style={{ width: worldSize.width, height: worldSize.height }}
+          />
 
-          <svg className="diagram-svg" viewBox={`0 0 ${WORLD_WIDTH} ${WORLD_HEIGHT}`} preserveAspectRatio="none">
+          <svg
+            className="diagram-svg"
+            viewBox={`0 0 ${worldSize.width} ${worldSize.height}`}
+            preserveAspectRatio="none"
+            style={{ width: worldSize.width, height: worldSize.height }}
+          >
             {relationships.map((relationship) => {
               const source = entityMap[relationship.sourceEntityId];
               const target = entityMap[relationship.targetEntityId];
