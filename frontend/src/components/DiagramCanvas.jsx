@@ -59,8 +59,9 @@ function isCommentDisplayLevel(displayLevel) {
   return normalizeDisplayLevel(displayLevel) === "comment";
 }
 
-function getCommentText(entity) {
-  return String(entity.comment ?? "").trim();
+function getCommentText(entity, viewMode) {
+  const useDefinition = String(viewMode ?? "").trim().toLowerCase() === "logical view";
+  return String(useDefinition ? entity.definition ?? "" : entity.comment ?? "").trim();
 }
 
 function getVisibleFields(entity, displayLevel) {
@@ -274,6 +275,7 @@ function getEntityCardVariant(entity) {
 function EntityCard({
   entity,
   displayLevel,
+  viewMode,
   isSelected,
   onPointerDown,
   onResizeStart,
@@ -281,7 +283,7 @@ function EntityCard({
   onDelete
 }) {
   const commentMode = isCommentDisplayLevel(displayLevel);
-  const commentText = getCommentText(entity);
+  const commentText = getCommentText(entity, viewMode);
   const visibleFields = getVisibleFields(entity, displayLevel);
   const preferredSize = getPreferredEntitySize(entity, displayLevel);
   const { width, height } = getRenderedEntitySize(entity, displayLevel);
@@ -352,6 +354,7 @@ export default function DiagramCanvas({
   selectedEntityIds,
   selectedRelationshipId,
   displayLevel,
+  viewMode,
   zoom,
   onSelectEntity,
   onSelectEntities,
@@ -657,6 +660,7 @@ export default function DiagramCanvas({
               key={entity.id}
               entity={entity}
               displayLevel={displayLevel}
+              viewMode={viewMode}
               isSelected={selectedEntityIds.includes(entity.id)}
               onPointerDown={handlePointerDown}
               onResizeStart={handleResizeStart}

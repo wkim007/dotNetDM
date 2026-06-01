@@ -2171,6 +2171,7 @@ export default function App() {
           selectedEntityIds={selectedEntityIds}
           selectedRelationshipId={selectedRelationshipId}
           displayLevel={model.project.displayLevel}
+          viewMode={model.project.viewMode}
           zoom={zoom}
           onSelectEntity={handleSelectEntity}
           onSelectEntities={handleSetSelectedEntities}
