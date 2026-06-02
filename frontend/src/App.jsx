@@ -2810,7 +2810,6 @@ export default function App() {
           selectedEntity={selectedEntity}
           selectedAttribute={selectedAttribute}
           selectedRelationship={selectedRelationship}
-          relationships={activeDiagram?.relationships ?? []}
           allEntities={activeDiagram?.entities ?? []}
           datatypeOptions={datatypeOptions}
           importForm={importForm}

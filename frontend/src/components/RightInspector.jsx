@@ -40,7 +40,6 @@ export default function RightInspector({
   selectedEntity,
   selectedAttribute,
   selectedRelationship,
-  relationships,
   allEntities,
   datatypeOptions,
   importForm,
@@ -62,11 +61,6 @@ export default function RightInspector({
   onZoomOut,
   isLinkingRelationship
 }) {
-  const selectedName = selectedEntity?.id ?? "";
-  const relationshipList = relationships.filter(
-    (relationship) =>
-      relationship.sourceEntityId === selectedName || relationship.targetEntityId === selectedName
-  );
   const selectedRelationshipSource = allEntities.find(
     (entity) => entity.id === selectedRelationship?.sourceEntityId
   );
@@ -121,34 +115,8 @@ export default function RightInspector({
         <div className="panel-heading">
           <span className="panel-label">Relationships</span>
         </div>
-        <div className="mini-list">
-          {relationships.length > 0 ? (
-            relationships.map((relationship) => {
-              const source = allEntities.find((entity) => entity.id === relationship.sourceEntityId);
-              const target = allEntities.find((entity) => entity.id === relationship.targetEntityId);
-
-              return (
-                <button
-                  key={relationship.id}
-                  type="button"
-                  className={`relationship-list-card ${selectedRelationship?.id === relationship.id ? "active" : ""}`}
-                  onClick={() => onSelectRelationship(relationship.id)}
-                >
-                  <strong>{relationship.physicalName ?? relationship.id}</strong>
-                  <span>{source?.physicalName} → {target?.physicalName}</span>
-                </button>
-              );
-            })
-          ) : (
-            <div className="mini-list-item">
-              <span>No relationships in this diagram.</span>
-            </div>
-          )}
-        </div>
-
         {selectedRelationship ? (
           <>
-            <div className="divider" />
             <div className="panel-heading">
               <span className="panel-label">
                 {selectedRelationshipSource?.physicalName} → {selectedRelationshipTarget?.physicalName}
@@ -205,7 +173,9 @@ export default function RightInspector({
               </button>
             </div>
           </>
-        ) : null}
+        ) : (
+          <p className="empty-state">Select a relationship in the diagram to edit its details.</p>
+        )}
       </section>
 
       <section className="panel">
@@ -349,31 +319,6 @@ export default function RightInspector({
             )}
 
             <div className="divider" />
-
-            <div className="panel-heading">
-              <span className="panel-label">Relationships</span>
-            </div>
-            <div className="mini-list">
-              {relationshipList.length > 0 ? (
-                relationshipList.map((relationship) => {
-                  const source = allEntities.find((entity) => entity.id === relationship.sourceEntityId);
-                  const target = allEntities.find((entity) => entity.id === relationship.targetEntityId);
-
-                  return (
-                    <div key={relationship.id} className="mini-list-item">
-                      <strong>{relationship.id}</strong>
-                      <span>
-                        {source?.physicalName} {relationship.cardinality} {target?.physicalName}
-                      </span>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="mini-list-item">
-                  <span>No relationships for the selected entity.</span>
-                </div>
-              )}
-            </div>
           </>
         ) : (
           <p className="empty-state">Select an entity to edit its fields.</p>
