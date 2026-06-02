@@ -288,6 +288,15 @@ body.panel-resizing {
   background: #30425c;
   font-size: 0.92rem;
   line-height: 1.15;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.diagram-box-item:hover,
+.diagram-box-item:focus-visible {
+  background: #3a4f6d;
+  border-color: rgba(140, 255, 184, 0.52);
+  box-shadow: inset 0 0 0 1px rgba(150, 255, 183, 0.38), 0 0 18px rgba(81, 236, 146, 0.2);
+  transform: translateY(-1px);
 }
 
 .diagram-box-item.active {
@@ -305,6 +314,15 @@ body.panel-resizing {
   color: #eff5ff;
   font-size: 1rem;
   line-height: 1;
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.diagram-box-item:hover .diagram-box-icon,
+.diagram-box-item:focus-visible .diagram-box-icon,
+.diagram-box-item.active .diagram-box-icon {
+  background: rgba(8, 14, 22, 0.92);
+  color: #95ffb7;
+  box-shadow: 0 0 14px rgba(81, 236, 146, 0.32);
 }
 
 .diagram-box-icon-svg svg {

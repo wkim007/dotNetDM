@@ -22,6 +22,8 @@ function SelectField({ label, value, options, onChange, disabled = false }) {
 export default function LeftSidebar({
   project,
   entityCount,
+  viewCount,
+  materializedViewCount,
   relationshipCount,
   activeRelationshipTool,
   showViewObjectsUi,
@@ -84,6 +86,18 @@ export default function LeftSidebar({
             <strong>{entityCount}</strong>
             <span>Entities</span>
           </div>
+          {viewCount > 0 ? (
+            <div className="stat-chip">
+              <strong>{viewCount}</strong>
+              <span>Views</span>
+            </div>
+          ) : null}
+          {materializedViewCount > 0 ? (
+            <div className="stat-chip">
+              <strong>{materializedViewCount}</strong>
+              <span>Materialized Views</span>
+            </div>
+          ) : null}
           <div className="stat-chip">
             <strong>{relationshipCount}</strong>
             <span>Links</span>
@@ -114,7 +128,7 @@ export default function LeftSidebar({
         <div className="field-group diagram-box-field">
           <span>Diagram Box</span>
           <div className="diagram-box-grid">
-            <button type="button" className="secondary-button diagram-box-item active" onClick={onAddEntity} title="Add Entity">
+            <button type="button" className="secondary-button diagram-box-item" onClick={onAddEntity} title="Add Entity">
               <span className="diagram-box-icon">▦</span>
               <span>Entity</span>
             </button>
@@ -181,15 +195,17 @@ export default function LeftSidebar({
               <span>Non-Identifying</span>
             </button>
 
-            <button
-              type="button"
-              className={`secondary-button diagram-box-item ${activeRelationshipTool === "Derived" ? "active" : ""}`}
-              onClick={onStartDerivedRelationship}
-              title="Add View/Materialized Relationship"
-            >
-              <span className="diagram-box-icon">⋯</span>
-              <span>View/Materized Rel.</span>
-            </button>
+            {showViewObjectsUi || showCachedViewObjectsUi ? (
+              <button
+                type="button"
+                className={`secondary-button diagram-box-item ${activeRelationshipTool === "Derived" ? "active" : ""}`}
+                onClick={onStartDerivedRelationship}
+                title="Add View/Materialized Relationship"
+              >
+                <span className="diagram-box-icon">⋯</span>
+                <span>View/Materized Rel.</span>
+              </button>
+            ) : null}
           </div>
         </div>
       </section>

@@ -1625,15 +1625,27 @@ export default function App() {
   const databaseVersionOptions = DATABASE_VERSION_OPTIONS[model.project.database] ?? ["1.0"];
   const displayLevelOptions = getDisplayLevelOptionsForViewMode(model.project.viewMode);
   const dbEngine = normalizeDbEngine(model.project.database);
+  const isPhysicalViewMode = model.project.viewMode === "Physical View";
   const datatypeOptions = getDatatypeOptionsForEngine(dbEngine);
-  const showViewObjectsUi = supportsViewObjects(dbEngine);
-  const showCachedViewObjectsUi = supportsCachedViews(dbEngine);
+  const showViewObjectsUi = isPhysicalViewMode && supportsViewObjects(dbEngine);
+  const showCachedViewObjectsUi = isPhysicalViewMode && supportsCachedViews(dbEngine);
   const cachedViewUiName =
     dbEngine === "teradata"
       ? "Join Index"
       : ["redshift", "bigquery", "databricks", "hive"].includes(dbEngine)
         ? "CTAS"
         : "Materialized View";
+
+  useEffect(() => {
+    if (isPhysicalViewMode || !linkDraft) {
+      return;
+    }
+
+    if (linkDraft.relationshipType === "Derived") {
+      setLinkDraft(null);
+      setStatus("Logical View hides view-specific relationship tools.");
+    }
+  }, [isPhysicalViewMode, linkDraft]);
 
   function createFreshSampleModel() {
     return normalizeModel(sampleModel);
@@ -2836,7 +2848,11 @@ export default function App() {
 
       <LeftSidebar
         project={model.project}
-        entityCount={activeDiagram?.entities.length ?? 0}
+        entityCount={activeDiagram?.entities.filter((entity) => getEntityObjectType(entity) === "entity").length ?? 0}
+        viewCount={activeDiagram?.entities.filter((entity) => getEntityObjectType(entity) === "view").length ?? 0}
+        materializedViewCount={
+          activeDiagram?.entities.filter((entity) => getEntityObjectType(entity) === "materializedView").length ?? 0
+        }
         relationshipCount={activeDiagram?.relationships.length ?? 0}
         activeRelationshipTool={linkDraft?.relationshipType ?? null}
         showViewObjectsUi={showViewObjectsUi}
