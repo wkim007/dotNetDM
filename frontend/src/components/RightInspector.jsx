@@ -41,6 +41,7 @@ export default function RightInspector({
   selectedAttribute,
   selectedRelationship,
   allEntities,
+  schemas,
   datatypeOptions,
   importForm,
   providers,
@@ -67,6 +68,11 @@ export default function RightInspector({
   const selectedRelationshipTarget = allEntities.find(
     (entity) => entity.id === selectedRelationship?.targetEntityId
   );
+  const derivedRelationshipOnly =
+    selectedRelationshipSource?.objectType === "view" ||
+    selectedRelationshipSource?.objectType === "materializedView" ||
+    selectedRelationshipTarget?.objectType === "view" ||
+    selectedRelationshipTarget?.objectType === "materializedView";
   const selectedAttributeDatatypeParts = selectedAttribute
     ? parseDatatypeParts(selectedAttribute.dataType)
     : { baseType: "", sizeValue: "" };
@@ -83,6 +89,24 @@ export default function RightInspector({
     <aside className="right-inspector">
       <section className="panel helper-panel">
         <p>Use drag and drop to reposition entities, then save the document or import a live schema.</p>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <span className="panel-label">Schema</span>
+        </div>
+        {schemas?.length > 0 ? (
+          <div className="mini-list">
+            {schemas.map((schema) => (
+              <div key={schema.id} className="mini-list-item">
+                <strong>{schema.name}</strong>
+                <span>{schema.comment?.trim() ? schema.comment : "No comment"}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-state">No schemas in the current model.</p>
+        )}
       </section>
 
       <section className="panel">
@@ -164,7 +188,7 @@ export default function RightInspector({
             <SelectField
               label="Relationship Type"
               value={selectedRelationship.relationshipType ?? "Non-Identifying"}
-              options={["Non-Identifying", "Identifying"]}
+              options={derivedRelationshipOnly ? ["Derived"] : ["Non-Identifying", "Identifying", "Derived"]}
               onChange={(value) => onRelationshipChange("relationshipType", value)}
             />
             <div className="button-row">

@@ -539,9 +539,21 @@ body.panel-resizing {
   cursor: pointer;
 }
 
-.diagram-link.dashed {
-  stroke-dasharray: 7 8;
+.diagram-link.identifying {
+  stroke-dasharray: none;
+  stroke-linecap: butt;
+}
+
+.diagram-link.non-identifying {
+  stroke-dasharray: 10 6;
   opacity: 0.85;
+  stroke-linecap: butt;
+}
+
+.diagram-link.derived {
+  stroke-dasharray: 1 6;
+  opacity: 0.9;
+  stroke-linecap: round;
 }
 
 .diagram-link.selected {

@@ -914,6 +914,28 @@ function normalizeDatatypeCase(value) {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function isViewLikeEntity(entity) {
+  return entity?.objectType === "view" || entity?.objectType === "materializedView";
+}
+
+function normalizeRelationshipType(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+
+  if (normalized === "16" || normalized === "derived") {
+    return "Derived";
+  }
+
+  if (normalized === "7" || normalized === "non-identifying") {
+    return "Non-Identifying";
+  }
+
+  if (normalized === "identifying") {
+    return "Identifying";
+  }
+
+  return "Non-Identifying";
+}
+
 function getEntityObjectType(entity) {
   if (entity?.objectType === "materializedView") {
     return "materializedView";
@@ -1049,13 +1071,19 @@ function exportModelToWorkspaceJson(model) {
     views: allViews,
     cachedViews: allCachedViews,
     relationships: allRelationships,
-    schemas: [
-      {
-        id: "schema-1",
-        name: dbMeta.schema,
-        comment: ""
-      }
-    ],
+    schemas: (model.project?.schemas?.length > 0
+      ? model.project.schemas
+      : [
+          {
+            id: "schema-1",
+            name: dbMeta.schema,
+            comment: ""
+          }
+        ]).map((schema) => ({
+          id: String(schema.id),
+          name: schema.name ?? dbMeta.schema,
+          comment: schema.comment ?? ""
+        })),
     databases: [],
     catalogs: [],
     subjectAreas: [
@@ -1259,6 +1287,11 @@ function importWorkspaceModel(payload) {
       viewMode,
       database: dbMeta.label,
       databaseVersion: `${dbMeta.major}${dbMeta.minor ? `.${dbMeta.minor}` : ""}`,
+      schemas: (workspace?.schemas ?? []).map((schema) => ({
+        id: String(schema.id),
+        name: schema.name ?? "",
+        comment: schema.comment ?? ""
+      })),
       subjectArea: activeSubjectArea.name ?? "<model>",
       definition: "Drag entities, define attributes, and wire relationships.",
       diagramDefinition: activeDiagram?.definition ?? "",
@@ -1293,14 +1326,14 @@ function getPreferredEntitySize(entity) {
 
 function normalizeRelationship(relationship) {
   return {
+    ...relationship,
     name: relationship.name ?? relationship.id,
     physicalName: relationship.physicalName ?? relationship.id,
     description: relationship.description ?? "relates_to",
     parentAttribute: relationship.parentAttribute ?? "Entity header",
     childAttribute: relationship.childAttribute ?? "Entity header",
     migratedKeyIndex: relationship.migratedKeyIndex ?? "Select parent index",
-    relationshipType: relationship.relationshipType ?? "Non-Identifying",
-    ...relationship
+    relationshipType: normalizeRelationshipType(relationship.relationshipType)
   };
 }
 
@@ -2034,6 +2067,14 @@ export default function App() {
       return;
     }
 
+    const sourceEntity = activeDiagram?.entities.find(
+      (entity) => entity.id === selectedRelationship?.sourceEntityId
+    );
+    const targetEntity = activeDiagram?.entities.find(
+      (entity) => entity.id === selectedRelationship?.targetEntityId
+    );
+    const derivedOnly = isViewLikeEntity(sourceEntity) || isViewLikeEntity(targetEntity);
+
     setModel((current) => ({
       ...current,
       diagrams: current.diagrams.map((diagram) =>
@@ -2042,7 +2083,14 @@ export default function App() {
               ...diagram,
               relationships: diagram.relationships.map((relationship) =>
                 relationship.id === selectedRelationshipId
-                  ? { ...relationship, [field]: value }
+                  ? {
+                      ...relationship,
+                      [field]: field === "relationshipType"
+                        ? derivedOnly
+                          ? "Derived"
+                          : normalizeRelationshipType(value)
+                        : value
+                    }
                   : relationship
               )
             }
@@ -2110,6 +2158,15 @@ export default function App() {
 
     const source = activeDiagram.entities.find((entity) => entity.id === linkDraft.sourceEntityId);
     const target = activeDiagram.entities.find((entity) => entity.id === entityId);
+    const sourceIsViewLike = isViewLikeEntity(source);
+    const targetIsViewLike = isViewLikeEntity(target);
+
+    if (sourceIsViewLike && targetIsViewLike) {
+      setStatus("View-to-view and materialized-view-to-view relationships are not allowed. Parent must be an entity.");
+      return;
+    }
+
+    const derivedOnly = sourceIsViewLike || targetIsViewLike;
     const relationshipId = `relationship-${Date.now()}`;
     const newRelationship = normalizeRelationship({
       id: relationshipId,
@@ -2119,7 +2176,8 @@ export default function App() {
       physicalName: `${linkDraft.sourceEntityId}-${entityId}`,
       description: "relates_to",
       cardinality: "1:N",
-      style: "solid"
+      style: derivedOnly ? "dashed" : "solid",
+      relationshipType: derivedOnly ? "Derived" : "Non-Identifying"
     });
 
     setModel((current) => ({
@@ -2782,6 +2840,7 @@ export default function App() {
           selectedAttributeId={selectedAttributeId}
           displayLevel={model.project.displayLevel}
           viewMode={model.project.viewMode}
+          isLinkingRelationship={Boolean(linkDraft)}
           zoom={zoom}
           onSelectEntity={handleSelectEntity}
           onSelectEntities={handleSetSelectedEntities}
@@ -2811,6 +2870,7 @@ export default function App() {
           selectedAttribute={selectedAttribute}
           selectedRelationship={selectedRelationship}
           allEntities={activeDiagram?.entities ?? []}
+          schemas={model.project?.schemas ?? []}
           datatypeOptions={datatypeOptions}
           importForm={importForm}
         providers={providers}

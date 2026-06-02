@@ -198,7 +198,7 @@ function DiagramLink({
   source,
   target,
   displayLevel,
-  dashed,
+  lineVariant,
   isSelected,
   onSelectRelationship,
   onDeleteRelationship
@@ -229,7 +229,7 @@ function DiagramLink({
       />
       <path
         d={path}
-        className={`diagram-link ${dashed ? "dashed" : ""} ${isSelected ? "selected" : ""}`}
+        className={`diagram-link ${lineVariant} ${isSelected ? "selected" : ""}`}
         onClick={(event) => {
           event.stopPropagation();
           onSelectRelationship(relationship.id);
@@ -278,6 +278,7 @@ function EntityCard({
   viewMode,
   isSelected,
   selectedAttributeId,
+  isLinkingRelationship,
   onPointerDown,
   onResizeStart,
   onSelect,
@@ -298,6 +299,15 @@ function EntityCard({
       onPointerDown={(event) => onPointerDown(event, entity.id)}
       onClick={(event) => {
         if (event.metaKey) {
+          return;
+        }
+
+        if (isLinkingRelationship) {
+          event.stopPropagation();
+          onSelect(entity.id, {
+            additive: false,
+            toggle: false
+          });
           return;
         }
 
@@ -368,6 +378,7 @@ export default function DiagramCanvas({
   selectedAttributeId,
   displayLevel,
   viewMode,
+  isLinkingRelationship,
   zoom,
   onSelectEntity,
   onSelectEntities,
@@ -433,6 +444,16 @@ export default function DiagramCanvas({
   }, [viewResetToken]);
 
   function handlePointerDown(event, entityId) {
+    if (isLinkingRelationship) {
+      event.preventDefault();
+      event.stopPropagation();
+      onSelectEntity(entityId, {
+        additive: false,
+        toggle: false
+      });
+      return;
+    }
+
     event.preventDefault();
     const entity = entityMap[entityId];
     const currentSelection = selectedEntityIds.includes(entityId) ? selectedEntityIds : [entityId];
@@ -660,7 +681,14 @@ export default function DiagramCanvas({
                   source={source}
                   target={target}
                   displayLevel={displayLevel}
-                  dashed={relationship.style === "dashed"}
+                  lineVariant={
+                    String(relationship.relationshipType ?? "").trim().toLowerCase() === "derived"
+                      ? "derived"
+                      : String(relationship.relationshipType ?? "").trim().toLowerCase() === "non-identifying" ||
+                          String(relationship.relationshipType ?? "").trim() === "7"
+                        ? "non-identifying"
+                        : "identifying"
+                  }
                   isSelected={relationship.id === selectedRelationshipId}
                   onSelectRelationship={onSelectRelationship}
                   onDeleteRelationship={onDeleteRelationship}
@@ -677,6 +705,7 @@ export default function DiagramCanvas({
               viewMode={viewMode}
               isSelected={selectedEntityIds.includes(entity.id)}
               selectedAttributeId={selectedEntityIds.includes(entity.id) ? selectedAttributeId : null}
+              isLinkingRelationship={isLinkingRelationship}
               onPointerDown={handlePointerDown}
               onResizeStart={handleResizeStart}
               onSelect={onSelectEntity}
