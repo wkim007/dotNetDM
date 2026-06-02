@@ -929,11 +929,25 @@ function normalizeRelationshipType(value) {
     return "Non-Identifying";
   }
 
-  if (normalized === "identifying") {
+  if (normalized === "2" || normalized === "identifying") {
     return "Identifying";
   }
 
   return "Non-Identifying";
+}
+
+function relationshipTypeToValue(value) {
+  const normalized = normalizeRelationshipType(value);
+
+  if (normalized === "Derived") {
+    return "16";
+  }
+
+  if (normalized === "Identifying") {
+    return "2";
+  }
+
+  return "7";
 }
 
 function getEntityObjectType(entity) {
@@ -1035,7 +1049,7 @@ function exportModelToWorkspaceJson(model) {
         parent: String(relationship.sourceEntityId),
         child: String(relationship.targetEntityId),
         cardinality: relationship.cardinality ?? "1:N",
-        relationshipType: relationship.relationshipType ?? "Non-Identifying",
+        relationshipType: relationshipTypeToValue(relationship.relationshipType),
         physicalOnly: false,
         logicalOnly: false,
         parentToChildVerbPhrase: relationship.parentToChildVerbPhrase ?? "",
