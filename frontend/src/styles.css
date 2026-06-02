@@ -705,7 +705,13 @@ body.panel-resizing {
   align-items: center;
   gap: 10px;
   margin-bottom: 8px;
+  padding: 3px 8px;
+  border-radius: 10px;
   color: #dce7f5;
+}
+
+.entity-field-row.active {
+  background: rgba(66, 217, 212, 0.16);
 }
 
 .entity-field-name {
@@ -814,6 +820,19 @@ body.panel-resizing {
 .empty-state {
   color: var(--muted);
   margin: 0;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.checkbox-field input {
+  width: 16px;
+  height: 16px;
 }
 
 .mini-list-item strong {

@@ -123,6 +123,481 @@ const DISPLAY_LEVEL_OPTIONS_LOGICAL = [
   { value: "5", label: "PrimaryKey" },
   { value: "7", label: "Icon" }
 ];
+const GENERIC_TYPES = ["integer", "bigint", "numeric", "varchar", "text", "boolean", "date", "timestamp"];
+const ORACLE_TYPES = [
+  "number",
+  "decimal",
+  "numeric",
+  "integer",
+  "int",
+  "smallint",
+  "real",
+  "varchar2",
+  "nvarchar2",
+  "char",
+  "nchar",
+  "float",
+  "binary_float",
+  "binary_double",
+  "double precision",
+  "date",
+  "timestamp",
+  "timestamp with time zone",
+  "timestamp with local time zone",
+  "interval year to month",
+  "interval day to second",
+  "clob",
+  "nclob",
+  "blob",
+  "bfile",
+  "raw",
+  "long",
+  "long raw",
+  "rowid",
+  "urowid",
+  "xmltype",
+  "json"
+];
+const PG_TYPES = [
+  "smallint",
+  "integer",
+  "bigint",
+  "decimal",
+  "numeric",
+  "real",
+  "double precision",
+  "serial",
+  "bigserial",
+  "money",
+  "char",
+  "varchar",
+  "text",
+  "boolean",
+  "date",
+  "time",
+  "timestamp",
+  "timestamptz",
+  "interval",
+  "uuid",
+  "json",
+  "jsonb",
+  "bytea"
+];
+const MSSQL_TYPES = [
+  "bit",
+  "tinyint",
+  "smallint",
+  "int",
+  "bigint",
+  "decimal",
+  "numeric",
+  "money",
+  "smallmoney",
+  "float",
+  "real",
+  "char",
+  "varchar",
+  "text",
+  "nchar",
+  "nvarchar",
+  "ntext",
+  "binary",
+  "varbinary",
+  "image",
+  "date",
+  "time",
+  "datetime",
+  "datetime2",
+  "datetimeoffset",
+  "smalldatetime",
+  "uniqueidentifier",
+  "xml",
+  "json"
+];
+const MYSQL_TYPES = [
+  "tinyint",
+  "smallint",
+  "mediumint",
+  "int",
+  "bigint",
+  "decimal",
+  "numeric",
+  "float",
+  "double",
+  "bit",
+  "char",
+  "varchar",
+  "text",
+  "tinytext",
+  "mediumtext",
+  "longtext",
+  "binary",
+  "varbinary",
+  "blob",
+  "tinyblob",
+  "mediumblob",
+  "longblob",
+  "date",
+  "time",
+  "datetime",
+  "timestamp",
+  "year",
+  "json"
+];
+const MONGODB_TYPES = [
+  "string",
+  "integer",
+  "long",
+  "double",
+  "decimal",
+  "boolean",
+  "date",
+  "timestamp",
+  "objectId",
+  "object",
+  "array",
+  "ArrayOfObject",
+  "null",
+  "regex"
+];
+const BIGQUERY_TYPES = [
+  "string",
+  "bytes",
+  "integer",
+  "int64",
+  "float",
+  "float64",
+  "numeric",
+  "bignumeric",
+  "boolean",
+  "bool",
+  "date",
+  "datetime",
+  "time",
+  "timestamp",
+  "json",
+  "record",
+  "struct",
+  "geography"
+];
+const HIVE_TYPES = [
+  "tinyint",
+  "smallint",
+  "int",
+  "bigint",
+  "float",
+  "double",
+  "decimal",
+  "string",
+  "varchar",
+  "char",
+  "boolean",
+  "date",
+  "timestamp",
+  "binary",
+  "array",
+  "map",
+  "struct",
+  "uniontype"
+];
+const DBX_TYPES = [
+  "tinyint",
+  "smallint",
+  "int",
+  "bigint",
+  "float",
+  "double",
+  "decimal",
+  "string",
+  "varchar",
+  "char",
+  "boolean",
+  "date",
+  "timestamp",
+  "binary",
+  "array",
+  "map",
+  "struct"
+];
+const SNOWFLAKE_TYPES = [
+  "number",
+  "decimal",
+  "numeric",
+  "int",
+  "integer",
+  "bigint",
+  "smallint",
+  "tinyint",
+  "byteint",
+  "float",
+  "float4",
+  "float8",
+  "double",
+  "double precision",
+  "real",
+  "varchar",
+  "string",
+  "text",
+  "char",
+  "character",
+  "boolean",
+  "date",
+  "datetime",
+  "time",
+  "timestamp",
+  "timestamp_ltz",
+  "timestamp_ntz",
+  "timestamp_tz",
+  "binary",
+  "varbinary",
+  "variant",
+  "object",
+  "array",
+  "geography",
+  "geometry"
+];
+const TERADATA_TYPES = [
+  "byteint",
+  "smallint",
+  "integer",
+  "bigint",
+  "decimal",
+  "numeric",
+  "float",
+  "real",
+  "double precision",
+  "char",
+  "varchar",
+  "clob",
+  "blob",
+  "byte",
+  "varbyte",
+  "date",
+  "time",
+  "timestamp",
+  "interval year to month",
+  "interval day to second",
+  "json",
+  "xml"
+];
+const REDSHIFT_TYPES = [
+  "smallserial",
+  "serial",
+  "bigserial",
+  "smallint",
+  "integer",
+  "bigint",
+  "decimal",
+  "numeric",
+  "real",
+  "double precision",
+  "boolean",
+  "char",
+  "varchar",
+  "text",
+  "date",
+  "time",
+  "timetz",
+  "timestamp",
+  "timestamptz",
+  "interval",
+  "super",
+  "varbyte",
+  "geometry"
+];
+const NETEZZA_TYPES = [
+  "byteint",
+  "smallint",
+  "integer",
+  "bigint",
+  "numeric",
+  "decimal",
+  "real",
+  "double precision",
+  "money",
+  "char",
+  "character",
+  "varchar",
+  "char varying",
+  "nchar",
+  "nvarchar",
+  "boolean",
+  "date",
+  "time",
+  "timestamp",
+  "interval",
+  "varbinary",
+  "json"
+];
+const PROGRESS_TYPES = [
+  "tinyint",
+  "int",
+  "character",
+  "char",
+  "varchar",
+  "longvarchar",
+  "smallint",
+  "integer",
+  "int64",
+  "decimal",
+  "numeric",
+  "real",
+  "float",
+  "double precision",
+  "double",
+  "logical",
+  "date",
+  "time",
+  "timestamp",
+  "datetime",
+  "blob",
+  "clob",
+  "raw"
+];
+const SAP_ASE_TYPES = [
+  "tinyint",
+  "smallint",
+  "int",
+  "bigint",
+  "decimal",
+  "numeric",
+  "money",
+  "smallmoney",
+  "float",
+  "real",
+  "bit",
+  "char",
+  "varchar",
+  "unichar",
+  "univarchar",
+  "text",
+  "unitext",
+  "binary",
+  "varbinary",
+  "image",
+  "date",
+  "time",
+  "datetime",
+  "smalldatetime",
+  "timestamp"
+];
+const SAP_IQ_TYPES = [
+  "bit",
+  "tinyint",
+  "smallint",
+  "int",
+  "bigint",
+  "decimal",
+  "numeric",
+  "real",
+  "double",
+  "float",
+  "char",
+  "varchar",
+  "long varchar",
+  "nchar",
+  "nvarchar",
+  "long nvarchar",
+  "binary",
+  "varbinary",
+  "long binary",
+  "date",
+  "time",
+  "timestamp"
+];
+const INFORMIX_TYPES = [
+  "smallint",
+  "integer",
+  "bigint",
+  "int8",
+  "serial",
+  "serial8",
+  "decimal",
+  "money",
+  "smallfloat",
+  "float",
+  "char",
+  "varchar",
+  "lvarchar",
+  "nchar",
+  "nvarchar",
+  "text",
+  "byte",
+  "boolean",
+  "date",
+  "datetime",
+  "interval",
+  "blob",
+  "clob",
+  "json",
+  "bson"
+];
+const DB2_TYPES = [
+  "smallint",
+  "integer",
+  "bigint",
+  "decimal",
+  "numeric",
+  "real",
+  "double",
+  "float",
+  "char",
+  "varchar",
+  "long varchar",
+  "graphic",
+  "vargraphic",
+  "boolean",
+  "date",
+  "time",
+  "timestamp",
+  "blob",
+  "clob",
+  "dbcblob",
+  "xml",
+  "json"
+];
+const AMAZON_KEYSPACES_TYPES = ["ascii", "bigint", "blob", "boolean", "date", "decimal", "double", "float", "inet", "int", "smallint", "text", "time", "timestamp", "timeuuid", "tinyint", "uuid", "varchar", "varint", "list", "map", "set", "tuple"];
+const DYNAMODB_TYPES = ["string", "number", "binary", "boolean", "null", "list", "map", "string set", "number set", "binary set"];
+const PARQUET_TYPES = ["boolean", "int32", "int64", "int96", "float", "double", "binary", "fixed_len_byte_array"];
+const NEO4J_TYPES = ["string", "integer", "float", "boolean", "date", "time", "datetime", "localtime", "localdatetime", "duration", "point", "bytearray", "list", "map"];
+const ARANGODB_TYPES = ["string", "integer", "double", "boolean", "null", "array", "object", "datetime"];
+const CASSANDRA_TYPES = ["ascii", "bigint", "blob", "boolean", "date", "decimal", "double", "float", "inet", "int", "smallint", "text", "time", "timestamp", "timeuuid", "tinyint", "uuid", "varchar", "varint", "list", "map", "set", "tuple"];
+const ODBC_TYPES = ["char", "varchar", "longvarchar", "wchar", "wvarchar", "decimal", "numeric", "smallint", "integer", "real", "float", "double", "bit", "tinyint", "bigint", "binary", "varbinary", "longvarbinary", "date", "time", "timestamp"];
+const JSON_COUCHBASE_TYPES = ["string", "array", "ArrayOfObject", "object", "integer", "number", "boolean", "null"];
+const DB_TYPES_BY_ENGINE = {
+  alloydb: PG_TYPES,
+  postgresql: PG_TYPES,
+  sqlserver: MSSQL_TYPES,
+  mssql: MSSQL_TYPES,
+  azuresynapse: MSSQL_TYPES,
+  mysql: MYSQL_TYPES,
+  mariadb: MYSQL_TYPES,
+  oracle: ORACLE_TYPES,
+  mongodb: MONGODB_TYPES,
+  bigquery: BIGQUERY_TYPES,
+  hive: HIVE_TYPES,
+  databricks: DBX_TYPES,
+  snowflake: SNOWFLAKE_TYPES,
+  teradata: TERADATA_TYPES,
+  redshift: REDSHIFT_TYPES,
+  netezza: NETEZZA_TYPES,
+  progress: PROGRESS_TYPES,
+  sapase: SAP_ASE_TYPES,
+  sapiq: SAP_IQ_TYPES,
+  informix: INFORMIX_TYPES,
+  db2luw: DB2_TYPES,
+  db2zos: DB2_TYPES,
+  db2i: DB2_TYPES,
+  amazonkeyspaces: AMAZON_KEYSPACES_TYPES,
+  cassandra: CASSANDRA_TYPES,
+  dynamodb: DYNAMODB_TYPES,
+  parquet: PARQUET_TYPES,
+  neo4j: NEO4J_TYPES,
+  arangodb: ARANGODB_TYPES,
+  odbc: ODBC_TYPES,
+  json: JSON_COUCHBASE_TYPES,
+  couchbase: JSON_COUCHBASE_TYPES
+};
 
 function supportsViewObjects(engineId) {
   return !["neo4j", "amazonkeyspaces", "cassandra", "dynamodb", "parquet", "json"].includes(
@@ -177,6 +652,10 @@ function getDiagramDisplayLevelValue(diagram, viewMode) {
   return viewMode === "Logical View"
     ? String(diagram?.displayLevelLogical ?? "1")
     : String(diagram?.displayLevelPhysical ?? "1");
+}
+
+function getDatatypeOptionsForEngine(engine) {
+  return DB_TYPES_BY_ENGINE[engine] ?? GENERIC_TYPES;
 }
 
 function syncProjectWithActiveDiagram(modelLike, nextProject = modelLike.project, nextActiveDiagramId = modelLike.activeDiagramId) {
@@ -400,8 +879,39 @@ function resolveDbMeta(databaseName, databaseVersion) {
   };
 }
 
+function resolveDbMetaFromPayloadMeta(meta) {
+  const dbId = String(meta?.db ?? "").trim();
+  const dbEngine = String(meta?.dbEngine ?? "").trim();
+
+  if (dbEngine) {
+    return resolveDbMeta(
+      DB_META_MAP[normalizeDbEngine(dbEngine)]?.label ?? dbEngine,
+      `${meta?.dbMajorVersion ?? "1"}${meta?.dbMinorVersion != null ? `.${meta.dbMinorVersion}` : ""}`
+    );
+  }
+
+  if (dbId) {
+    const matchingEntry = Object.values(DB_META_MAP).find((item) => String(item.db) === dbId);
+    if (matchingEntry) {
+      return resolveDbMeta(
+        matchingEntry.label,
+        `${meta?.dbMajorVersion ?? "1"}${meta?.dbMinorVersion != null ? `.${meta.dbMinorVersion}` : ""}`
+      );
+    }
+  }
+
+  return resolveDbMeta(
+    "PostgreSQL",
+    `${meta?.dbMajorVersion ?? "16"}${meta?.dbMinorVersion != null ? `.${meta.dbMinorVersion}` : ""}`
+  );
+}
+
 function getRelationshipName(relationship, source, target) {
   return relationship.name ?? `${source?.physicalName ?? source?.name ?? "Entity"} -> ${target?.physicalName ?? target?.name ?? "Entity"}`;
+}
+
+function normalizeDatatypeCase(value) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function getEntityObjectType(entity) {
@@ -447,13 +957,13 @@ function exportModelToWorkspaceJson(model) {
           name: field.name ?? "",
           physicalName: field.physicalName ?? "",
           definition: field.definition ?? "",
-          datatype: field.dataType ?? "",
+          datatype: normalizeDatatypeCase(field.dataType ?? ""),
           comment: field.comment ?? "",
-          isPrimary: field.kind === "PK",
-          isFK: field.kind === "FK",
+          isPrimary: field.isPrimary ?? field.kind === "PK",
+          isFK: field.isFK ?? field.kind === "FK",
           isNullable: field.isNullable ?? true,
-          physicalOnly: false,
-          logicalOnly: false
+          physicalOnly: field.physicalOnly ?? false,
+          logicalOnly: field.logicalOnly ?? false
         })),
         props: {
           pParentRelationshipsRef: [],
@@ -654,12 +1164,7 @@ function importWorkspaceModel(payload) {
   const viewMap = toIdMap(workspace.views ?? []);
   const cachedViewMap = toIdMap(workspace.cachedViews ?? []);
   const activeDiagramId = String(payload?.meta?.activeDiagramId ?? activeSubjectArea.diagrams[0]?.id ?? "");
-  const dbMeta = resolveDbMeta(
-    DB_META_MAP[normalizeDbEngine(payload?.meta?.dbEngine)]?.label ??
-      Object.values(DB_META_MAP).find((item) => item.db === String(payload?.meta?.db))?.label ??
-      "PostgreSQL",
-    `${payload?.meta?.dbMajorVersion ?? "16"}${payload?.meta?.dbMinorVersion != null ? `.${payload.meta.dbMinorVersion}` : ""}`
-  );
+  const dbMeta = resolveDbMetaFromPayloadMeta(payload?.meta);
 
   const diagrams = activeSubjectArea.diagrams.map((diagram, diagramIndex) => {
     const entityShapes = diagram.modelShapes?.entities ?? [];
@@ -690,7 +1195,15 @@ function importWorkspaceModel(payload) {
           id: String(attribute.id ?? `${shape.id}-field-${attributeIndex + 1}`),
           kind: attribute.isPrimary ? "PK" : attribute.isFK ? "FK" : "COL",
           name: attribute.name ?? `Column${attributeIndex + 1}`,
-          dataType: attribute.datatype ?? attribute.dataType ?? "varchar(50)"
+          physicalName: attribute.physicalName ?? "",
+          definition: attribute.definition ?? "",
+          comment: attribute.comment ?? "",
+          isPrimary: attribute.isPrimary ?? false,
+          isFK: attribute.isFK ?? false,
+          isNullable: attribute.isNullable ?? true,
+          physicalOnly: attribute.physicalOnly ?? false,
+          logicalOnly: attribute.logicalOnly ?? false,
+          dataType: normalizeDatatypeCase(attribute.datatype ?? attribute.dataType ?? "varchar(50)")
         }))
       };
     });
@@ -844,6 +1357,7 @@ export default function App() {
     initialModel.diagrams[0]?.entities[0]?.id ? [initialModel.diagrams[0].entities[0].id] : []
   );
   const [selectedRelationshipId, setSelectedRelationshipId] = useState(null);
+  const [selectedAttributeId, setSelectedAttributeId] = useState(null);
   const [linkDraft, setLinkDraft] = useState(null);
   const [panelWidths, setPanelWidths] = useState(() => ({
     left: savedPanelWidths?.left ?? DEFAULT_LEFT_PANEL_WIDTH,
@@ -888,6 +1402,10 @@ export default function App() {
     () => activeDiagram?.relationships.find((relationship) => relationship.id === selectedRelationshipId) ?? null,
     [activeDiagram, selectedRelationshipId]
   );
+  const selectedAttribute = useMemo(
+    () => selectedEntity?.fields.find((field) => field.id === selectedAttributeId) ?? null,
+    [selectedEntity, selectedAttributeId]
+  );
 
   useEffect(() => {
     window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(model));
@@ -900,6 +1418,27 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(JSON_DRAFT_STORAGE_KEY, jsonDraft);
   }, [jsonDraft]);
+
+  useEffect(() => {
+    if (!selectedEntity) {
+      if (selectedAttributeId !== null) {
+        setSelectedAttributeId(null);
+      }
+      return;
+    }
+
+    const fieldIds = selectedEntity.fields.map((field) => field.id);
+    if (fieldIds.length === 0) {
+      if (selectedAttributeId !== null) {
+        setSelectedAttributeId(null);
+      }
+      return;
+    }
+
+    if (!selectedAttributeId || !fieldIds.includes(selectedAttributeId)) {
+      setSelectedAttributeId(fieldIds[0]);
+    }
+  }, [selectedEntity, selectedAttributeId]);
 
   useEffect(() => {
     loadProviders();
@@ -1039,6 +1578,7 @@ export default function App() {
   const databaseVersionOptions = DATABASE_VERSION_OPTIONS[model.project.database] ?? ["1.0"];
   const displayLevelOptions = getDisplayLevelOptionsForViewMode(model.project.viewMode);
   const dbEngine = normalizeDbEngine(model.project.database);
+  const datatypeOptions = getDatatypeOptionsForEngine(dbEngine);
   const showViewObjectsUi = supportsViewObjects(dbEngine);
   const showCachedViewObjectsUi = supportsCachedViews(dbEngine);
   const cachedViewUiName =
@@ -1514,11 +2054,15 @@ export default function App() {
   function handleSelectRelationship(relationshipId) {
     setSelectedRelationshipId(relationshipId);
     setSelectedEntityIds([]);
+    setSelectedAttributeId(null);
     setLinkDraft(null);
   }
 
   function handleSetSelectedEntities(entityIds) {
     setSelectedEntityIds(entityIds);
+    if (entityIds.length !== 1) {
+      setSelectedAttributeId(null);
+    }
   }
 
   function handleSelectEntity(entityId, options = {}) {
@@ -1553,6 +2097,7 @@ export default function App() {
     if (!linkDraft.sourceEntityId) {
       setLinkDraft({ sourceEntityId: entityId });
       setSelectedEntityIds(entityId ? [entityId] : []);
+      setSelectedAttributeId(null);
       setSelectedRelationshipId(null);
       setStatus("Select the second entity to create a relationship.");
       return;
@@ -1591,8 +2136,19 @@ export default function App() {
 
     setLinkDraft(null);
     setSelectedEntityIds([]);
+    setSelectedAttributeId(null);
     setSelectedRelationshipId(relationshipId);
     setStatus(`Created relationship ${newRelationship.name}.`);
+  }
+
+  function handleSelectAttribute(attributeId, entityId = selectedEntityId) {
+    if (!entityId) {
+      return;
+    }
+
+    setSelectedEntityIds([entityId]);
+    setSelectedRelationshipId(null);
+    setSelectedAttributeId(attributeId);
   }
 
   function handleStartRelationshipLink() {
@@ -1639,8 +2195,32 @@ export default function App() {
               ? {
                   ...item,
                   ...(field === "fieldName" ? { name: value } : {}),
-                  ...(field === "fieldType" ? { dataType: value } : {}),
-                  ...(field === "fieldKind" ? { kind: value } : {})
+                  ...(field === "fieldPhysicalName" ? { physicalName: value } : {}),
+                  ...(field === "fieldComment" ? { comment: value } : {}),
+                  ...(field === "fieldDefinition" ? { definition: value } : {}),
+                  ...(field === "fieldType" ? { dataType: normalizeDatatypeCase(value) } : {}),
+                  ...(field === "fieldKind"
+                    ? {
+                        kind: value,
+                        isPrimary: value === "PK",
+                        isFK: value === "FK"
+                      }
+                    : {}),
+                  ...(field === "fieldPrimary"
+                    ? {
+                        isPrimary: value === "Yes",
+                        kind: value === "Yes" ? "PK" : item.isFK ? "FK" : "COL"
+                      }
+                    : {}),
+                  ...(field === "fieldForeignKey"
+                    ? {
+                        isFK: value === "Yes",
+                        kind: value === "Yes" ? "FK" : item.isPrimary ? "PK" : "COL"
+                      }
+                    : {}),
+                  ...(field === "fieldNullable" ? { isNullable: value === "Yes" } : {}),
+                  ...(field === "fieldPhysicalOnly" ? { physicalOnly: value } : {}),
+                  ...(field === "fieldLogicalOnly" ? { logicalOnly: value } : {})
                 }
               : item
           )
@@ -1995,17 +2575,22 @@ export default function App() {
       return;
     }
 
+    const attributeId = `${selectedEntity.id}-${Date.now()}`;
     updateSelectedEntity((entity) => ({
       fields: [
         ...entity.fields,
         {
-          id: `${entity.id}-${Date.now()}`,
+          id: attributeId,
           kind: "COL",
           name: `Column${entity.fields.length + 1}`,
-          dataType: "varchar(50)"
+          physicalName: "",
+          comment: "",
+          dataType: "varchar(50)",
+          isNullable: true
         }
       ]
     }));
+    setSelectedAttributeId(attributeId);
     setStatus("Added an attribute.");
   }
 
@@ -2013,7 +2598,31 @@ export default function App() {
     updateSelectedEntity((entity) => ({
       fields: entity.fields.filter((field) => field.id !== attributeId)
     }));
+    if (selectedAttributeId === attributeId) {
+      setSelectedAttributeId(null);
+    }
     setStatus("Removed an attribute.");
+  }
+
+  function handleMoveAttribute(attributeId, direction) {
+    updateSelectedEntity((entity) => {
+      const index = entity.fields.findIndex((field) => field.id === attributeId);
+      if (index === -1) {
+        return {};
+      }
+
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= entity.fields.length) {
+        return {};
+      }
+
+      const nextFields = [...entity.fields];
+      const [movedField] = nextFields.splice(index, 1);
+      nextFields.splice(targetIndex, 0, movedField);
+      return { fields: nextFields };
+    });
+
+    setStatus(direction === "up" ? "Moved attribute up." : "Moved attribute down.");
   }
 
   function handleImportFormChange(field, value) {
@@ -2170,12 +2779,14 @@ export default function App() {
           relationships={activeDiagram?.relationships ?? []}
           selectedEntityIds={selectedEntityIds}
           selectedRelationshipId={selectedRelationshipId}
+          selectedAttributeId={selectedAttributeId}
           displayLevel={model.project.displayLevel}
           viewMode={model.project.viewMode}
           zoom={zoom}
           onSelectEntity={handleSelectEntity}
           onSelectEntities={handleSetSelectedEntities}
           onSelectRelationship={handleSelectRelationship}
+          onSelectAttribute={handleSelectAttribute}
           onMoveEntity={handleMoveEntity}
           onMoveEntities={handleMoveEntities}
           onResizeEntity={handleResizeEntity}
@@ -2195,21 +2806,24 @@ export default function App() {
         />
       ) : null}
 
-      <RightInspector
-        selectedEntity={selectedEntity}
-        selectedRelationship={selectedRelationship}
-        relationships={activeDiagram?.relationships ?? []}
-        allEntities={activeDiagram?.entities ?? []}
-        importForm={importForm}
+        <RightInspector
+          selectedEntity={selectedEntity}
+          selectedAttribute={selectedAttribute}
+          selectedRelationship={selectedRelationship}
+          relationships={activeDiagram?.relationships ?? []}
+          allEntities={activeDiagram?.entities ?? []}
+          datatypeOptions={datatypeOptions}
+          importForm={importForm}
         providers={providers}
-        status={status}
-        zoom={zoom}
-        onEntityChange={handleEntityChange}
-        onAddAttribute={handleAddAttribute}
-        onStartRelationshipLink={handleStartRelationshipLink}
-        onDeleteEntity={handleDeleteEntity}
-        onDeleteAttribute={handleDeleteAttribute}
-        onRelationshipChange={handleRelationshipChange}
+          status={status}
+          zoom={zoom}
+          onEntityChange={handleEntityChange}
+          onAddAttribute={handleAddAttribute}
+          onStartRelationshipLink={handleStartRelationshipLink}
+          onDeleteEntity={handleDeleteEntity}
+          onDeleteAttribute={handleDeleteAttribute}
+          onMoveAttribute={handleMoveAttribute}
+          onRelationshipChange={handleRelationshipChange}
         onDeleteRelationship={handleDeleteRelationship}
         onSelectRelationship={handleSelectRelationship}
         onImportFormChange={handleImportFormChange}

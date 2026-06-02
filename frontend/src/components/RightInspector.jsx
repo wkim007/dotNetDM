@@ -26,11 +26,23 @@ function TextField({ label, value, onChange, tall = false }) {
   );
 }
 
+function parseDatatypeParts(dataType) {
+  const text = String(dataType ?? "").trim();
+  const match = text.match(/^([^()]+?)(?:\(([^)]+)\))?$/);
+
+  return {
+    baseType: match?.[1]?.trim() ?? text,
+    sizeValue: match?.[2]?.trim() ?? ""
+  };
+}
+
 export default function RightInspector({
   selectedEntity,
+  selectedAttribute,
   selectedRelationship,
   relationships,
   allEntities,
+  datatypeOptions,
   importForm,
   providers,
   status,
@@ -40,6 +52,7 @@ export default function RightInspector({
   onStartRelationshipLink,
   onDeleteEntity,
   onDeleteAttribute,
+  onMoveAttribute,
   onRelationshipChange,
   onDeleteRelationship,
   onSelectRelationship,
@@ -60,6 +73,17 @@ export default function RightInspector({
   const selectedRelationshipTarget = allEntities.find(
     (entity) => entity.id === selectedRelationship?.targetEntityId
   );
+  const selectedAttributeDatatypeParts = selectedAttribute
+    ? parseDatatypeParts(selectedAttribute.dataType)
+    : { baseType: "", sizeValue: "" };
+  const datatypeSelectOptions = selectedAttribute
+    ? Array.from(
+        new Set([
+          selectedAttributeDatatypeParts.baseType,
+          ...(datatypeOptions ?? [])
+        ].filter(Boolean))
+      )
+    : datatypeOptions ?? [];
 
   return (
     <aside className="right-inspector">
@@ -225,31 +249,104 @@ export default function RightInspector({
             <div className="panel-heading">
               <span className="panel-label">Attributes</span>
             </div>
-            <div className="mini-list">
-              {selectedEntity.fields.map((attribute) => (
-                <div key={attribute.id} className="mini-list-item editable-mini-list-item">
+            {selectedAttribute ? (
+              <>
+                <TextField
+                  label="Attribute"
+                  value={selectedAttribute.name ?? ""}
+                  onChange={(value) => onEntityChange("fieldName", value, selectedAttribute.id)}
+                />
+                <TextField
+                  label="Physical Name"
+                  value={selectedAttribute.physicalName ?? ""}
+                  onChange={(value) => onEntityChange("fieldPhysicalName", value, selectedAttribute.id)}
+                />
+                <TextField
+                  label="Comment"
+                  value={selectedAttribute.comment ?? ""}
+                  onChange={(value) => onEntityChange("fieldComment", value, selectedAttribute.id)}
+                  tall
+                />
+                <SelectField
+                  label="Datatype"
+                  value={selectedAttributeDatatypeParts.baseType}
+                  options={datatypeSelectOptions}
+                  onChange={(value) => {
+                    const nextType = selectedAttributeDatatypeParts.sizeValue
+                      ? `${value}(${selectedAttributeDatatypeParts.sizeValue})`
+                      : value;
+                    onEntityChange("fieldType", nextType, selectedAttribute.id);
+                  }}
+                />
+                <TextField
+                  label="Size / Precision"
+                  value={selectedAttributeDatatypeParts.sizeValue}
+                  onChange={(value) => {
+                    const nextType = value
+                      ? `${selectedAttributeDatatypeParts.baseType}(${value})`
+                      : selectedAttributeDatatypeParts.baseType;
+                    onEntityChange("fieldType", nextType, selectedAttribute.id);
+                  }}
+                />
+                <SelectField
+                  label="Kind"
+                  value={selectedAttribute.kind ?? "COL"}
+                  options={["PK", "COL", "FK"]}
+                  onChange={(value) => onEntityChange("fieldKind", value, selectedAttribute.id)}
+                />
+                <SelectField
+                  label="Primary Key"
+                  value={selectedAttribute.isPrimary ? "Yes" : "No"}
+                  options={["Yes", "No"]}
+                  onChange={(value) => onEntityChange("fieldPrimary", value, selectedAttribute.id)}
+                />
+                <SelectField
+                  label="Nullable"
+                  value={selectedAttribute.isNullable === false ? "No" : "Yes"}
+                  options={["Yes", "No"]}
+                  onChange={(value) => onEntityChange("fieldNullable", value, selectedAttribute.id)}
+                />
+                <SelectField
+                  label="Foreign Key"
+                  value={selectedAttribute.isFK ? "Yes" : "No"}
+                  options={["Yes", "No"]}
+                  onChange={(value) => onEntityChange("fieldForeignKey", value, selectedAttribute.id)}
+                />
+                <label className="checkbox-field">
                   <input
-                    value={attribute.name}
-                    onChange={(event) => onEntityChange("fieldName", event.target.value, attribute.id)}
+                    type="checkbox"
+                    checked={!!selectedAttribute.physicalOnly}
+                    onChange={(event) => onEntityChange("fieldPhysicalOnly", event.target.checked, selectedAttribute.id)}
                   />
+                  <span>physicalOnly</span>
+                </label>
+                <label className="checkbox-field">
                   <input
-                    value={attribute.dataType}
-                    onChange={(event) => onEntityChange("fieldType", event.target.value, attribute.id)}
+                    type="checkbox"
+                    checked={!!selectedAttribute.logicalOnly}
+                    onChange={(event) => onEntityChange("fieldLogicalOnly", event.target.checked, selectedAttribute.id)}
                   />
-                  <select
-                    value={attribute.kind}
-                    onChange={(event) => onEntityChange("fieldKind", event.target.value, attribute.id)}
-                  >
-                    <option value="PK">PK</option>
-                    <option value="COL">COL</option>
-                    <option value="FK">FK</option>
-                  </select>
-                  <button className="subtle-button" type="button" onClick={() => onDeleteAttribute(attribute.id)}>
-                    Remove
+                  <span>logicalOnly</span>
+                </label>
+                <div className="button-row">
+                  <button className="secondary-button" type="button" onClick={() => onMoveAttribute(selectedAttribute.id, "up")}>
+                    Move Up
+                  </button>
+                  <button className="secondary-button" type="button" onClick={() => onMoveAttribute(selectedAttribute.id, "down")}>
+                    Move Down
                   </button>
                 </div>
-              ))}
-            </div>
+                <div className="button-row">
+                  <button className="danger-button" type="button" onClick={() => onDeleteAttribute(selectedAttribute.id)}>
+                    Delete Attribute
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="empty-state">
+                Select an attribute in the diagram to edit its details.
+              </p>
+            )}
 
             <div className="divider" />
 

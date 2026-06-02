@@ -277,9 +277,11 @@ function EntityCard({
   displayLevel,
   viewMode,
   isSelected,
+  selectedAttributeId,
   onPointerDown,
   onResizeStart,
   onSelect,
+  onSelectAttribute,
   onDelete
 }) {
   const commentMode = isCommentDisplayLevel(displayLevel);
@@ -328,7 +330,17 @@ function EntityCard({
       ) : visibleFields.length > 0 ? (
         <div className="entity-fields">
           {visibleFields.map((field) => (
-            <div key={field.id} className="entity-field-row">
+            <div
+              key={field.id}
+              className={`entity-field-row ${selectedAttributeId === field.id ? "active" : ""}`}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelectAttribute(field.id, entity.id);
+              }}
+            >
               <FieldBadge kind={field.kind} />
               <span className="entity-field-name">{field.name}</span>
               <span className="entity-field-type">{field.dataType}</span>
@@ -353,6 +365,7 @@ export default function DiagramCanvas({
   relationships,
   selectedEntityIds,
   selectedRelationshipId,
+  selectedAttributeId,
   displayLevel,
   viewMode,
   zoom,
@@ -362,6 +375,7 @@ export default function DiagramCanvas({
   onMoveEntity,
   onMoveEntities,
   onResizeEntity,
+  onSelectAttribute,
   onDeleteEntity,
   onDeleteRelationship,
   onViewportChange,
@@ -662,9 +676,11 @@ export default function DiagramCanvas({
               displayLevel={displayLevel}
               viewMode={viewMode}
               isSelected={selectedEntityIds.includes(entity.id)}
+              selectedAttributeId={selectedEntityIds.includes(entity.id) ? selectedAttributeId : null}
               onPointerDown={handlePointerDown}
               onResizeStart={handleResizeStart}
               onSelect={onSelectEntity}
+              onSelectAttribute={onSelectAttribute}
               onDelete={onDeleteEntity}
             />
           ))}
