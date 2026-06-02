@@ -2157,7 +2157,7 @@ export default function App() {
     }
 
     if (!linkDraft.sourceEntityId) {
-      setLinkDraft({ sourceEntityId: entityId });
+      setLinkDraft((current) => ({ ...(current ?? {}), sourceEntityId: entityId }));
       setSelectedEntityIds(entityId ? [entityId] : []);
       setSelectedAttributeId(null);
       setSelectedRelationshipId(null);
@@ -2174,6 +2174,14 @@ export default function App() {
     const target = activeDiagram.entities.find((entity) => entity.id === entityId);
     const sourceIsViewLike = isViewLikeEntity(source);
     const targetIsViewLike = isViewLikeEntity(target);
+    const requestedRelationshipType = normalizeRelationshipType(
+      linkDraft.relationshipType ?? "Non-Identifying"
+    );
+
+    if (requestedRelationshipType === "Derived" && !targetIsViewLike) {
+      setStatus("View/Materized Rel. requires the target to be a view or materialized view.");
+      return;
+    }
 
     if (sourceIsViewLike && targetIsViewLike) {
       setStatus("View-to-view and materialized-view-to-view relationships are not allowed. Parent must be an entity.");
@@ -2181,6 +2189,7 @@ export default function App() {
     }
 
     const derivedOnly = sourceIsViewLike || targetIsViewLike;
+    const resolvedRelationshipType = derivedOnly ? "Derived" : requestedRelationshipType;
     const relationshipId = `relationship-${Date.now()}`;
     const newRelationship = normalizeRelationship({
       id: relationshipId,
@@ -2190,8 +2199,8 @@ export default function App() {
       physicalName: `${linkDraft.sourceEntityId}-${entityId}`,
       description: "relates_to",
       cardinality: "1:N",
-      style: derivedOnly ? "dashed" : "solid",
-      relationshipType: derivedOnly ? "Derived" : "Non-Identifying"
+      style: ["Non-Identifying", "Derived"].includes(resolvedRelationshipType) ? "dashed" : "solid",
+      relationshipType: resolvedRelationshipType
     });
 
     setModel((current) => ({
@@ -2223,15 +2232,37 @@ export default function App() {
     setSelectedAttributeId(attributeId);
   }
 
-  function handleStartRelationshipLink() {
+  function handleStartRelationshipLink(relationshipType = "Non-Identifying") {
     if (!selectedEntityId || selectedEntityIds.length !== 1) {
-      setStatus("Select the first entity, then click Link.");
+      setStatus(`Select the first entity, then choose ${relationshipType}.`);
       return;
     }
 
-    setLinkDraft({ sourceEntityId: selectedEntityId });
+    const sourceEntity = activeDiagram?.entities.find((entity) => entity.id === selectedEntityId);
+    const normalizedRelationshipType = isViewLikeEntity(sourceEntity)
+      ? "Derived"
+      : normalizeRelationshipType(relationshipType);
+
+    setLinkDraft({
+      sourceEntityId: selectedEntityId,
+      relationshipType: normalizedRelationshipType
+    });
     setSelectedRelationshipId(null);
-    setStatus("Select the second entity to create a relationship.");
+    setStatus(
+      `Select the second entity to create a ${normalizedRelationshipType.toLowerCase()} relationship.`
+    );
+  }
+
+  function handleStartIdentifyingRelationship() {
+    handleStartRelationshipLink("Identifying");
+  }
+
+  function handleStartNonIdentifyingRelationship() {
+    handleStartRelationshipLink("Non-Identifying");
+  }
+
+  function handleStartDerivedRelationship() {
+    handleStartRelationshipLink("Derived");
   }
 
   function updateSelectedEntity(update) {
@@ -2807,6 +2838,7 @@ export default function App() {
         project={model.project}
         entityCount={activeDiagram?.entities.length ?? 0}
         relationshipCount={activeDiagram?.relationships.length ?? 0}
+        activeRelationshipTool={linkDraft?.relationshipType ?? null}
         showViewObjectsUi={showViewObjectsUi}
         showCachedViewObjectsUi={showCachedViewObjectsUi}
         cachedViewUiName={cachedViewUiName}
@@ -2820,6 +2852,9 @@ export default function App() {
         onAddEntity={handleAddEntity}
         onAddView={handleAddView}
         onAddMaterializedView={handleAddMaterializedView}
+        onStartIdentifyingRelationship={handleStartIdentifyingRelationship}
+        onStartNonIdentifyingRelationship={handleStartNonIdentifyingRelationship}
+        onStartDerivedRelationship={handleStartDerivedRelationship}
         onProjectChange={handleProjectChange}
         onExportJson={handleExportJson}
         onImportJson={handleImportJson}

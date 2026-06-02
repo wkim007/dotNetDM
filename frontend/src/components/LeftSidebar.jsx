@@ -23,6 +23,7 @@ export default function LeftSidebar({
   project,
   entityCount,
   relationshipCount,
+  activeRelationshipTool,
   showViewObjectsUi,
   showCachedViewObjectsUi,
   cachedViewUiName,
@@ -36,6 +37,9 @@ export default function LeftSidebar({
   onAddEntity,
   onAddView,
   onAddMaterializedView,
+  onStartIdentifyingRelationship,
+  onStartNonIdentifyingRelationship,
+  onStartDerivedRelationship,
   onProjectChange,
   onExportJson,
   onImportJson,
@@ -156,6 +160,36 @@ export default function LeftSidebar({
                 <span>{cachedViewUiName}</span>
               </button>
             ) : null}
+
+            <button
+              type="button"
+              className={`secondary-button diagram-box-item ${activeRelationshipTool === "Identifying" ? "active" : ""}`}
+              onClick={onStartIdentifyingRelationship}
+              title="Add Identifying Relationship"
+            >
+              <span className="diagram-box-icon">↘</span>
+              <span>Identifying</span>
+            </button>
+
+            <button
+              type="button"
+              className={`secondary-button diagram-box-item ${activeRelationshipTool === "Non-Identifying" ? "active" : ""}`}
+              onClick={onStartNonIdentifyingRelationship}
+              title="Add Non-Identifying Relationship"
+            >
+              <span className="diagram-box-icon">⇢</span>
+              <span>Non-Identifying</span>
+            </button>
+
+            <button
+              type="button"
+              className={`secondary-button diagram-box-item ${activeRelationshipTool === "Derived" ? "active" : ""}`}
+              onClick={onStartDerivedRelationship}
+              title="Add View/Materialized Relationship"
+            >
+              <span className="diagram-box-icon">⋯</span>
+              <span>View/Materized Rel.</span>
+            </button>
           </div>
         </div>
       </section>
