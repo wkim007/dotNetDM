@@ -64,9 +64,22 @@ function getCommentText(entity, viewMode) {
   return String(useDefinition ? entity.definition ?? "" : entity.comment ?? "").trim();
 }
 
+function sortFieldsForDisplay(fields) {
+  return [...fields].sort((left, right) => {
+    const leftRank = left.kind === "PK" ? 0 : 1;
+    const rightRank = right.kind === "PK" ? 0 : 1;
+
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    return 0;
+  });
+}
+
 function getVisibleFields(entity, displayLevel) {
   const normalizedDisplayLevel = normalizeDisplayLevel(displayLevel);
-  const fields = entity.fields ?? [];
+  const fields = sortFieldsForDisplay(entity.fields ?? []);
 
   if (
     normalizedDisplayLevel === "table" ||
