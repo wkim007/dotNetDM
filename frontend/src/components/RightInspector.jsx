@@ -36,11 +36,54 @@ function parseDatatypeParts(dataType) {
   };
 }
 
+function getObjectTypeLabel(entity) {
+  if (entity?.objectType === "view") {
+    return "View";
+  }
+
+  if (entity?.objectType === "materializedView") {
+    return "Materialized View";
+  }
+
+  return "Entity";
+}
+
+function ObjectBrowserSection({ title, items, onEditEntity, onGoToEntity }) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <span className="panel-label">{title}</span>
+      </div>
+      <div className="mini-list">
+        {items.map((entity) => (
+          <div key={entity.id} className="mini-list-item entity-browser-card">
+            <strong>{entity.physicalName ?? entity.name}</strong>
+            <span>{getObjectTypeLabel(entity).toUpperCase()}</span>
+            <div className="button-row">
+              <button className="secondary-button" type="button" onClick={() => onEditEntity(entity.id)}>
+                Edit
+              </button>
+              <button className="secondary-button" type="button" onClick={() => onGoToEntity(entity.id)}>
+                Go To
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function RightInspector({
   selectedEntity,
   selectedAttribute,
   selectedRelationship,
   allEntities,
+  allRelationships,
   schemas,
   datatypeOptions,
   importForm,
@@ -48,6 +91,10 @@ export default function RightInspector({
   status,
   zoom,
   onEntityChange,
+  onEditEntity,
+  onGoToEntity,
+  onEditRelationship,
+  onGoToRelationship,
   onAddAttribute,
   onStartRelationshipLink,
   onDeleteEntity,
@@ -84,6 +131,16 @@ export default function RightInspector({
         ].filter(Boolean))
       )
     : datatypeOptions ?? [];
+  const sortedEntities = [...(allEntities ?? [])].sort((left, right) =>
+    String(left.physicalName ?? left.name ?? "").localeCompare(String(right.physicalName ?? right.name ?? ""))
+  );
+  const sortedEntityObjects = sortedEntities.filter((entity) => entity.objectType !== "view" && entity.objectType !== "materializedView");
+  const sortedViewObjects = sortedEntities.filter((entity) => entity.objectType === "view");
+  const sortedMaterializedViewObjects = sortedEntities.filter((entity) => entity.objectType === "materializedView");
+  const sortedRelationships = [...(allRelationships ?? [])].sort((left, right) =>
+    String(left.name ?? left.physicalName ?? "").localeCompare(String(right.name ?? right.physicalName ?? ""))
+  );
+  const selectedEntitySectionLabel = getObjectTypeLabel(selectedEntity);
 
   return (
     <aside className="right-inspector">
@@ -178,16 +235,42 @@ export default function RightInspector({
             </div>
           </>
         ) : (
-          <p className="empty-state">Select a relationship in the diagram to edit its details.</p>
+          sortedRelationships.length > 0 ? (
+            <div className="mini-list">
+              {sortedRelationships.map((relationship) => {
+                const sourceEntity = allEntities.find((entity) => entity.id === relationship.sourceEntityId);
+                const targetEntity = allEntities.find((entity) => entity.id === relationship.targetEntityId);
+
+                return (
+                  <div key={relationship.id} className="mini-list-item relationship-browser-card">
+                    <strong>{relationship.name ?? relationship.physicalName}</strong>
+                    <span>
+                      {(sourceEntity?.physicalName ?? sourceEntity?.name ?? "Entity")} → {(targetEntity?.physicalName ?? targetEntity?.name ?? "Entity")}
+                    </span>
+                    <div className="button-row">
+                      <button className="secondary-button" type="button" onClick={() => onEditRelationship(relationship.id)}>
+                        Edit
+                      </button>
+                      <button className="secondary-button" type="button" onClick={() => onGoToRelationship(relationship.id)}>
+                        Go To
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="empty-state">No relationships in the current diagram.</p>
+          )
         )}
       </section>
 
-      <section className="panel">
-        <div className="panel-heading">
-          <span className="panel-label">Entity</span>
-        </div>
+      {selectedEntity ? (
+        <section className="panel">
+          <div className="panel-heading">
+            <span className="panel-label">{selectedEntitySectionLabel}</span>
+          </div>
 
-        {selectedEntity ? (
           <>
             <TextField
               label="Name"
@@ -324,10 +407,39 @@ export default function RightInspector({
 
             <div className="divider" />
           </>
-        ) : (
-          <p className="empty-state">Select an entity to edit its fields.</p>
-        )}
-      </section>
+        </section>
+      ) : null}
+
+      {!selectedEntity ? (
+        <>
+          <ObjectBrowserSection
+            title="View"
+            items={sortedViewObjects}
+            onEditEntity={onEditEntity}
+            onGoToEntity={onGoToEntity}
+          />
+          <ObjectBrowserSection
+            title="Materialized View"
+            items={sortedMaterializedViewObjects}
+            onEditEntity={onEditEntity}
+            onGoToEntity={onGoToEntity}
+          />
+          <ObjectBrowserSection
+            title="Entity"
+            items={sortedEntityObjects}
+            onEditEntity={onEditEntity}
+            onGoToEntity={onGoToEntity}
+          />
+          {sortedEntities.length === 0 ? (
+            <section className="panel">
+              <div className="panel-heading">
+                <span className="panel-label">Entity</span>
+              </div>
+              <p className="empty-state">No objects in the current diagram.</p>
+            </section>
+          ) : null}
+        </>
+      ) : null}
 
       <section className="panel">
         <div className="panel-heading">

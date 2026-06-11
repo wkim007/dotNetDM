@@ -407,6 +407,8 @@ export default function DiagramCanvas({
   viewMode,
   isLinkingRelationship,
   zoom,
+  focusEntityRequest,
+  focusRelationshipRequest,
   onSelectEntity,
   onSelectEntities,
   onSelectRelationship,
@@ -469,6 +471,61 @@ export default function DiagramCanvas({
       behavior: "smooth"
     });
   }, [viewResetToken]);
+
+  useEffect(() => {
+    if (!canvasRef.current || !focusEntityRequest?.entityId) {
+      return;
+    }
+
+    const entity = entityMap[focusEntityRequest.entityId];
+    if (!entity) {
+      return;
+    }
+
+    const element = canvasRef.current;
+    const bounds = getCardBounds(entity, displayLevel);
+    const targetLeft = Math.max(0, bounds.left * zoom - Math.max(0, element.clientWidth / 2 - (bounds.width * zoom) / 2));
+    const targetTop = Math.max(0, bounds.top * zoom - Math.max(0, element.clientHeight / 2 - (bounds.height * zoom) / 2));
+
+    element.scrollTo({
+      left: targetLeft,
+      top: targetTop,
+      behavior: "smooth"
+    });
+  }, [displayLevel, entityMap, focusEntityRequest, zoom]);
+
+  useEffect(() => {
+    if (!canvasRef.current || !focusRelationshipRequest?.relationshipId) {
+      return;
+    }
+
+    const relationship = relationships.find(
+      (item) => item.id === focusRelationshipRequest.relationshipId
+    );
+    if (!relationship) {
+      return;
+    }
+
+    const source = entityMap[relationship.sourceEntityId];
+    const target = entityMap[relationship.targetEntityId];
+    if (!source || !target) {
+      return;
+    }
+
+    const start = getAnchor(source, target, displayLevel);
+    const end = getAnchor(target, source, displayLevel);
+    const focusX = (start.x + end.x) / 2;
+    const focusY = (start.y + end.y) / 2;
+    const element = canvasRef.current;
+    const targetLeft = Math.max(0, focusX * zoom - element.clientWidth / 2);
+    const targetTop = Math.max(0, focusY * zoom - element.clientHeight / 2);
+
+    element.scrollTo({
+      left: targetLeft,
+      top: targetTop,
+      behavior: "smooth"
+    });
+  }, [displayLevel, entityMap, focusRelationshipRequest, relationships, zoom]);
 
   function handlePointerDown(event, entityId) {
     if (isLinkingRelationship) {

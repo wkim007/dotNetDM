@@ -1428,6 +1428,8 @@ export default function App() {
   const [selectedRelationshipId, setSelectedRelationshipId] = useState(null);
   const [selectedAttributeId, setSelectedAttributeId] = useState(null);
   const [linkDraft, setLinkDraft] = useState(null);
+  const [focusEntityRequest, setFocusEntityRequest] = useState(null);
+  const [focusRelationshipRequest, setFocusRelationshipRequest] = useState(null);
   const [panelWidths, setPanelWidths] = useState(() => ({
     left: savedPanelWidths?.left ?? DEFAULT_LEFT_PANEL_WIDTH,
     right: savedPanelWidths?.right ?? DEFAULT_RIGHT_PANEL_WIDTH
@@ -2335,6 +2337,60 @@ export default function App() {
     setSelectedAttributeId(attributeId);
   }
 
+  function handleEditEntity(entityId) {
+    if (!entityId) {
+      return;
+    }
+
+    setSelectedEntityIds([entityId]);
+    setSelectedRelationshipId(null);
+    setLinkDraft(null);
+    setStatus("Opened entity details.");
+  }
+
+  function handleGoToEntity(entityId) {
+    if (!entityId) {
+      return;
+    }
+
+    setSelectedEntityIds([entityId]);
+    setSelectedRelationshipId(null);
+    setLinkDraft(null);
+    setFocusEntityRequest({
+      entityId,
+      nonce: Date.now()
+    });
+    setStatus("Focused the selected entity in the diagram.");
+  }
+
+  function handleEditRelationship(relationshipId) {
+    if (!relationshipId) {
+      return;
+    }
+
+    setSelectedRelationshipId(relationshipId);
+    setSelectedEntityIds([]);
+    setSelectedAttributeId(null);
+    setLinkDraft(null);
+    setStatus("Opened relationship details.");
+  }
+
+  function handleGoToRelationship(relationshipId) {
+    if (!relationshipId) {
+      return;
+    }
+
+    setSelectedRelationshipId(relationshipId);
+    setSelectedEntityIds([]);
+    setSelectedAttributeId(null);
+    setLinkDraft(null);
+    setFocusRelationshipRequest({
+      relationshipId,
+      nonce: Date.now()
+    });
+    setStatus("Focused the selected relationship in the diagram.");
+  }
+
   function handleStartRelationshipLink(relationshipType = "Non-Identifying") {
     if (!selectedEntityId || selectedEntityIds.length !== 1) {
       setStatus(`Select the first entity, then choose ${relationshipType}.`);
@@ -3016,6 +3072,8 @@ export default function App() {
           viewMode={model.project.viewMode}
           isLinkingRelationship={Boolean(linkDraft)}
           zoom={zoom}
+          focusEntityRequest={focusEntityRequest}
+          focusRelationshipRequest={focusRelationshipRequest}
           onSelectEntity={handleSelectEntity}
           onSelectEntities={handleSetSelectedEntities}
           onSelectRelationship={handleSelectRelationship}
@@ -3044,6 +3102,7 @@ export default function App() {
           selectedAttribute={selectedAttribute}
           selectedRelationship={selectedRelationship}
           allEntities={activeDiagram?.entities ?? []}
+          allRelationships={activeDiagram?.relationships ?? []}
           schemas={model.project?.schemas ?? []}
           datatypeOptions={datatypeOptions}
           importForm={importForm}
@@ -3051,6 +3110,10 @@ export default function App() {
           status={status}
           zoom={zoom}
           onEntityChange={handleEntityChange}
+          onEditEntity={handleEditEntity}
+          onGoToEntity={handleGoToEntity}
+          onEditRelationship={handleEditRelationship}
+          onGoToRelationship={handleGoToRelationship}
           onAddAttribute={handleAddAttribute}
           onStartRelationshipLink={handleStartRelationshipLink}
           onDeleteEntity={handleDeleteEntity}

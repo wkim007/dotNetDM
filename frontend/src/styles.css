@@ -672,18 +672,18 @@ body.panel-resizing {
 }
 
 .entity-card.view.selected {
-  border-color: rgba(88, 232, 242, 1);
+  border-color: var(--warning);
   box-shadow:
-    0 0 0 1px rgba(88, 232, 242, 0.65),
-    0 0 18px rgba(88, 232, 242, 0.14),
+    0 0 0 1px rgba(241, 191, 82, 0.75),
+    0 0 18px rgba(241, 191, 82, 0.14),
     0 18px 36px rgba(0, 0, 0, 0.36);
 }
 
 .entity-card.materialized-view.selected {
-  border-color: rgba(241, 184, 63, 1);
+  border-color: var(--warning);
   box-shadow:
-    0 0 0 1px rgba(241, 184, 63, 0.72),
-    0 0 18px rgba(241, 184, 63, 0.14),
+    0 0 0 1px rgba(241, 191, 82, 0.75),
+    0 0 18px rgba(241, 191, 82, 0.14),
     0 18px 36px rgba(0, 0, 0, 0.36);
 }
 
