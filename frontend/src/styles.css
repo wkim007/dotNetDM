@@ -568,9 +568,20 @@ body.panel-resizing {
   stroke-linecap: butt;
 }
 
+.diagram-link.many-to-many {
+  stroke-dasharray: 6 5;
+  opacity: 0.9;
+  stroke-linecap: round;
+}
+
 .diagram-link.derived {
   stroke-dasharray: 1 6;
   opacity: 0.9;
+  stroke-linecap: round;
+}
+
+.diagram-link.sub-category {
+  stroke-dasharray: none;
   stroke-linecap: round;
 }
 
@@ -578,6 +589,18 @@ body.panel-resizing {
   stroke: #f1df77;
   stroke-width: 3.5px;
   opacity: 1;
+  filter: drop-shadow(0 0 10px rgba(241, 223, 119, 0.18));
+}
+
+.diagram-link-subcategory-marker {
+  fill: rgba(12, 19, 30, 0.98);
+  stroke: var(--accent);
+  stroke-width: 2px;
+  cursor: pointer;
+}
+
+.diagram-link-subcategory-marker.selected {
+  stroke: #f1df77;
   filter: drop-shadow(0 0 10px rgba(241, 223, 119, 0.18));
 }
 

@@ -921,6 +921,20 @@ function isViewLikeEntity(entity) {
 function normalizeRelationshipType(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
 
+  if (
+    normalized === "9" ||
+    normalized === "subtype" ||
+    normalized === "sub-category" ||
+    normalized === "subcategory" ||
+    normalized === "sub category"
+  ) {
+    return "Subtype";
+  }
+
+  if (normalized === "4" || normalized === "manytomany" || normalized === "many-to-many" || normalized === "many to many") {
+    return "ManyToMany";
+  }
+
   if (normalized === "16" || normalized === "derived") {
     return "Derived";
   }
@@ -938,6 +952,14 @@ function normalizeRelationshipType(value) {
 
 function relationshipTypeToValue(value) {
   const normalized = normalizeRelationshipType(value);
+
+  if (normalized === "Subtype") {
+    return "9";
+  }
+
+  if (normalized === "ManyToMany") {
+    return "4";
+  }
 
   if (normalized === "Derived") {
     return "16";
@@ -1637,18 +1659,57 @@ export default function App() {
         : "Materialized View";
 
   useEffect(() => {
-    if (isPhysicalViewMode || !linkDraft) {
+    if (!linkDraft) {
       return;
     }
 
-    if (linkDraft.relationshipType === "Derived") {
+    if (linkDraft.relationshipType === "Derived" && !isPhysicalViewMode) {
       setLinkDraft(null);
       setStatus("Logical View hides view-specific relationship tools.");
+      return;
+    }
+
+    if (linkDraft.relationshipType === "Subtype" && isPhysicalViewMode) {
+      setLinkDraft(null);
+      setStatus("Physical View hides sub-category relationship tools.");
     }
   }, [isPhysicalViewMode, linkDraft]);
 
   function createFreshSampleModel() {
     return normalizeModel(sampleModel);
+  }
+
+  function createEmptyWorkspaceModel() {
+    const nextProject = {
+      ...model.project,
+      diagramDefinition: "",
+      definition: ""
+    };
+    const blankDiagram = {
+      id: `er-diagram-${Date.now()}`,
+      name: "ER_Diagram_1",
+      definition: "",
+      displayLevelLogical: getDisplayLevelValueForViewMode(
+        "Logical View",
+        getDefaultDisplayLevelForViewMode("Logical View")
+      ),
+      displayLevelPhysical: getDisplayLevelValueForViewMode(
+        "Physical View",
+        getDefaultDisplayLevelForViewMode("Physical View")
+      ),
+      entities: [],
+      relationships: []
+    };
+
+    return syncProjectWithActiveDiagram(
+      {
+        project: nextProject,
+        activeDiagramId: blankDiagram.id,
+        diagrams: [blankDiagram]
+      },
+      nextProject,
+      blankDiagram.id
+    );
   }
 
   function getEntitySize(entity) {
@@ -1812,6 +1873,27 @@ export default function App() {
     setJsonDraft("");
     setViewResetToken((current) => current + 1);
     setStatus("Reloaded the original local sample model.");
+  }
+
+  function handleClearWorkspace() {
+    const confirmed = window.confirm(
+      "Clear the current workspace? This will remove all diagrams, entities, relationships, and unsaved changes."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const clearedModel = createEmptyWorkspaceModel();
+    setModel(clearedModel);
+    setSelectedEntityIds([]);
+    setSelectedRelationshipId(null);
+    setSelectedAttributeId(null);
+    setLinkDraft(null);
+    setJsonDraft("");
+    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(clearedModel));
+    setViewResetToken((current) => current + 1);
+    setStatus("Cleared the workspace.");
   }
 
   function handleProjectChange(field, value) {
@@ -2190,6 +2272,11 @@ export default function App() {
       linkDraft.relationshipType ?? "Non-Identifying"
     );
 
+    if (requestedRelationshipType === "Subtype" && (sourceIsViewLike || targetIsViewLike)) {
+      setStatus("Sub-Category relationships are only allowed between entities.");
+      return;
+    }
+
     if (requestedRelationshipType === "Derived" && !targetIsViewLike) {
       setStatus("View/Materized Rel. requires the target to be a view or materialized view.");
       return;
@@ -2201,7 +2288,11 @@ export default function App() {
     }
 
     const derivedOnly = sourceIsViewLike || targetIsViewLike;
-    const resolvedRelationshipType = derivedOnly ? "Derived" : requestedRelationshipType;
+    const resolvedRelationshipType = requestedRelationshipType === "Subtype"
+      ? "Subtype"
+      : derivedOnly
+        ? "Derived"
+        : requestedRelationshipType;
     const relationshipId = `relationship-${Date.now()}`;
     const newRelationship = normalizeRelationship({
       id: relationshipId,
@@ -2210,8 +2301,8 @@ export default function App() {
       name: `${source?.physicalName ?? "Entity"} -> ${target?.physicalName ?? "Entity"}`,
       physicalName: `${linkDraft.sourceEntityId}-${entityId}`,
       description: "relates_to",
-      cardinality: "1:N",
-      style: ["Non-Identifying", "Derived"].includes(resolvedRelationshipType) ? "dashed" : "solid",
+      cardinality: resolvedRelationshipType === "Subtype" ? "" : "1:N",
+      style: ["Non-Identifying", "Derived", "ManyToMany"].includes(resolvedRelationshipType) ? "dashed" : "solid",
       relationshipType: resolvedRelationshipType
     });
 
@@ -2255,6 +2346,18 @@ export default function App() {
       ? "Derived"
       : normalizeRelationshipType(relationshipType);
 
+    if (normalizedRelationshipType === "Subtype") {
+      if (model.project.viewMode !== "Logical View") {
+        setStatus("Sub-Category relationships are only available in Logical View.");
+        return;
+      }
+
+      if (isViewLikeEntity(sourceEntity)) {
+        setStatus("Sub-Category relationships can only start from an entity.");
+        return;
+      }
+    }
+
     setLinkDraft({
       sourceEntityId: selectedEntityId,
       relationshipType: normalizedRelationshipType
@@ -2275,6 +2378,10 @@ export default function App() {
 
   function handleStartDerivedRelationship() {
     handleStartRelationshipLink("Derived");
+  }
+
+  function handleStartSubCategoryRelationship() {
+    handleStartRelationshipLink("Subtype");
   }
 
   function updateSelectedEntity(update) {
@@ -2871,6 +2978,7 @@ export default function App() {
         onStartIdentifyingRelationship={handleStartIdentifyingRelationship}
         onStartNonIdentifyingRelationship={handleStartNonIdentifyingRelationship}
         onStartDerivedRelationship={handleStartDerivedRelationship}
+        onStartSubCategoryRelationship={handleStartSubCategoryRelationship}
         onProjectChange={handleProjectChange}
         onExportJson={handleExportJson}
         onImportJson={handleImportJson}
@@ -2895,6 +3003,7 @@ export default function App() {
           onAddDiagram={handleAddDiagram}
           onReload={handleReloadSample}
           onSave={handleSave}
+          onClear={handleClearWorkspace}
         />
         <div className="workspace-status">{status}</div>
         <DiagramCanvas

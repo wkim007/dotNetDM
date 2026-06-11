@@ -111,32 +111,6 @@ export default function RightInspector({
 
       <section className="panel">
         <div className="panel-heading">
-          <span className="panel-label">Schema Import</span>
-        </div>
-        <SelectField
-          label="Provider"
-          value={importForm.provider}
-          options={providers.map((provider) => provider.id)}
-          onChange={(value) => onImportFormChange("provider", value)}
-        />
-        <TextField
-          label="Connection String"
-          value={importForm.connectionString}
-          onChange={(value) => onImportFormChange("connectionString", value)}
-          tall
-        />
-        <TextField
-          label="Database Name"
-          value={importForm.databaseName}
-          onChange={(value) => onImportFormChange("databaseName", value)}
-        />
-        <button className="secondary-button" type="button" onClick={onImportSchema}>
-          Import Schema
-        </button>
-      </section>
-
-      <section className="panel">
-        <div className="panel-heading">
           <span className="panel-label">Relationships</span>
         </div>
         {selectedRelationship ? (
@@ -188,7 +162,13 @@ export default function RightInspector({
             <SelectField
               label="Relationship Type"
               value={selectedRelationship.relationshipType ?? "Non-Identifying"}
-              options={derivedRelationshipOnly ? ["Derived"] : ["Non-Identifying", "Identifying", "Derived"]}
+              options={
+                selectedRelationship.relationshipType === "Subtype"
+                  ? ["Subtype"]
+                  : derivedRelationshipOnly
+                    ? ["Derived"]
+                    : ["Non-Identifying", "Identifying", "ManyToMany", "Derived", "Subtype"]
+              }
               onChange={(value) => onRelationshipChange("relationshipType", value)}
             />
             <div className="button-row">

@@ -42,6 +42,7 @@ export default function LeftSidebar({
   onStartIdentifyingRelationship,
   onStartNonIdentifyingRelationship,
   onStartDerivedRelationship,
+  onStartSubCategoryRelationship,
   onProjectChange,
   onExportJson,
   onImportJson,
@@ -194,6 +195,18 @@ export default function LeftSidebar({
               <span className="diagram-box-icon">⇢</span>
               <span>Non-Identifying</span>
             </button>
+
+            {project.viewMode === "Logical View" ? (
+              <button
+                type="button"
+                className={`secondary-button diagram-box-item ${activeRelationshipTool === "Subtype" ? "active" : ""}`}
+                onClick={onStartSubCategoryRelationship}
+                title="Add Sub-Category Relationship"
+              >
+                <span className="diagram-box-icon">◌</span>
+                <span>Sub-Category</span>
+              </button>
+            ) : null}
 
             {showViewObjectsUi || showCachedViewObjectsUi ? (
               <button

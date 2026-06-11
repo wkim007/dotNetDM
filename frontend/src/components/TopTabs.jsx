@@ -4,7 +4,8 @@ export default function TopTabs({
   onCloseTab,
   onAddDiagram,
   onReload,
-  onSave
+  onSave,
+  onClear
 }) {
   return (
     <div className="top-tabs">
@@ -39,6 +40,9 @@ export default function TopTabs({
         </button>
         <button type="button" className="secondary-button diagram-button" onClick={onSave}>
           Save
+        </button>
+        <button type="button" className="secondary-button diagram-button" onClick={onClear}>
+          Clear
         </button>
       </div>
     </div>

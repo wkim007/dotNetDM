@@ -229,6 +229,8 @@ function DiagramLink({
   const path = `M ${start.x} ${start.y} C ${controlOneX} ${controlOneY}, ${controlTwoX} ${controlTwoY}, ${end.x} ${end.y}`;
   const midX = (start.x + end.x) / 2;
   const midY = (start.y + end.y) / 2 - 10;
+  const markerX = ((start.x + controlOneX) / 2 + (controlTwoX + end.x) / 2) / 2;
+  const markerY = ((start.y + controlOneY) / 2 + (controlTwoY + end.y) / 2) / 2;
 
   return (
     <>
@@ -248,6 +250,18 @@ function DiagramLink({
           onSelectRelationship(relationship.id);
         }}
       />
+      {lineVariant === "sub-category" ? (
+        <circle
+          cx={markerX}
+          cy={markerY}
+          r="9"
+          className={`diagram-link-subcategory-marker ${isSelected ? "selected" : ""}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelectRelationship(relationship.id);
+          }}
+        />
+      ) : null}
       <text x={midX} y={midY} className="diagram-link-label">
         {relationship.cardinality}
       </text>
@@ -695,8 +709,15 @@ export default function DiagramCanvas({
                   target={target}
                   displayLevel={displayLevel}
                   lineVariant={
-                    String(relationship.relationshipType ?? "").trim().toLowerCase() === "derived"
+                    String(relationship.relationshipType ?? "").trim().toLowerCase() === "subtype" &&
+                    String(viewMode ?? "").trim().toLowerCase() === "logical view"
+                      ? "sub-category"
+                      : String(relationship.relationshipType ?? "").trim().toLowerCase() === "derived"
                       ? "derived"
+                      : String(relationship.relationshipType ?? "").trim().toLowerCase() === "manytomany" ||
+                          String(relationship.relationshipType ?? "").trim().toLowerCase() === "many-to-many" ||
+                          String(relationship.relationshipType ?? "").trim() === "4"
+                        ? "many-to-many"
                       : String(relationship.relationshipType ?? "").trim().toLowerCase() === "non-identifying" ||
                           String(relationship.relationshipType ?? "").trim() === "7"
                         ? "non-identifying"
