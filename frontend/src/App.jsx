@@ -1965,6 +1965,54 @@ export default function App() {
     }
   }
 
+  function handleAddSchema() {
+    const nextIndex = (model.project?.schemas?.length ?? 0) + 1;
+    const schemaId = `schema-${Date.now()}`;
+    const newSchema = {
+      id: schemaId,
+      name: `schema_${nextIndex}`,
+      comment: ""
+    };
+
+    setModel((current) => ({
+      ...current,
+      project: {
+        ...current.project,
+        schemas: [...(current.project?.schemas ?? []), newSchema]
+      }
+    }));
+    setStatus("Added a new schema.");
+    return schemaId;
+  }
+
+  function handleSchemaChange(schemaId, field, value) {
+    setModel((current) => ({
+      ...current,
+      project: {
+        ...current.project,
+        schemas: (current.project?.schemas ?? []).map((schema) =>
+          schema.id === schemaId
+            ? {
+                ...schema,
+                [field]: value
+              }
+            : schema
+        )
+      }
+    }));
+  }
+
+  function handleDeleteSchema(schemaId) {
+    setModel((current) => ({
+      ...current,
+      project: {
+        ...current.project,
+        schemas: (current.project?.schemas ?? []).filter((schema) => schema.id !== schemaId)
+      }
+    }));
+    setStatus("Deleted schema.");
+  }
+
   function handleExportJson() {
     const exportedJson = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
     setJsonDraft(exportedJson);
@@ -3106,9 +3154,12 @@ export default function App() {
           schemas={model.project?.schemas ?? []}
           datatypeOptions={datatypeOptions}
           importForm={importForm}
-        providers={providers}
+          providers={providers}
           status={status}
           zoom={zoom}
+          onAddSchema={handleAddSchema}
+          onSchemaChange={handleSchemaChange}
+          onDeleteSchema={handleDeleteSchema}
           onEntityChange={handleEntityChange}
           onEditEntity={handleEditEntity}
           onGoToEntity={handleGoToEntity}

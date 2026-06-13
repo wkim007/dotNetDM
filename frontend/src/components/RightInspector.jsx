@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from "react";
+
 function SelectField({ label, value, options, onChange }) {
   return (
     <label className="field-group">
@@ -90,6 +92,9 @@ export default function RightInspector({
   providers,
   status,
   zoom,
+  onAddSchema,
+  onSchemaChange,
+  onDeleteSchema,
   onEntityChange,
   onEditEntity,
   onGoToEntity,
@@ -131,6 +136,7 @@ export default function RightInspector({
         ].filter(Boolean))
       )
     : datatypeOptions ?? [];
+  const [editingSchemaId, setEditingSchemaId] = useState(null);
   const sortedEntities = [...(allEntities ?? [])].sort((left, right) =>
     String(left.physicalName ?? left.name ?? "").localeCompare(String(right.physicalName ?? right.name ?? ""))
   );
@@ -141,6 +147,26 @@ export default function RightInspector({
     String(left.name ?? left.physicalName ?? "").localeCompare(String(right.name ?? right.physicalName ?? ""))
   );
   const selectedEntitySectionLabel = getObjectTypeLabel(selectedEntity);
+  const sortedSchemas = useMemo(
+    () =>
+      [...(schemas ?? [])].sort((left, right) =>
+        String(left.name ?? "").localeCompare(String(right.name ?? ""))
+      ),
+    [schemas]
+  );
+  const editingSchema =
+    sortedSchemas.find((schema) => String(schema.id) === String(editingSchemaId)) ?? null;
+
+  useEffect(() => {
+    if (!editingSchemaId) {
+      return;
+    }
+
+    const stillExists = sortedSchemas.some((schema) => String(schema.id) === String(editingSchemaId));
+    if (!stillExists) {
+      setEditingSchemaId(null);
+    }
+  }, [editingSchemaId, sortedSchemas]);
 
   return (
     <aside className="right-inspector">
@@ -152,18 +178,75 @@ export default function RightInspector({
         <div className="panel-heading">
           <span className="panel-label">Schema</span>
         </div>
-        {schemas?.length > 0 ? (
+        <div className="button-row">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => {
+              const createdSchemaId = onAddSchema?.();
+              if (createdSchemaId) {
+                setEditingSchemaId(createdSchemaId);
+              }
+            }}
+          >
+            Add Schema
+          </button>
+        </div>
+        {sortedSchemas.length > 0 ? (
           <div className="mini-list">
-            {schemas.map((schema) => (
-              <div key={schema.id} className="mini-list-item">
+            {sortedSchemas.map((schema) => (
+              <div key={schema.id} className="mini-list-item schema-browser-card">
                 <strong>{schema.name}</strong>
                 <span>{schema.comment?.trim() ? schema.comment : "No comment"}</span>
+                <div className="button-row">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => setEditingSchemaId(schema.id)}
+                  >
+                    Edit
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         ) : (
           <p className="empty-state">No schemas in the current model.</p>
         )}
+        {editingSchema ? (
+          <div className="mini-list-item schema-editor-card">
+            <TextField
+              label="Name"
+              value={editingSchema.name ?? ""}
+              onChange={(value) => onSchemaChange(editingSchema.id, "name", value)}
+            />
+            <TextField
+              label="Comment"
+              value={editingSchema.comment ?? ""}
+              onChange={(value) => onSchemaChange(editingSchema.id, "comment", value)}
+              tall
+            />
+            <div className="button-row">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setEditingSchemaId(null)}
+              >
+                Close
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                onClick={() => {
+                  onDeleteSchema(editingSchema.id);
+                  setEditingSchemaId(null);
+                }}
+              >
+                Delete Schema
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="panel">
