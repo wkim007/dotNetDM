@@ -863,6 +863,40 @@ function normalizeDbEngine(databaseName) {
   return normalized || "postgresql";
 }
 
+function isDocumentDatabase(databaseName) {
+  return ["mongodb", "couchbase", "json"].includes(normalizeDbEngine(databaseName));
+}
+
+function collectNestedFieldNamesFromAttributes(attributes) {
+  const names = new Set();
+
+  function visit(items) {
+    (items ?? []).forEach((attribute) => {
+      const children = Array.isArray(attribute?.children) ? attribute.children : [];
+      if (children.length > 0) {
+        if (attribute?.name) {
+          names.add(String(attribute.name));
+        }
+        if (attribute?.physicalName) {
+          names.add(String(attribute.physicalName));
+        }
+      }
+      children.forEach((child) => {
+        if (child?.name) {
+          names.add(String(child.name));
+        }
+        if (child?.physicalName) {
+          names.add(String(child.physicalName));
+        }
+      });
+      visit(children);
+    });
+  }
+
+  visit(attributes);
+  return names;
+}
+
 function resolveDbMeta(databaseName, databaseVersion) {
   const engine = normalizeDbEngine(databaseName);
   const resolved = DB_META_MAP[engine] ?? DB_META_MAP.postgresql;
@@ -984,6 +1018,117 @@ function getEntityObjectType(entity) {
   return "entity";
 }
 
+function deserializeAttributeToField(attribute, fallbackPrefix = "field", index = 0) {
+  const children = Array.isArray(attribute?.children) ? attribute.children : [];
+
+  return {
+    id: String(attribute?.id ?? `${fallbackPrefix}-${index + 1}`),
+    kind: attribute?.isPrimary ? "PK" : attribute?.isFK ? "FK" : "COL",
+    name: attribute?.name ?? `Column${index + 1}`,
+    physicalName: attribute?.physicalName ?? "",
+    definition: attribute?.definition ?? "",
+    comment: attribute?.comment ?? "",
+    isPrimary: attribute?.isPrimary ?? false,
+    isFK: attribute?.isFK ?? false,
+    isNullable: attribute?.isNullable ?? true,
+    physicalOnly: attribute?.physicalOnly ?? false,
+    logicalOnly: attribute?.logicalOnly ?? false,
+    dataType: normalizeDatatypeCase(attribute?.datatype ?? attribute?.dataType ?? "varchar(50)"),
+    children: children.map((child, childIndex) =>
+      deserializeAttributeToField(child, `${attribute?.id ?? fallbackPrefix}-child`, childIndex)
+    )
+  };
+}
+
+function serializeFieldToAttribute(field) {
+  const children = Array.isArray(field?.children) ? field.children : [];
+
+  return {
+    id: String(field.id),
+    name: field.name ?? "",
+    physicalName: field.physicalName ?? "",
+    definition: field.definition ?? "",
+    datatype: normalizeDatatypeCase(field.dataType ?? ""),
+    comment: field.comment ?? "",
+    isPrimary: field.isPrimary ?? field.kind === "PK",
+    isFK: field.isFK ?? field.kind === "FK",
+    isNullable: field.isNullable ?? true,
+    physicalOnly: field.physicalOnly ?? false,
+    logicalOnly: field.logicalOnly ?? false,
+    ...(children.length > 0
+      ? {
+          children: children.map(serializeFieldToAttribute)
+        }
+      : {})
+  };
+}
+
+function findFieldById(fields, fieldId) {
+  for (const field of fields ?? []) {
+    if (field.id === fieldId) {
+      return field;
+    }
+
+    const childMatch = findFieldById(field.children ?? [], fieldId);
+    if (childMatch) {
+      return childMatch;
+    }
+  }
+
+  return null;
+}
+
+function collectFieldIds(fields) {
+  return (fields ?? []).flatMap((field) => [field.id, ...collectFieldIds(field.children ?? [])]);
+}
+
+function mapFieldTree(fields, updater) {
+  return (fields ?? []).map((field) => {
+    const nextField = {
+      ...field,
+      children: mapFieldTree(field.children ?? [], updater)
+    };
+
+    return updater(nextField);
+  });
+}
+
+function deleteFieldFromTree(fields, fieldId) {
+  return (fields ?? []).flatMap((field) => {
+    if (field.id === fieldId) {
+      return [];
+    }
+
+    return [
+      {
+        ...field,
+        children: deleteFieldFromTree(field.children ?? [], fieldId)
+      }
+    ];
+  });
+}
+
+function moveFieldInTree(fields, fieldId, direction) {
+  const index = (fields ?? []).findIndex((field) => field.id === fieldId);
+
+  if (index !== -1) {
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= fields.length) {
+      return fields;
+    }
+
+    const nextFields = [...fields];
+    const [movedField] = nextFields.splice(index, 1);
+    nextFields.splice(targetIndex, 0, movedField);
+    return nextFields;
+  }
+
+  return (fields ?? []).map((field) => ({
+    ...field,
+    children: moveFieldInTree(field.children ?? [], fieldId, direction)
+  }));
+}
+
 function exportModelToWorkspaceJson(model) {
   const dbMeta = resolveDbMeta(model.project?.database, model.project?.databaseVersion);
   const activeSubjectAreaId = "1";
@@ -1010,19 +1155,7 @@ function exportModelToWorkspaceJson(model) {
         physicalOnly: false,
         logicalOnly: false,
         indexes: entity.indexes ?? [],
-        attributes: (entity.fields ?? []).map((field) => ({
-          id: String(field.id),
-          name: field.name ?? "",
-          physicalName: field.physicalName ?? "",
-          definition: field.definition ?? "",
-          datatype: normalizeDatatypeCase(field.dataType ?? ""),
-          comment: field.comment ?? "",
-          isPrimary: field.isPrimary ?? field.kind === "PK",
-          isFK: field.isFK ?? field.kind === "FK",
-          isNullable: field.isNullable ?? true,
-          physicalOnly: field.physicalOnly ?? false,
-          logicalOnly: field.logicalOnly ?? false
-        })),
+        attributes: (entity.fields ?? []).map(serializeFieldToAttribute),
         props: {
           pParentRelationshipsRef: [],
           pChildRelationshipsRef: []
@@ -1229,16 +1362,61 @@ function importWorkspaceModel(payload) {
   const cachedViewMap = toIdMap(workspace.cachedViews ?? []);
   const activeDiagramId = String(payload?.meta?.activeDiagramId ?? activeSubjectArea.diagrams[0]?.id ?? "");
   const dbMeta = resolveDbMetaFromPayloadMeta(payload?.meta);
+  const shouldCollapseDocumentHelpers = isDocumentDatabase(dbMeta.label);
+  const nestedFieldNames = shouldCollapseDocumentHelpers
+    ? [...(workspace.entities ?? []), ...(workspace.views ?? []), ...(workspace.cachedViews ?? [])].reduce(
+        (names, entity) => {
+          collectNestedFieldNamesFromAttributes(entity?.attributes ?? []).forEach((name) => names.add(name));
+          return names;
+        },
+        new Set()
+      )
+    : new Set();
 
   const diagrams = activeSubjectArea.diagrams.map((diagram, diagramIndex) => {
     const entityShapes = diagram.modelShapes?.entities ?? [];
     const viewShapes = diagram.modelShapes?.views ?? [];
     const cachedViewShapes = diagram.modelShapes?.cachedViews ?? [];
-    const shapeEntityIds = new Set([...entityShapes, ...viewShapes, ...cachedViewShapes].map((shape) => String(shape.id)));
-    const entities = [
+    const skippedEntityIds = new Set();
+    const includedShapeEntries = [
       ...entityShapes.map((shape) => ({ shape, sourceEntity: entityMap.get(String(shape.id)), objectType: "entity" })),
       ...viewShapes.map((shape) => ({ shape, sourceEntity: viewMap.get(String(shape.id)), objectType: "view" })),
-      ...cachedViewShapes.map((shape) => ({ shape, sourceEntity: cachedViewMap.get(String(shape.id)), objectType: "materializedView" }))
+      ...cachedViewShapes.map((shape) => ({
+        shape,
+        sourceEntity: cachedViewMap.get(String(shape.id)),
+        objectType: "materializedView"
+      }))
+    ].filter(({ shape, sourceEntity }) => {
+      if (!shouldCollapseDocumentHelpers) {
+        return true;
+      }
+
+      const shapeName = String(shape?.name ?? "");
+      const shapePhysicalName = String(shape?.physicalName ?? "");
+      const helperLikeWithoutSource =
+        !sourceEntity &&
+        (nestedFieldNames.has(shapeName) || nestedFieldNames.has(shapePhysicalName));
+
+      const helperLikeWithSource =
+        !!sourceEntity &&
+        sourceEntity.logicalOnly === true &&
+        (sourceEntity.attributes?.length ?? 0) === 0 &&
+        (
+          nestedFieldNames.has(String(sourceEntity.name ?? "")) ||
+          nestedFieldNames.has(String(sourceEntity.physicalName ?? "")) ||
+          nestedFieldNames.has(shapeName) ||
+          nestedFieldNames.has(shapePhysicalName)
+        );
+
+      if (helperLikeWithoutSource || helperLikeWithSource) {
+        skippedEntityIds.add(String(sourceEntity?.id ?? shape.id));
+      }
+
+      return !(helperLikeWithoutSource || helperLikeWithSource);
+    });
+    const shapeEntityIds = new Set(includedShapeEntries.map(({ shape }) => String(shape.id)));
+    const entities = [
+      ...includedShapeEntries
     ].map(({ shape, sourceEntity, objectType }) => {
       const fallbackName = shape.physicalName || shape.name || `Entity_${diagramIndex + 1}`;
       const attributes = sourceEntity?.attributes ?? [];
@@ -1255,26 +1433,22 @@ function importWorkspaceModel(payload) {
         ...(shape.width != null ? { width: Number(shape.width) } : {}),
         ...(shape.height != null ? { height: Number(shape.height) } : {}),
         indexes: sourceEntity?.indexes ?? [],
-        fields: attributes.map((attribute, attributeIndex) => ({
-          id: String(attribute.id ?? `${shape.id}-field-${attributeIndex + 1}`),
-          kind: attribute.isPrimary ? "PK" : attribute.isFK ? "FK" : "COL",
-          name: attribute.name ?? `Column${attributeIndex + 1}`,
-          physicalName: attribute.physicalName ?? "",
-          definition: attribute.definition ?? "",
-          comment: attribute.comment ?? "",
-          isPrimary: attribute.isPrimary ?? false,
-          isFK: attribute.isFK ?? false,
-          isNullable: attribute.isNullable ?? true,
-          physicalOnly: attribute.physicalOnly ?? false,
-          logicalOnly: attribute.logicalOnly ?? false,
-          dataType: normalizeDatatypeCase(attribute.datatype ?? attribute.dataType ?? "varchar(50)")
-        }))
+        fields: attributes.map((attribute, attributeIndex) =>
+          deserializeAttributeToField(attribute, `${shape.id}-field`, attributeIndex)
+        )
       };
     });
 
     const relationshipShapeIds = new Set((diagram.modelShapes?.relationships ?? []).map((shape) => String(shape.id)));
     const relationships = (workspace.relationships ?? [])
       .filter((relationship) => {
+        if (
+          skippedEntityIds.has(String(relationship.parent ?? relationship.sourceEntityId)) ||
+          skippedEntityIds.has(String(relationship.child ?? relationship.targetEntityId))
+        ) {
+          return false;
+        }
+
         if (relationshipShapeIds.size > 0) {
           return relationshipShapeIds.has(String(relationship.id));
         }
@@ -1342,21 +1516,43 @@ function estimateTextWidth(text, factor = 9.2) {
   return String(text ?? "").length * factor;
 }
 
+function flattenFieldsForLayout(fields, depth = 0) {
+  return (fields ?? []).flatMap((field) => {
+    const children = Array.isArray(field.children) ? field.children : [];
+    return [
+      {
+        ...field,
+        depth,
+        hasChildren: children.length > 0
+      },
+      ...flattenFieldsForLayout(children, depth + 1)
+    ];
+  });
+}
+
 function getPreferredEntitySize(entity) {
-  const fields = entity.fields ?? [];
+  const fields = flattenFieldsForLayout(entity.fields ?? []);
+  const hasNestedFields = fields.some((field) => field.hasChildren || field.depth > 0);
   const headerWidth = estimateTextWidth(entity.physicalName ?? entity.name ?? "Entity", 12) + 92;
   const widestFieldWidth = Math.max(
     ...fields.map((field) => {
+      const indentWidth = field.depth * 18 + (field.hasChildren ? 16 : 0);
       const nameWidth = estimateTextWidth(field.name, 10);
       const typeWidth = estimateTextWidth(field.dataType, 9.1);
-      return 48 + 10 + nameWidth + 18 + typeWidth + 28;
+      return 48 + indentWidth + 10 + nameWidth + 18 + typeWidth + 28;
     }),
     CARD_BASE_WIDTH
   );
 
   return {
-    width: Math.min(CARD_MAX_WIDTH, Math.max(CARD_MIN_WIDTH, Math.ceil(Math.max(headerWidth, widestFieldWidth)))),
-    height: Math.max(CARD_MIN_HEIGHT, CARD_HEADER + fields.length * ROW_HEIGHT + 18)
+    width: Math.min(
+      CARD_MAX_WIDTH,
+      Math.max(CARD_MIN_WIDTH, Math.ceil(Math.max(headerWidth, widestFieldWidth) + (hasNestedFields ? 12 : 0)))
+    ),
+    height: Math.max(
+      CARD_MIN_HEIGHT,
+      CARD_HEADER + fields.length * ROW_HEIGHT + 18 + (hasNestedFields ? ROW_HEIGHT : 0)
+    )
   };
 }
 
@@ -1427,6 +1623,7 @@ export default function App() {
   );
   const [selectedRelationshipId, setSelectedRelationshipId] = useState(null);
   const [selectedAttributeId, setSelectedAttributeId] = useState(null);
+  const [expandedFieldIds, setExpandedFieldIds] = useState({});
   const [linkDraft, setLinkDraft] = useState(null);
   const [focusEntityRequest, setFocusEntityRequest] = useState(null);
   const [focusRelationshipRequest, setFocusRelationshipRequest] = useState(null);
@@ -1474,7 +1671,7 @@ export default function App() {
     [activeDiagram, selectedRelationshipId]
   );
   const selectedAttribute = useMemo(
-    () => selectedEntity?.fields.find((field) => field.id === selectedAttributeId) ?? null,
+    () => findFieldById(selectedEntity?.fields ?? [], selectedAttributeId),
     [selectedEntity, selectedAttributeId]
   );
 
@@ -1498,7 +1695,7 @@ export default function App() {
       return;
     }
 
-    const fieldIds = selectedEntity.fields.map((field) => field.id);
+    const fieldIds = collectFieldIds(selectedEntity.fields ?? []);
     if (fieldIds.length === 0) {
       if (selectedAttributeId !== null) {
         setSelectedAttributeId(null);
@@ -2020,8 +2217,10 @@ export default function App() {
   }
 
   function handleViewJson() {
-    const exportedJson = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
-    setJsonDraft(exportedJson);
+    if (!jsonDraft.trim()) {
+      const exportedJson = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
+      setJsonDraft(exportedJson);
+    }
     setIsJsonViewerOpen(true);
     setStatus("Opened the model JSON viewer.");
   }
@@ -2054,11 +2253,12 @@ export default function App() {
   }
 
   async function handleCopyJson() {
-    const exportedJson = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
-    setJsonDraft(exportedJson);
+    const contentToCopy = jsonDraft.trim()
+      ? jsonDraft
+      : JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
 
     try {
-      await navigator.clipboard.writeText(exportedJson);
+      await navigator.clipboard.writeText(contentToCopy);
       setStatus("Copied model JSON to the clipboard.");
     } catch {
       setStatus("Copy failed. Your browser blocked clipboard access.");
@@ -2066,8 +2266,9 @@ export default function App() {
   }
 
   async function handleSaveJsonToFile() {
-    const exportedJson = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
-    setJsonDraft(exportedJson);
+    const contentToSave = jsonDraft.trim()
+      ? jsonDraft
+      : JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
     const suggestedName = `${activeDiagram?.name ?? "ER_Diagram_1"}.json`;
 
     try {
@@ -2084,7 +2285,7 @@ export default function App() {
           ]
         });
         const writable = await handle.createWritable();
-        await writable.write(exportedJson);
+        await writable.write(contentToSave);
         await writable.close();
         setStatus("Saved model JSON to a file.");
         return;
@@ -2098,7 +2299,7 @@ export default function App() {
       setStatus(`Save dialog failed, falling back to download. ${error instanceof Error ? error.message : ""}`.trim());
     }
 
-    const blob = new Blob([exportedJson], { type: "application/json" });
+    const blob = new Blob([contentToSave], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -2516,7 +2717,7 @@ export default function App() {
 
       if (fieldId) {
         return {
-          fields: entity.fields.map((item) =>
+          fields: mapFieldTree(entity.fields, (item) =>
             item.id === fieldId
               ? {
                   ...item,
@@ -2922,7 +3123,7 @@ export default function App() {
 
   function handleDeleteAttribute(attributeId) {
     updateSelectedEntity((entity) => ({
-      fields: entity.fields.filter((field) => field.id !== attributeId)
+      fields: deleteFieldFromTree(entity.fields, attributeId)
     }));
     if (selectedAttributeId === attributeId) {
       setSelectedAttributeId(null);
@@ -2932,19 +3133,11 @@ export default function App() {
 
   function handleMoveAttribute(attributeId, direction) {
     updateSelectedEntity((entity) => {
-      const index = entity.fields.findIndex((field) => field.id === attributeId);
-      if (index === -1) {
+      const nextFields = moveFieldInTree(entity.fields, attributeId, direction);
+      if (nextFields === entity.fields) {
         return {};
       }
 
-      const targetIndex = direction === "up" ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= entity.fields.length) {
-        return {};
-      }
-
-      const nextFields = [...entity.fields];
-      const [movedField] = nextFields.splice(index, 1);
-      nextFields.splice(targetIndex, 0, movedField);
       return { fields: nextFields };
     });
 
@@ -3038,6 +3231,13 @@ export default function App() {
     document.body.classList.add("panel-resizing");
   }
 
+  function handleToggleFieldExpansion(entityId, fieldId) {
+    setExpandedFieldIds((current) => ({
+      ...current,
+      [fieldId]: !(current[fieldId] ?? true)
+    }));
+  }
+
   return (
     <div
       className="app-shell"
@@ -3120,6 +3320,7 @@ export default function App() {
           viewMode={model.project.viewMode}
           isLinkingRelationship={Boolean(linkDraft)}
           zoom={zoom}
+          expandedFieldIds={expandedFieldIds}
           focusEntityRequest={focusEntityRequest}
           focusRelationshipRequest={focusRelationshipRequest}
           onSelectEntity={handleSelectEntity}
@@ -3131,6 +3332,7 @@ export default function App() {
           onResizeEntity={handleResizeEntity}
           onDeleteEntity={handleDeleteEntityById}
           onDeleteRelationship={handleDeleteRelationship}
+          onToggleFieldExpansion={handleToggleFieldExpansion}
           onViewportChange={setDiagramViewport}
           viewResetToken={viewResetToken}
         />

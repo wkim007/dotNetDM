@@ -77,9 +77,25 @@ function sortFieldsForDisplay(fields) {
   });
 }
 
-function getVisibleFields(entity, displayLevel) {
+function flattenFieldTree(fields, expandedFieldIds, depth = 0) {
+  return sortFieldsForDisplay(fields).flatMap((field) => {
+    const children = Array.isArray(field.children) ? field.children : [];
+    const isExpanded = expandedFieldIds?.[field.id] ?? true;
+    return [
+      {
+        ...field,
+        depth,
+        hasChildren: children.length > 0,
+        isExpanded
+      },
+      ...(children.length > 0 && isExpanded ? flattenFieldTree(children, expandedFieldIds, depth + 1) : [])
+    ];
+  });
+}
+
+function getVisibleFields(entity, displayLevel, expandedFieldIds) {
   const normalizedDisplayLevel = normalizeDisplayLevel(displayLevel);
-  const fields = sortFieldsForDisplay(entity.fields ?? []);
+  const fields = flattenFieldTree(entity.fields ?? [], expandedFieldIds);
 
   if (
     normalizedDisplayLevel === "table" ||
@@ -96,12 +112,12 @@ function getVisibleFields(entity, displayLevel) {
   return fields;
 }
 
-function getPreferredEntitySize(entity, displayLevel) {
+function getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds) {
   const headerWidth = estimateTextWidth(entity.physicalName ?? entity.name ?? "Entity", 12) + 92;
   const commentMode = isCommentDisplayLevel(displayLevel);
 
   if (commentMode) {
-    const commentText = getCommentText(entity);
+    const commentText = getCommentText(entity, viewMode);
     const commentWidth = commentText ? estimateTextWidth(commentText, 8.6) + 34 : 0;
 
     return {
@@ -113,12 +129,13 @@ function getPreferredEntitySize(entity, displayLevel) {
     };
   }
 
-  const visibleFields = getVisibleFields(entity, displayLevel);
+  const visibleFields = getVisibleFields(entity, displayLevel, expandedFieldIds);
   const widestFieldWidth = Math.max(
     ...visibleFields.map((field) => {
+      const indentWidth = field.depth * 18 + (field.hasChildren ? 16 : 0);
       const nameWidth = estimateTextWidth(field.name, 10);
       const typeWidth = estimateTextWidth(field.dataType, 9.1);
-      return 48 + 10 + nameWidth + 18 + typeWidth + 28;
+      return 48 + indentWidth + 10 + nameWidth + 18 + typeWidth + 28;
     }),
     CARD_WIDTH
   );
@@ -131,14 +148,13 @@ function getPreferredEntitySize(entity, displayLevel) {
   };
 }
 
-function getRenderedEntitySize(entity, displayLevel) {
-  const preferredSize = getPreferredEntitySize(entity, displayLevel);
-  const visibleFields = getVisibleFields(entity, displayLevel);
-  const totalFields = entity.fields?.length ?? 0;
+function getRenderedEntitySize(entity, displayLevel, viewMode, expandedFieldIds) {
+  const preferredSize = getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds);
+  const normalizedDisplayLevel = normalizeDisplayLevel(displayLevel);
   const shouldPreserveManualHeight =
-    !isCommentDisplayLevel(displayLevel) &&
-    visibleFields.length > 0 &&
-    visibleFields.length === totalFields;
+    normalizedDisplayLevel !== "table" &&
+    normalizedDisplayLevel !== "entity" &&
+    normalizedDisplayLevel !== "comment";
 
   return {
     width: Math.max(entity.width ?? 0, preferredSize.width),
@@ -148,8 +164,8 @@ function getRenderedEntitySize(entity, displayLevel) {
   };
 }
 
-function getCardBounds(entity, displayLevel) {
-  const { width, height } = getRenderedEntitySize(entity, displayLevel);
+function getCardBounds(entity, displayLevel, viewMode, expandedFieldIds) {
+  const { width, height } = getRenderedEntitySize(entity, displayLevel, viewMode, expandedFieldIds);
 
   return {
     left: entity.x,
@@ -163,7 +179,7 @@ function getCardBounds(entity, displayLevel) {
   };
 }
 
-function getWorldSize(entities, displayLevel) {
+function getWorldSize(entities, displayLevel, viewMode, expandedFieldIds) {
   if (entities.length === 0) {
     return {
       width: WORLD_WIDTH,
@@ -171,8 +187,12 @@ function getWorldSize(entities, displayLevel) {
     };
   }
 
-  const furthestRight = Math.max(...entities.map((entity) => getCardBounds(entity, displayLevel).right));
-  const furthestBottom = Math.max(...entities.map((entity) => getCardBounds(entity, displayLevel).bottom));
+  const furthestRight = Math.max(
+    ...entities.map((entity) => getCardBounds(entity, displayLevel, viewMode, expandedFieldIds).right)
+  );
+  const furthestBottom = Math.max(
+    ...entities.map((entity) => getCardBounds(entity, displayLevel, viewMode, expandedFieldIds).bottom)
+  );
 
   return {
     width: Math.max(WORLD_WIDTH, Math.ceil(furthestRight + WORLD_PADDING)),
@@ -184,9 +204,9 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-function getAnchor(entity, target, displayLevel) {
-  const bounds = getCardBounds(entity, displayLevel);
-  const targetBounds = getCardBounds(target, displayLevel);
+function getAnchor(entity, target, displayLevel, viewMode, expandedFieldIds) {
+  const bounds = getCardBounds(entity, displayLevel, viewMode, expandedFieldIds);
+  const targetBounds = getCardBounds(target, displayLevel, viewMode, expandedFieldIds);
   const horizontalGap = targetBounds.centerX - bounds.centerX;
   const verticalGap = targetBounds.centerY - bounds.centerY;
   const horizontalBias = Math.abs(horizontalGap) / bounds.width;
@@ -211,13 +231,15 @@ function DiagramLink({
   source,
   target,
   displayLevel,
+  viewMode,
+  expandedFieldIds,
   lineVariant,
   isSelected,
   onSelectRelationship,
   onDeleteRelationship
 }) {
-  const start = getAnchor(source, target, displayLevel);
-  const end = getAnchor(target, source, displayLevel);
+  const start = getAnchor(source, target, displayLevel, viewMode, expandedFieldIds);
+  const end = getAnchor(target, source, displayLevel, viewMode, expandedFieldIds);
   const deltaX = end.x - start.x;
   const deltaY = end.y - start.y;
   const curveStrength = Math.max(36, Math.min(140, Math.abs(deltaX) * 0.35 + Math.abs(deltaY) * 0.1));
@@ -287,6 +309,14 @@ function FieldBadge({ kind }) {
   return <span className={`field-badge ${kind.toLowerCase()}`}>{kind}</span>;
 }
 
+function FieldTreeMarker({ expanded }) {
+  return (
+    <span className={`field-tree-marker ${expanded ? "expanded" : ""}`} aria-hidden="true">
+      {expanded ? "▾" : "▸"}
+    </span>
+  );
+}
+
 function getEntityCardVariant(entity) {
   if (entity?.objectType === "materializedView") {
     return "materialized-view";
@@ -303,6 +333,7 @@ function EntityCard({
   entity,
   displayLevel,
   viewMode,
+  expandedFieldIds,
   isSelected,
   selectedAttributeId,
   isLinkingRelationship,
@@ -310,13 +341,14 @@ function EntityCard({
   onResizeStart,
   onSelect,
   onSelectAttribute,
+  onToggleFieldExpansion,
   onDelete
 }) {
   const commentMode = isCommentDisplayLevel(displayLevel);
   const commentText = getCommentText(entity, viewMode);
-  const visibleFields = getVisibleFields(entity, displayLevel);
-  const preferredSize = getPreferredEntitySize(entity, displayLevel);
-  const { width, height } = getRenderedEntitySize(entity, displayLevel);
+  const visibleFields = getVisibleFields(entity, displayLevel, expandedFieldIds);
+  const preferredSize = getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds);
+  const { width, height } = getRenderedEntitySize(entity, displayLevel, viewMode, expandedFieldIds);
   const variantClass = getEntityCardVariant(entity);
 
   return (
@@ -370,6 +402,7 @@ function EntityCard({
             <div
               key={field.id}
               className={`entity-field-row ${selectedAttributeId === field.id ? "active" : ""}`}
+              style={{ "--field-depth": field.depth }}
               onPointerDown={(event) => {
                 event.stopPropagation();
               }}
@@ -377,7 +410,36 @@ function EntityCard({
                 event.stopPropagation();
                 onSelectAttribute(field.id, entity.id);
               }}
+              onDoubleClick={(event) => {
+                if (!field.hasChildren) {
+                  return;
+                }
+
+                event.stopPropagation();
+                onToggleFieldExpansion(entity.id, field.id);
+              }}
             >
+              <span className="entity-field-indent" aria-hidden="true" />
+              {field.hasChildren ? (
+                <button
+                  type="button"
+                  className={`field-tree-toggle ${String(field.dataType ?? "").toLowerCase().startsWith("array") ? "array" : "object"}`}
+                  aria-label={`${field.isExpanded ? "Collapse" : "Expand"} ${field.name}`}
+                  title={`${field.isExpanded ? "Collapse" : "Expand"} ${field.name}`}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectAttribute(field.id, entity.id);
+                    onToggleFieldExpansion(entity.id, field.id);
+                  }}
+                >
+                  <FieldTreeMarker expanded={field.isExpanded} />
+                </button>
+              ) : (
+                <span className="field-tree-placeholder" aria-hidden="true" />
+              )}
               <FieldBadge kind={field.kind} />
               <span className="entity-field-name">{field.name}</span>
               <span className="entity-field-type">{field.dataType}</span>
@@ -407,6 +469,7 @@ export default function DiagramCanvas({
   viewMode,
   isLinkingRelationship,
   zoom,
+  expandedFieldIds,
   focusEntityRequest,
   focusRelationshipRequest,
   onSelectEntity,
@@ -418,16 +481,27 @@ export default function DiagramCanvas({
   onSelectAttribute,
   onDeleteEntity,
   onDeleteRelationship,
+  onToggleFieldExpansion,
   onViewportChange,
   viewResetToken
 }) {
   const entityMap = Object.fromEntries(entities.map((entity) => [entity.id, entity]));
-  const worldSize = getWorldSize(entities, displayLevel);
+  const worldSize = getWorldSize(entities, displayLevel, viewMode, expandedFieldIds);
   const interactionState = useRef(null);
   const canvasRef = useRef(null);
   const suppressBackgroundClickRef = useRef(false);
   const [draggingId, setDraggingId] = useState(null);
   const [marqueeRect, setMarqueeRect] = useState(null);
+
+  useEffect(() => {
+    const visibleFieldIds = new Set(
+      entities.flatMap((entity) => flattenFieldTree(entity.fields ?? [], expandedFieldIds).map((field) => field.id))
+    );
+
+    if (selectedAttributeId && !visibleFieldIds.has(selectedAttributeId)) {
+      onSelectAttribute(null, selectedEntityIds.at(-1) ?? null);
+    }
+  }, [entities, expandedFieldIds, onSelectAttribute, selectedAttributeId, selectedEntityIds]);
 
   function getCanvasPoint(event) {
     const element = canvasRef.current;
@@ -483,7 +557,7 @@ export default function DiagramCanvas({
     }
 
     const element = canvasRef.current;
-    const bounds = getCardBounds(entity, displayLevel);
+    const bounds = getCardBounds(entity, displayLevel, viewMode, expandedFieldIds);
     const targetLeft = Math.max(0, bounds.left * zoom - Math.max(0, element.clientWidth / 2 - (bounds.width * zoom) / 2));
     const targetTop = Math.max(0, bounds.top * zoom - Math.max(0, element.clientHeight / 2 - (bounds.height * zoom) / 2));
 
@@ -512,8 +586,8 @@ export default function DiagramCanvas({
       return;
     }
 
-    const start = getAnchor(source, target, displayLevel);
-    const end = getAnchor(target, source, displayLevel);
+    const start = getAnchor(source, target, displayLevel, viewMode, expandedFieldIds);
+    const end = getAnchor(target, source, displayLevel, viewMode, expandedFieldIds);
     const focusX = (start.x + end.x) / 2;
     const focusY = (start.y + end.y) / 2;
     const element = canvasRef.current;
@@ -572,8 +646,8 @@ export default function DiagramCanvas({
     event.preventDefault();
     event.stopPropagation();
     const entity = entityMap[entityId];
-    const preferredSize = getPreferredEntitySize(entity, displayLevel);
-    const { width, height } = getRenderedEntitySize(entity, displayLevel);
+    const preferredSize = getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds);
+    const { width, height } = getRenderedEntitySize(entity, displayLevel, viewMode, expandedFieldIds);
 
     interactionState.current = {
       mode: "resize",
@@ -631,7 +705,7 @@ export default function DiagramCanvas({
 
       const hits = entities
         .filter((entity) => {
-          const bounds = getCardBounds(entity, displayLevel);
+          const bounds = getCardBounds(entity, displayLevel, viewMode, expandedFieldIds);
 
           return !(
             bounds.right < rect.left ||
@@ -765,6 +839,8 @@ export default function DiagramCanvas({
                   source={source}
                   target={target}
                   displayLevel={displayLevel}
+                  viewMode={viewMode}
+                  expandedFieldIds={expandedFieldIds}
                   lineVariant={
                     String(relationship.relationshipType ?? "").trim().toLowerCase() === "subtype" &&
                     String(viewMode ?? "").trim().toLowerCase() === "logical view"
@@ -794,6 +870,7 @@ export default function DiagramCanvas({
               entity={entity}
               displayLevel={displayLevel}
               viewMode={viewMode}
+              expandedFieldIds={expandedFieldIds}
               isSelected={selectedEntityIds.includes(entity.id)}
               selectedAttributeId={selectedEntityIds.includes(entity.id) ? selectedAttributeId : null}
               isLinkingRelationship={isLinkingRelationship}
@@ -801,6 +878,7 @@ export default function DiagramCanvas({
               onResizeStart={handleResizeStart}
               onSelect={onSelectEntity}
               onSelectAttribute={onSelectAttribute}
+              onToggleFieldExpansion={onToggleFieldExpansion}
               onDelete={onDeleteEntity}
             />
           ))}

@@ -754,7 +754,7 @@ body.panel-resizing {
 
 .entity-field-row {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
+  grid-template-columns: calc(var(--field-depth, 0) * 18px) 16px 48px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   margin-bottom: 8px;
@@ -763,8 +763,49 @@ body.panel-resizing {
   color: #dce7f5;
 }
 
+.entity-field-row:has(.field-tree-toggle) {
+  cursor: default;
+}
+
 .entity-field-row.active {
   background: rgba(66, 217, 212, 0.16);
+}
+
+.entity-field-indent {
+  width: calc(var(--field-depth, 0) * 18px);
+}
+
+.field-tree-marker,
+.field-tree-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  color: currentColor;
+  font-size: 0.78rem;
+}
+
+.field-tree-marker {
+  transform: translateY(-1px);
+}
+
+.field-tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.field-tree-toggle.array {
+  color: #ffd26b;
+}
+
+.field-tree-toggle.object {
+  color: #78e8ff;
 }
 
 .entity-field-name {
