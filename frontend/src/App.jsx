@@ -1156,6 +1156,46 @@ function addChildFieldToTree(fields, parentFieldId, childFieldFactory) {
   return inserted ? nextFields : fields;
 }
 
+function collectNumericIdsFromFields(fields, bucket) {
+  (fields ?? []).forEach((field) => {
+    if (/^\d+$/.test(String(field?.id ?? ""))) {
+      bucket.push(Number(field.id));
+    }
+    collectNumericIdsFromFields(field.children ?? [], bucket);
+  });
+}
+
+function getNextNumericWorkspaceId(model) {
+  const numericIds = [];
+
+  (model?.project?.schemas ?? []).forEach((schema) => {
+    if (/^\d+$/.test(String(schema?.id ?? ""))) {
+      numericIds.push(Number(schema.id));
+    }
+  });
+
+  (model?.diagrams ?? []).forEach((diagram) => {
+    if (/^\d+$/.test(String(diagram?.id ?? ""))) {
+      numericIds.push(Number(diagram.id));
+    }
+
+    (diagram.entities ?? []).forEach((entity) => {
+      if (/^\d+$/.test(String(entity?.id ?? ""))) {
+        numericIds.push(Number(entity.id));
+      }
+      collectNumericIdsFromFields(entity.fields ?? [], numericIds);
+    });
+
+    (diagram.relationships ?? []).forEach((relationship) => {
+      if (/^\d+$/.test(String(relationship?.id ?? ""))) {
+        numericIds.push(Number(relationship.id));
+      }
+    });
+  });
+
+  return String((numericIds.length > 0 ? Math.max(...numericIds) : 0) + 1);
+}
+
 function exportModelToWorkspaceJson(model) {
   const dbMeta = resolveDbMeta(model.project?.database, model.project?.databaseVersion);
   const activeSubjectAreaId = "1";
@@ -3129,7 +3169,7 @@ export default function App() {
       return;
     }
 
-    const attributeId = `${selectedEntity.id}-${Date.now()}`;
+    const attributeId = getNextNumericWorkspaceId(model);
     updateSelectedEntity((entity) => ({
       fields: [
         ...entity.fields,
@@ -3153,7 +3193,7 @@ export default function App() {
       return;
     }
 
-    const childAttributeId = `${selectedEntity.id}-${Date.now()}`;
+    const childAttributeId = getNextNumericWorkspaceId(model);
 
     updateSelectedEntity((entity) => {
       const nextFields = addChildFieldToTree(entity.fields, parentAttributeId, (parentField) => ({
