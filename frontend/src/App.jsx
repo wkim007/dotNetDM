@@ -1129,6 +1129,33 @@ function moveFieldInTree(fields, fieldId, direction) {
   }));
 }
 
+function addChildFieldToTree(fields, parentFieldId, childFieldFactory) {
+  let inserted = false;
+
+  const nextFields = (fields ?? []).map((field) => {
+    if (field.id === parentFieldId) {
+      inserted = true;
+      const nextChildren = [...(field.children ?? []), childFieldFactory(field)];
+      return {
+        ...field,
+        children: nextChildren
+      };
+    }
+
+    const nextChildren = addChildFieldToTree(field.children ?? [], parentFieldId, childFieldFactory);
+    if (nextChildren !== (field.children ?? [])) {
+      return {
+        ...field,
+        children: nextChildren
+      };
+    }
+
+    return field;
+  });
+
+  return inserted ? nextFields : fields;
+}
+
 function exportModelToWorkspaceJson(model) {
   const dbMeta = resolveDbMeta(model.project?.database, model.project?.databaseVersion);
   const activeSubjectAreaId = "1";
@@ -3121,6 +3148,39 @@ export default function App() {
     setStatus("Added an attribute.");
   }
 
+  function handleAddChildAttribute(parentAttributeId) {
+    if (!selectedEntity || !parentAttributeId) {
+      return;
+    }
+
+    const childAttributeId = `${selectedEntity.id}-${Date.now()}`;
+
+    updateSelectedEntity((entity) => {
+      const nextFields = addChildFieldToTree(entity.fields, parentAttributeId, (parentField) => ({
+        id: childAttributeId,
+        kind: "COL",
+        name: `Child${(parentField.children?.length ?? 0) + 1}`,
+        physicalName: "",
+        comment: "",
+        dataType: "string",
+        isNullable: true
+      }));
+
+      if (nextFields === entity.fields) {
+        return {};
+      }
+
+      return { fields: nextFields };
+    });
+
+    setExpandedFieldIds((current) => ({
+      ...current,
+      [parentAttributeId]: true
+    }));
+    setSelectedAttributeId(childAttributeId);
+    setStatus("Added a child attribute.");
+  }
+
   function handleDeleteAttribute(attributeId) {
     updateSelectedEntity((entity) => ({
       fields: deleteFieldFromTree(entity.fields, attributeId)
@@ -3368,6 +3428,7 @@ export default function App() {
           onEditRelationship={handleEditRelationship}
           onGoToRelationship={handleGoToRelationship}
           onAddAttribute={handleAddAttribute}
+          onAddChildAttribute={handleAddChildAttribute}
           onStartRelationshipLink={handleStartRelationshipLink}
           onDeleteEntity={handleDeleteEntity}
           onDeleteAttribute={handleDeleteAttribute}

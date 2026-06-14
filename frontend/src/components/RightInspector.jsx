@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
-function SelectField({ label, value, options, onChange }) {
+function SelectField({ label, value, options, onChange, disabled = false }) {
   return (
     <label className="field-group">
       <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
+      <select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled}>
         {options.map((option) => (
           <option key={option} value={option}>
             {option}
@@ -15,14 +15,14 @@ function SelectField({ label, value, options, onChange }) {
   );
 }
 
-function TextField({ label, value, onChange, tall = false }) {
+function TextField({ label, value, onChange, tall = false, disabled = false }) {
   return (
     <label className="field-group">
       <span>{label}</span>
       {tall ? (
-        <textarea value={value} onChange={(event) => onChange(event.target.value)} />
+        <textarea value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} />
       ) : (
-        <input value={value} onChange={(event) => onChange(event.target.value)} />
+        <input value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} />
       )}
     </label>
   );
@@ -101,6 +101,7 @@ export default function RightInspector({
   onEditRelationship,
   onGoToRelationship,
   onAddAttribute,
+  onAddChildAttribute,
   onStartRelationshipLink,
   onDeleteEntity,
   onDeleteAttribute,
@@ -136,6 +137,13 @@ export default function RightInspector({
         ].filter(Boolean))
       )
     : datatypeOptions ?? [];
+  const canAddChildAttribute = ["object", "array"].includes(
+    String(selectedAttributeDatatypeParts.baseType ?? "").trim().toLowerCase()
+  );
+  const isContainerDatatype = ["object", "array"].includes(
+    String(selectedAttributeDatatypeParts.baseType ?? "").trim().toLowerCase()
+  );
+  const selectedAttributeHasChildren = (selectedAttribute?.children?.length ?? 0) > 0;
   const [editingSchemaId, setEditingSchemaId] = useState(null);
   const sortedEntities = [...(allEntities ?? [])].sort((left, right) =>
     String(left.physicalName ?? left.name ?? "").localeCompare(String(right.physicalName ?? right.name ?? ""))
@@ -411,23 +419,37 @@ export default function RightInspector({
                   label="Datatype"
                   value={selectedAttributeDatatypeParts.baseType}
                   options={datatypeSelectOptions}
+                  disabled={selectedAttributeHasChildren}
                   onChange={(value) => {
-                    const nextType = selectedAttributeDatatypeParts.sizeValue
-                      ? `${value}(${selectedAttributeDatatypeParts.sizeValue})`
-                      : value;
+                    const normalizedValue = String(value).trim().toLowerCase();
+                    const nextType =
+                      normalizedValue === "object" || normalizedValue === "array"
+                        ? normalizedValue
+                        : selectedAttributeDatatypeParts.sizeValue
+                          ? `${value}(${selectedAttributeDatatypeParts.sizeValue})`
+                          : value;
                     onEntityChange("fieldType", nextType, selectedAttribute.id);
                   }}
                 />
                 <TextField
                   label="Size / Precision"
-                  value={selectedAttributeDatatypeParts.sizeValue}
+                  value={isContainerDatatype ? "" : selectedAttributeDatatypeParts.sizeValue}
+                  disabled={selectedAttributeHasChildren || isContainerDatatype}
                   onChange={(value) => {
+                    if (isContainerDatatype) {
+                      return;
+                    }
                     const nextType = value
                       ? `${selectedAttributeDatatypeParts.baseType}(${value})`
                       : selectedAttributeDatatypeParts.baseType;
                     onEntityChange("fieldType", nextType, selectedAttribute.id);
                   }}
                 />
+                {selectedAttributeHasChildren ? (
+                  <p className="empty-state">
+                    Datatype is locked because this attribute has child attributes.
+                  </p>
+                ) : null}
                 <SelectField
                   label="Kind"
                   value={selectedAttribute.kind ?? "COL"}
@@ -477,6 +499,15 @@ export default function RightInspector({
                   </button>
                 </div>
                 <div className="button-row">
+                  {canAddChildAttribute ? (
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => onAddChildAttribute(selectedAttribute.id)}
+                    >
+                      Add Child
+                    </button>
+                  ) : null}
                   <button className="danger-button" type="button" onClick={() => onDeleteAttribute(selectedAttribute.id)}>
                     Delete Attribute
                   </button>
