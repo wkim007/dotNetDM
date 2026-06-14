@@ -1196,6 +1196,38 @@ function getNextNumericWorkspaceId(model) {
   return String((numericIds.length > 0 ? Math.max(...numericIds) : 0) + 1);
 }
 
+function getNextNumericWorkspaceIds(model, count) {
+  const numericIds = [];
+
+  (model?.project?.schemas ?? []).forEach((schema) => {
+    if (/^\d+$/.test(String(schema?.id ?? ""))) {
+      numericIds.push(Number(schema.id));
+    }
+  });
+
+  (model?.diagrams ?? []).forEach((diagram) => {
+    if (/^\d+$/.test(String(diagram?.id ?? ""))) {
+      numericIds.push(Number(diagram.id));
+    }
+
+    (diagram.entities ?? []).forEach((entity) => {
+      if (/^\d+$/.test(String(entity?.id ?? ""))) {
+        numericIds.push(Number(entity.id));
+      }
+      collectNumericIdsFromFields(entity.fields ?? [], numericIds);
+    });
+
+    (diagram.relationships ?? []).forEach((relationship) => {
+      if (/^\d+$/.test(String(relationship?.id ?? ""))) {
+        numericIds.push(Number(relationship.id));
+      }
+    });
+  });
+
+  const start = (numericIds.length > 0 ? Math.max(...numericIds) : 0) + 1;
+  return Array.from({ length: count }, (_, index) => String(start + index));
+}
+
 function exportModelToWorkspaceJson(model) {
   const dbMeta = resolveDbMeta(model.project?.database, model.project?.databaseVersion);
   const activeSubjectAreaId = "1";
@@ -2877,7 +2909,7 @@ export default function App() {
   }
 
   function handleAddEntity() {
-    const entityId = `entity-${Date.now()}`;
+    const [entityId, fieldId] = getNextNumericWorkspaceIds(model, 2);
     const newEntity = {
       id: entityId,
       name: "New Entity",
@@ -2889,7 +2921,7 @@ export default function App() {
       height: 120,
       fields: [
         {
-          id: `${entityId}-id`,
+          id: fieldId,
           kind: "PK",
           name: "Id",
           dataType: "uuid"
@@ -2915,7 +2947,7 @@ export default function App() {
   }
 
   function handleAddView() {
-    const entityId = `view-${Date.now()}`;
+    const [entityId, fieldId] = getNextNumericWorkspaceIds(model, 2);
     const newView = {
       id: entityId,
       name: "New View",
@@ -2928,7 +2960,7 @@ export default function App() {
       height: 120,
       fields: [
         {
-          id: `${entityId}-column`,
+          id: fieldId,
           kind: "COL",
           name: "Column1",
           dataType: "varchar(50)"
@@ -2954,7 +2986,7 @@ export default function App() {
   }
 
   function handleAddMaterializedView() {
-    const entityId = `cached-view-${Date.now()}`;
+    const [entityId, fieldId] = getNextNumericWorkspaceIds(model, 2);
     const newMaterializedView = {
       id: entityId,
       name: cachedViewUiName,
@@ -2967,7 +2999,7 @@ export default function App() {
       height: 120,
       fields: [
         {
-          id: `${entityId}-column`,
+          id: fieldId,
           kind: "COL",
           name: "Column1",
           dataType: "varchar(50)"
