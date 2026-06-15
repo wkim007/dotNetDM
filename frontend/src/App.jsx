@@ -1764,6 +1764,7 @@ export default function App() {
     isOpen: false,
     isConnecting: false,
     isDatabaseDialogOpen: false,
+    dialogStep: "databases",
     connectionString: "",
     availableDatabases: [],
     highlightedAvailableDatabaseNames: [],
@@ -1772,7 +1773,9 @@ export default function App() {
     highlightedSelectedDatabaseNames: [],
     isLoadingCollections: false,
     availableCollections: [],
-    selectedCollectionNames: []
+    selectedCollectionNames: [],
+    highlightedAvailableCollectionNames: [],
+    highlightedSelectedCollectionNames: []
   });
   const resizeState = useRef(null);
   const jsonFileInputRef = useRef(null);
@@ -1991,6 +1994,13 @@ export default function App() {
   );
   const reverseEngineeringSelectedDatabaseOptions = (reverseEngineering.availableDatabases ?? []).filter(
     (database) => reverseEngineeringSelectedDatabaseSet.has(database.name)
+  );
+  const reverseEngineeringSelectedCollectionSet = new Set(reverseEngineering.selectedCollectionNames ?? []);
+  const reverseEngineeringAvailableCollectionOptions = (reverseEngineering.availableCollections ?? []).filter(
+    (collection) => !reverseEngineeringSelectedCollectionSet.has(collection.name)
+  );
+  const reverseEngineeringSelectedCollectionOptions = (reverseEngineering.availableCollections ?? []).filter(
+    (collection) => reverseEngineeringSelectedCollectionSet.has(collection.name)
   );
 
   useEffect(() => {
@@ -3413,7 +3423,9 @@ export default function App() {
         ...current,
         selectedDatabaseName: value,
         availableCollections: [],
-        selectedCollectionNames: []
+        selectedCollectionNames: [],
+        highlightedAvailableCollectionNames: [],
+        highlightedSelectedCollectionNames: []
       }));
       return;
     }
@@ -3428,8 +3440,11 @@ export default function App() {
     setReverseEngineering((current) => ({
       ...current,
       isDatabaseDialogOpen: false,
+      dialogStep: "databases",
       highlightedAvailableDatabaseNames: [],
-      highlightedSelectedDatabaseNames: []
+      highlightedSelectedDatabaseNames: [],
+      highlightedAvailableCollectionNames: [],
+      highlightedSelectedCollectionNames: []
     }));
   }
 
@@ -3494,29 +3509,13 @@ export default function App() {
       return;
     }
 
-    if (selectedDatabaseNames.length === 1) {
-      const [selectedDatabaseName] = selectedDatabaseNames;
-      setReverseEngineering((current) => ({
-        ...current,
-        isDatabaseDialogOpen: false,
-        selectedDatabaseName,
-        highlightedAvailableDatabaseNames: [],
-        highlightedSelectedDatabaseNames: []
-      }));
-      await handleLoadReverseEngineeringCollections(selectedDatabaseName);
+    if (selectedDatabaseNames.length !== 1) {
+      setStatus("Select exactly one database to continue to the collections step.");
       return;
     }
 
-    setReverseEngineering((current) => ({
-      ...current,
-      isDatabaseDialogOpen: false,
-      selectedDatabaseName: "",
-      highlightedAvailableDatabaseNames: [],
-      highlightedSelectedDatabaseNames: [],
-      availableCollections: [],
-      selectedCollectionNames: []
-    }));
-    setStatus(`Selected ${selectedDatabaseNames.length} databases for reverse engineering.`);
+    const [selectedDatabaseName] = selectedDatabaseNames;
+    await handleLoadReverseEngineeringCollections(selectedDatabaseName);
   }
 
   async function handleConnectReverseEngineering() {
@@ -3555,13 +3554,16 @@ export default function App() {
         ...current,
         isConnecting: false,
         isDatabaseDialogOpen: true,
+        dialogStep: "databases",
         availableDatabases: data.databases ?? [],
         highlightedAvailableDatabaseNames: [],
         selectedDatabaseName: "",
         selectedDatabaseNames: [],
         highlightedSelectedDatabaseNames: [],
         availableCollections: [],
-        selectedCollectionNames: []
+        selectedCollectionNames: [],
+        highlightedAvailableCollectionNames: [],
+        highlightedSelectedCollectionNames: []
       }));
       setStatus(data.summary ?? "Connection verified.");
     } catch (error) {
@@ -3616,8 +3618,12 @@ export default function App() {
       setReverseEngineering((current) => ({
         ...current,
         isLoadingCollections: false,
+        dialogStep: "collections",
+        selectedDatabaseName,
         availableCollections: data.collections ?? [],
-        selectedCollectionNames: []
+        selectedCollectionNames: [],
+        highlightedAvailableCollectionNames: [],
+        highlightedSelectedCollectionNames: []
       }));
       setStatus(data.summary ?? `Loaded collections for ${selectedDatabaseName}.`);
     } catch (error) {
@@ -3631,6 +3637,68 @@ export default function App() {
           : "Collection loading failed. Verify the selected database and connection string."
       );
     }
+  }
+
+  function handleBackReverseEngineeringDialog() {
+    setReverseEngineering((current) => ({
+      ...current,
+      dialogStep: "databases",
+      highlightedAvailableCollectionNames: [],
+      highlightedSelectedCollectionNames: []
+    }));
+  }
+
+  function handleMoveReverseEngineeringCollections(direction) {
+    setReverseEngineering((current) => {
+      const availableNames = (current.availableCollections ?? []).map((collection) => collection.name);
+      const selectedNames = current.selectedCollectionNames ?? [];
+      const availableSet = new Set(availableNames);
+      const selectedSet = new Set(selectedNames);
+
+      if (direction === "add") {
+        const nextSelectedNames = [
+          ...selectedNames,
+          ...(current.highlightedAvailableCollectionNames ?? []).filter((name) => availableSet.has(name) && !selectedSet.has(name))
+        ];
+
+        return {
+          ...current,
+          selectedCollectionNames: nextSelectedNames,
+          highlightedAvailableCollectionNames: [],
+          highlightedSelectedCollectionNames: []
+        };
+      }
+
+      if (direction === "addAll") {
+        return {
+          ...current,
+          selectedCollectionNames: availableNames,
+          highlightedAvailableCollectionNames: [],
+          highlightedSelectedCollectionNames: []
+        };
+      }
+
+      if (direction === "remove") {
+        const highlightedSelectedSet = new Set(current.highlightedSelectedCollectionNames ?? []);
+        return {
+          ...current,
+          selectedCollectionNames: selectedNames.filter((name) => !highlightedSelectedSet.has(name)),
+          highlightedSelectedCollectionNames: [],
+          highlightedAvailableCollectionNames: []
+        };
+      }
+
+      if (direction === "removeAll") {
+        return {
+          ...current,
+          selectedCollectionNames: [],
+          highlightedSelectedCollectionNames: [],
+          highlightedAvailableCollectionNames: []
+        };
+      }
+
+      return current;
+    });
   }
 
   function handleToggleFieldExpansion(entityId, fieldId) {
@@ -3847,12 +3915,25 @@ export default function App() {
           >
             <div className="json-modal-header">
               <div>
-                <h2 id="reverse-engineering-dialog-title">Available Databases</h2>
+                <h2 id="reverse-engineering-dialog-title">
+                  {reverseEngineering.dialogStep === "collections" ? "Collections" : "Available Databases"}
+                </h2>
                 <p className="reverse-engineering-dialog-copy">
-                  Select one database to load collections, or choose multiple databases for later import.
+                  {reverseEngineering.dialogStep === "collections"
+                    ? `Select collections from ${reverseEngineering.selectedDatabaseName}.`
+                    : "Select one database to continue to the collections step."}
                 </p>
               </div>
               <div className="button-row">
+                {reverseEngineering.dialogStep === "collections" ? (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleBackReverseEngineeringDialog}
+                  >
+                    Back
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="secondary-button"
@@ -3860,89 +3941,174 @@ export default function App() {
                 >
                   Close
                 </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={handleConfirmReverseEngineeringDatabases}
-                  disabled={(reverseEngineering.selectedDatabaseNames ?? []).length === 0}
-                >
-                  Next
-                </button>
+                {reverseEngineering.dialogStep === "collections" ? (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleCloseReverseEngineeringDatabaseDialog}
+                  >
+                    Done
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleConfirmReverseEngineeringDatabases}
+                    disabled={(reverseEngineering.selectedDatabaseNames ?? []).length === 0}
+                  >
+                    Next
+                  </button>
+                )}
               </div>
             </div>
 
-            <div className="reverse-engineering-dialog-body">
-              <div className="reverse-engineering-column">
-                <label className="field-group">
-                  <span>Available Databases</span>
-                  <div className="reverse-engineering-dialog-list">
-                    {reverseEngineeringAvailableDatabaseOptions.map((database) => {
-                      const isHighlighted = (reverseEngineering.highlightedAvailableDatabaseNames ?? []).includes(database.name);
-                      return (
-                        <button
-                          key={database.name}
-                          type="button"
-                          className={`reverse-engineering-dialog-item ${isHighlighted ? "selected" : ""}`}
-                          onClick={() => {
-                            const currentHighlight = reverseEngineering.highlightedAvailableDatabaseNames ?? [];
-                            const nextHighlight = currentHighlight.includes(database.name)
-                              ? currentHighlight.filter((name) => name !== database.name)
-                              : [...currentHighlight, database.name];
-                            handleReverseEngineeringChange("highlightedAvailableDatabaseNames", nextHighlight);
-                          }}
-                        >
-                          <span>{database.name}</span>
-                          <span>{database.collectionCount} collections</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </label>
-              </div>
+            {reverseEngineering.dialogStep === "collections" ? (
+              <div className="reverse-engineering-dialog-body">
+                <div className="reverse-engineering-column">
+                  <label className="field-group">
+                    <span>Available Collections</span>
+                    <div className="reverse-engineering-dialog-list">
+                      {reverseEngineeringAvailableCollectionOptions.map((collection) => {
+                        const isHighlighted = (reverseEngineering.highlightedAvailableCollectionNames ?? []).includes(collection.name);
+                        return (
+                          <button
+                            key={collection.name}
+                            type="button"
+                            className={`reverse-engineering-dialog-item ${isHighlighted ? "selected" : ""}`}
+                            onClick={() => {
+                              const currentHighlight = reverseEngineering.highlightedAvailableCollectionNames ?? [];
+                              const nextHighlight = currentHighlight.includes(collection.name)
+                                ? currentHighlight.filter((name) => name !== collection.name)
+                                : [...currentHighlight, collection.name];
+                              handleReverseEngineeringChange("highlightedAvailableCollectionNames", nextHighlight);
+                            }}
+                          >
+                            <span>{collection.name}</span>
+                            <span>{collection.documentCount} documents</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </label>
+                </div>
 
-              <div className="reverse-engineering-transfer-buttons">
-                <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringDatabases("add")}>
-                  &gt;
-                </button>
-                <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringDatabases("addAll")}>
-                  &gt;&gt;
-                </button>
-                <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringDatabases("remove")}>
-                  &lt;
-                </button>
-                <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringDatabases("removeAll")}>
-                  &lt;&lt;
-                </button>
-              </div>
+                <div className="reverse-engineering-transfer-buttons">
+                  <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringCollections("add")}>
+                    &gt;
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringCollections("addAll")}>
+                    &gt;&gt;
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringCollections("remove")}>
+                    &lt;
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringCollections("removeAll")}>
+                    &lt;&lt;
+                  </button>
+                </div>
 
-              <div className="reverse-engineering-column">
-                <label className="field-group">
-                  <span>Selected Databases</span>
-                  <div className="reverse-engineering-dialog-list">
-                    {reverseEngineeringSelectedDatabaseOptions.map((database) => {
-                      const isHighlighted = (reverseEngineering.highlightedSelectedDatabaseNames ?? []).includes(database.name);
-                      return (
-                        <button
-                          key={database.name}
-                          type="button"
-                          className={`reverse-engineering-dialog-item ${isHighlighted ? "selected" : ""}`}
-                          onClick={() => {
-                            const currentHighlight = reverseEngineering.highlightedSelectedDatabaseNames ?? [];
-                            const nextHighlight = currentHighlight.includes(database.name)
-                              ? currentHighlight.filter((name) => name !== database.name)
-                              : [...currentHighlight, database.name];
-                            handleReverseEngineeringChange("highlightedSelectedDatabaseNames", nextHighlight);
-                          }}
-                        >
-                          <span>{database.name}</span>
-                          <span>{database.collectionCount} collections</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </label>
+                <div className="reverse-engineering-column">
+                  <label className="field-group">
+                    <span>Selected Collections</span>
+                    <div className="reverse-engineering-dialog-list">
+                      {reverseEngineeringSelectedCollectionOptions.map((collection) => {
+                        const isHighlighted = (reverseEngineering.highlightedSelectedCollectionNames ?? []).includes(collection.name);
+                        return (
+                          <button
+                            key={collection.name}
+                            type="button"
+                            className={`reverse-engineering-dialog-item ${isHighlighted ? "selected" : ""}`}
+                            onClick={() => {
+                              const currentHighlight = reverseEngineering.highlightedSelectedCollectionNames ?? [];
+                              const nextHighlight = currentHighlight.includes(collection.name)
+                                ? currentHighlight.filter((name) => name !== collection.name)
+                                : [...currentHighlight, collection.name];
+                              handleReverseEngineeringChange("highlightedSelectedCollectionNames", nextHighlight);
+                            }}
+                          >
+                            <span>{collection.name}</span>
+                            <span>{collection.documentCount} documents</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </label>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="reverse-engineering-dialog-body">
+                <div className="reverse-engineering-column">
+                  <label className="field-group">
+                    <span>Available Databases</span>
+                    <div className="reverse-engineering-dialog-list">
+                      {reverseEngineeringAvailableDatabaseOptions.map((database) => {
+                        const isHighlighted = (reverseEngineering.highlightedAvailableDatabaseNames ?? []).includes(database.name);
+                        return (
+                          <button
+                            key={database.name}
+                            type="button"
+                            className={`reverse-engineering-dialog-item ${isHighlighted ? "selected" : ""}`}
+                            onClick={() => {
+                              const currentHighlight = reverseEngineering.highlightedAvailableDatabaseNames ?? [];
+                              const nextHighlight = currentHighlight.includes(database.name)
+                                ? currentHighlight.filter((name) => name !== database.name)
+                                : [...currentHighlight, database.name];
+                              handleReverseEngineeringChange("highlightedAvailableDatabaseNames", nextHighlight);
+                            }}
+                          >
+                            <span>{database.name}</span>
+                            <span>{database.collectionCount} collections</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </label>
+                </div>
+
+                <div className="reverse-engineering-transfer-buttons">
+                  <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringDatabases("add")}>
+                    &gt;
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringDatabases("addAll")}>
+                    &gt;&gt;
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringDatabases("remove")}>
+                    &lt;
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringDatabases("removeAll")}>
+                    &lt;&lt;
+                  </button>
+                </div>
+
+                <div className="reverse-engineering-column">
+                  <label className="field-group">
+                    <span>Selected Databases</span>
+                    <div className="reverse-engineering-dialog-list">
+                      {reverseEngineeringSelectedDatabaseOptions.map((database) => {
+                        const isHighlighted = (reverseEngineering.highlightedSelectedDatabaseNames ?? []).includes(database.name);
+                        return (
+                          <button
+                            key={database.name}
+                            type="button"
+                            className={`reverse-engineering-dialog-item ${isHighlighted ? "selected" : ""}`}
+                            onClick={() => {
+                              const currentHighlight = reverseEngineering.highlightedSelectedDatabaseNames ?? [];
+                              const nextHighlight = currentHighlight.includes(database.name)
+                                ? currentHighlight.filter((name) => name !== database.name)
+                                : [...currentHighlight, database.name];
+                              handleReverseEngineeringChange("highlightedSelectedDatabaseNames", nextHighlight);
+                            }}
+                          >
+                            <span>{database.name}</span>
+                            <span>{database.collectionCount} collections</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
           </section>
         </div>
       ) : null}

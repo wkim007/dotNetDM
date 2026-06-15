@@ -51,8 +51,7 @@ export default function LeftSidebar({
   onViewJson,
   onToggleReverseEngineering,
   onReverseEngineeringChange,
-  onConnectReverseEngineering,
-  onLoadReverseEngineeringCollections
+  onConnectReverseEngineering
 }) {
   const showReverseEngineering = Boolean(reverseEngineering?.isOpen);
   const reverseEngineeringSupportsConnection =
@@ -156,31 +155,6 @@ export default function LeftSidebar({
               <p className="empty-state">Reverse engineering UI is currently implemented for MongoDB.</p>
             ) : null}
 
-            {reverseEngineering?.availableCollections?.length > 0 ? (
-              <div className="field-group">
-                <span>
-                  Collections in {reverseEngineering.selectedDatabaseName}
-                </span>
-                <div className="reverse-engineering-list">
-                  {reverseEngineering.availableCollections.map((collection) => (
-                    <label key={collection.name} className="reverse-engineering-list-item">
-                      <input
-                        type="checkbox"
-                        checked={(reverseEngineering.selectedCollectionNames ?? []).includes(collection.name)}
-                        onChange={(event) => {
-                          const currentSelection = reverseEngineering.selectedCollectionNames ?? [];
-                          const nextSelection = event.target.checked
-                            ? [...currentSelection, collection.name]
-                            : currentSelection.filter((name) => name !== collection.name);
-                          onReverseEngineeringChange("selectedCollectionNames", nextSelection);
-                        }}
-                      />
-                      <span>{collection.name} ({collection.documentCount} documents)</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </div>
         ) : null}
 
