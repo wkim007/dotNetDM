@@ -1,6 +1,7 @@
 using DataModeler.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseUrls("https://localhost:7248", "http://localhost:5248");
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

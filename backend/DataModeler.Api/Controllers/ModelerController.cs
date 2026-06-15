@@ -45,4 +45,40 @@ public class ModelerController : ControllerBase
         await _modelerService.SaveDiagramAsync(response.Diagram, cancellationToken);
         return Ok(response);
     }
+
+    [HttpPost("reverse-engineer/databases")]
+    public async Task<IActionResult> ReverseEngineerDatabases([FromBody] ReverseEngineeringRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _schemaIntrospectionService.DiscoverDatabasesAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (Exception exception)
+        {
+            return Problem(
+                detail: exception.Message,
+                title: "Reverse engineering connection failed",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    [HttpPost("reverse-engineer/collections")]
+    public async Task<IActionResult> ReverseEngineerCollections(
+        [FromBody] ReverseEngineeringCollectionsRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _schemaIntrospectionService.DiscoverCollectionsAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (Exception exception)
+        {
+            return Problem(
+                detail: exception.Message,
+                title: "Reverse engineering collection discovery failed",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
 }

@@ -34,6 +34,7 @@ export default function LeftSidebar({
   displayLevelOptions,
   viewModeOptions,
   jsonDraft,
+  reverseEngineering,
   onJsonDraftChange,
   onAutoLayout,
   onAddEntity,
@@ -47,8 +48,15 @@ export default function LeftSidebar({
   onExportJson,
   onImportJson,
   onClearJson,
-  onViewJson
+  onViewJson,
+  onToggleReverseEngineering,
+  onReverseEngineeringChange,
+  onConnectReverseEngineering,
+  onLoadReverseEngineeringCollections
 }) {
+  const showReverseEngineering = Boolean(reverseEngineering?.isOpen);
+  const reverseEngineeringSupportsConnection =
+    String(project.database ?? "").toLowerCase().includes("mongo");
   return (
     <aside className="left-sidebar">
       <h1>{project.name}</h1>
@@ -108,6 +116,73 @@ export default function LeftSidebar({
         <button type="button" className="secondary-button full-width-button" onClick={onAutoLayout}>
           Auto-layout
         </button>
+
+        <button
+          type="button"
+          className="secondary-button full-width-button"
+          onClick={onToggleReverseEngineering}
+        >
+          {showReverseEngineering ? "Hide Reverse Engineering" : "Reverse Engineering"}
+        </button>
+
+        {showReverseEngineering ? (
+          <div className="reverse-engineering-panel">
+            <div className="field-group">
+              <span>Provider</span>
+              <input value={project.database} readOnly />
+            </div>
+
+            <label className="field-group">
+              <span>Connection String</span>
+              <textarea
+                value={reverseEngineering?.connectionString ?? ""}
+                onChange={(event) => onReverseEngineeringChange("connectionString", event.target.value)}
+                placeholder="Enter connection string"
+              />
+            </label>
+
+            <div className="button-row">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={onConnectReverseEngineering}
+                disabled={!reverseEngineeringSupportsConnection || reverseEngineering?.isConnecting}
+              >
+                {reverseEngineering?.isConnecting ? "Connecting..." : "Connect"}
+              </button>
+            </div>
+
+            {!reverseEngineeringSupportsConnection ? (
+              <p className="empty-state">Reverse engineering UI is currently implemented for MongoDB.</p>
+            ) : null}
+
+            {reverseEngineering?.availableCollections?.length > 0 ? (
+              <div className="field-group">
+                <span>
+                  Collections in {reverseEngineering.selectedDatabaseName}
+                </span>
+                <div className="reverse-engineering-list">
+                  {reverseEngineering.availableCollections.map((collection) => (
+                    <label key={collection.name} className="reverse-engineering-list-item">
+                      <input
+                        type="checkbox"
+                        checked={(reverseEngineering.selectedCollectionNames ?? []).includes(collection.name)}
+                        onChange={(event) => {
+                          const currentSelection = reverseEngineering.selectedCollectionNames ?? [];
+                          const nextSelection = event.target.checked
+                            ? [...currentSelection, collection.name]
+                            : currentSelection.filter((name) => name !== collection.name);
+                          onReverseEngineeringChange("selectedCollectionNames", nextSelection);
+                        }}
+                      />
+                      <span>{collection.name} ({collection.documentCount} documents)</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <label className="field-group">
           <span>Definition</span>

@@ -81,3 +81,43 @@ public sealed class IntrospectionResponse
     public required string Summary { get; init; }
     public required ModelerDiagramDocument Diagram { get; init; }
 }
+
+public sealed class ReverseEngineeringRequest
+{
+    public required string Provider { get; init; }
+    public required string ConnectionString { get; init; }
+}
+
+public sealed class ReverseEngineeringDatabaseInfo
+{
+    public required string Name { get; init; }
+    public int CollectionCount { get; init; }
+}
+
+public sealed class ReverseEngineeringResponse
+{
+    public required string Provider { get; init; }
+    public required string Summary { get; init; }
+    public required IReadOnlyList<ReverseEngineeringDatabaseInfo> Databases { get; init; }
+}
+
+public sealed class ReverseEngineeringCollectionsRequest
+{
+    public required string Provider { get; init; }
+    public required string ConnectionString { get; init; }
+    public required string DatabaseName { get; init; }
+}
+
+public sealed class ReverseEngineeringCollectionInfo
+{
+    public required string Name { get; init; }
+    public long DocumentCount { get; init; }
+}
+
+public sealed class ReverseEngineeringCollectionsResponse
+{
+    public required string Provider { get; init; }
+    public required string DatabaseName { get; init; }
+    public required string Summary { get; init; }
+    public required IReadOnlyList<ReverseEngineeringCollectionInfo> Collections { get; init; }
+}

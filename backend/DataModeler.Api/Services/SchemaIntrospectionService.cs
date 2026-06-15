@@ -9,6 +9,10 @@ namespace DataModeler.Api.Services;
 public interface ISchemaIntrospectionService
 {
     Task<IntrospectionResponse> InspectAsync(IntrospectionRequest request, CancellationToken cancellationToken);
+    Task<ReverseEngineeringResponse> DiscoverDatabasesAsync(ReverseEngineeringRequest request, CancellationToken cancellationToken);
+    Task<ReverseEngineeringCollectionsResponse> DiscoverCollectionsAsync(
+        ReverseEngineeringCollectionsRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
@@ -23,6 +27,32 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
             "postgresql" => await InspectPostgreSqlAsync(request, cancellationToken),
             "mongodb" => await InspectMongoDbAsync(request, cancellationToken),
             _ => throw new InvalidOperationException($"Unsupported provider '{request.Provider}'.")
+        };
+    }
+
+    public async Task<ReverseEngineeringResponse> DiscoverDatabasesAsync(
+        ReverseEngineeringRequest request,
+        CancellationToken cancellationToken)
+    {
+        var provider = request.Provider.Trim().ToLowerInvariant();
+
+        return provider switch
+        {
+            "mongodb" => await DiscoverMongoDbDatabasesAsync(request, cancellationToken),
+            _ => throw new InvalidOperationException($"Reverse engineering is not yet supported for provider '{request.Provider}'.")
+        };
+    }
+
+    public async Task<ReverseEngineeringCollectionsResponse> DiscoverCollectionsAsync(
+        ReverseEngineeringCollectionsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var provider = request.Provider.Trim().ToLowerInvariant();
+
+        return provider switch
+        {
+            "mongodb" => await DiscoverMongoDbCollectionsAsync(request, cancellationToken),
+            _ => throw new InvalidOperationException($"Reverse engineering collection discovery is not yet supported for provider '{request.Provider}'.")
         };
     }
 
@@ -127,6 +157,72 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
                 Entities = entities,
                 Relationships = Array.Empty<RelationshipLink>()
             }
+        };
+    }
+
+    private static async Task<ReverseEngineeringResponse> DiscoverMongoDbDatabasesAsync(
+        ReverseEngineeringRequest request,
+        CancellationToken cancellationToken)
+    {
+        var client = new MongoClient(request.ConnectionString);
+        var databaseNames = await client.ListDatabaseNames().ToListAsync(cancellationToken);
+        var databases = new List<ReverseEngineeringDatabaseInfo>();
+
+        foreach (var databaseName in databaseNames)
+        {
+            var database = client.GetDatabase(databaseName);
+            var collectionCount = await database.ListCollectionNames().ToListAsync(cancellationToken);
+            databases.Add(new ReverseEngineeringDatabaseInfo
+            {
+                Name = databaseName,
+                CollectionCount = collectionCount.Count
+            });
+        }
+
+        return new ReverseEngineeringResponse
+        {
+            Provider = "mongodb",
+            Summary = $"MongoDB connection verified. Found {databases.Count} databases.",
+            Databases = databases
+                .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList()
+        };
+    }
+
+    private static async Task<ReverseEngineeringCollectionsResponse> DiscoverMongoDbCollectionsAsync(
+        ReverseEngineeringCollectionsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.DatabaseName))
+        {
+            throw new InvalidOperationException("A database name is required before loading collections.");
+        }
+
+        var client = new MongoClient(request.ConnectionString);
+        var database = client.GetDatabase(request.DatabaseName);
+        var collectionNames = await database.ListCollectionNames().ToListAsync(cancellationToken);
+        var collections = new List<ReverseEngineeringCollectionInfo>();
+
+        foreach (var collectionName in collectionNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase))
+        {
+            var collection = database.GetCollection<MongoDB.Bson.BsonDocument>(collectionName);
+            var documentCount = await collection.CountDocumentsAsync(
+                FilterDefinition<MongoDB.Bson.BsonDocument>.Empty,
+                cancellationToken: cancellationToken);
+
+            collections.Add(new ReverseEngineeringCollectionInfo
+            {
+                Name = collectionName,
+                DocumentCount = documentCount
+            });
+        }
+
+        return new ReverseEngineeringCollectionsResponse
+        {
+            Provider = "mongodb",
+            DatabaseName = request.DatabaseName,
+            Summary = $"Loaded {collections.Count} collections from '{request.DatabaseName}'.",
+            Collections = collections
         };
     }
 

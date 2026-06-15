@@ -1668,6 +1668,22 @@ function normalizeRelationship(relationship) {
   };
 }
 
+async function readErrorMessage(response, fallbackMessage) {
+  try {
+    const contentType = response.headers.get("content-type") ?? "";
+
+    if (contentType.includes("application/json")) {
+      const payload = await response.json();
+      return payload?.detail || payload?.title || payload?.message || fallbackMessage;
+    }
+
+    const text = await response.text();
+    return text.trim() || fallbackMessage;
+  } catch {
+    return fallbackMessage;
+  }
+}
+
 function normalizeModel(rawModel) {
   const baseModel = clone(rawModel ?? sampleModel);
 
@@ -1743,6 +1759,20 @@ export default function App() {
     provider: "postgresql",
     connectionString: "",
     databaseName: ""
+  });
+  const [reverseEngineering, setReverseEngineering] = useState({
+    isOpen: false,
+    isConnecting: false,
+    isDatabaseDialogOpen: false,
+    connectionString: "",
+    availableDatabases: [],
+    highlightedAvailableDatabaseNames: [],
+    selectedDatabaseName: "",
+    selectedDatabaseNames: [],
+    highlightedSelectedDatabaseNames: [],
+    isLoadingCollections: false,
+    availableCollections: [],
+    selectedCollectionNames: []
   });
   const resizeState = useRef(null);
   const jsonFileInputRef = useRef(null);
@@ -1955,6 +1985,13 @@ export default function App() {
       : ["redshift", "bigquery", "databricks", "hive"].includes(dbEngine)
         ? "CTAS"
         : "Materialized View";
+  const reverseEngineeringSelectedDatabaseSet = new Set(reverseEngineering.selectedDatabaseNames ?? []);
+  const reverseEngineeringAvailableDatabaseOptions = (reverseEngineering.availableDatabases ?? []).filter(
+    (database) => !reverseEngineeringSelectedDatabaseSet.has(database.name)
+  );
+  const reverseEngineeringSelectedDatabaseOptions = (reverseEngineering.availableDatabases ?? []).filter(
+    (database) => reverseEngineeringSelectedDatabaseSet.has(database.name)
+  );
 
   useEffect(() => {
     if (!linkDraft) {
@@ -3363,6 +3400,239 @@ export default function App() {
     document.body.classList.add("panel-resizing");
   }
 
+  function handleToggleReverseEngineering() {
+    setReverseEngineering((current) => ({
+      ...current,
+      isOpen: !current.isOpen
+    }));
+  }
+
+  function handleReverseEngineeringChange(field, value) {
+    if (field === "selectedDatabaseName") {
+      setReverseEngineering((current) => ({
+        ...current,
+        selectedDatabaseName: value,
+        availableCollections: [],
+        selectedCollectionNames: []
+      }));
+      return;
+    }
+
+    setReverseEngineering((current) => ({
+      ...current,
+      [field]: value
+    }));
+  }
+
+  function handleCloseReverseEngineeringDatabaseDialog() {
+    setReverseEngineering((current) => ({
+      ...current,
+      isDatabaseDialogOpen: false,
+      highlightedAvailableDatabaseNames: [],
+      highlightedSelectedDatabaseNames: []
+    }));
+  }
+
+  function handleMoveReverseEngineeringDatabases(direction) {
+    setReverseEngineering((current) => {
+      const availableNames = (current.availableDatabases ?? []).map((database) => database.name);
+      const selectedNames = current.selectedDatabaseNames ?? [];
+      const availableSet = new Set(availableNames);
+      const selectedSet = new Set(selectedNames);
+
+      if (direction === "add") {
+        const nextSelectedNames = [
+          ...selectedNames,
+          ...(current.highlightedAvailableDatabaseNames ?? []).filter((name) => availableSet.has(name) && !selectedSet.has(name))
+        ];
+
+        return {
+          ...current,
+          selectedDatabaseNames: nextSelectedNames,
+          highlightedAvailableDatabaseNames: [],
+          highlightedSelectedDatabaseNames: []
+        };
+      }
+
+      if (direction === "addAll") {
+        return {
+          ...current,
+          selectedDatabaseNames: availableNames,
+          highlightedAvailableDatabaseNames: [],
+          highlightedSelectedDatabaseNames: []
+        };
+      }
+
+      if (direction === "remove") {
+        const highlightedSelectedSet = new Set(current.highlightedSelectedDatabaseNames ?? []);
+        return {
+          ...current,
+          selectedDatabaseNames: selectedNames.filter((name) => !highlightedSelectedSet.has(name)),
+          highlightedSelectedDatabaseNames: [],
+          highlightedAvailableDatabaseNames: []
+        };
+      }
+
+      if (direction === "removeAll") {
+        return {
+          ...current,
+          selectedDatabaseNames: [],
+          highlightedSelectedDatabaseNames: [],
+          highlightedAvailableDatabaseNames: []
+        };
+      }
+
+      return current;
+    });
+  }
+
+  async function handleConfirmReverseEngineeringDatabases() {
+    const selectedDatabaseNames = reverseEngineering.selectedDatabaseNames ?? [];
+
+    if (selectedDatabaseNames.length === 0) {
+      setStatus("Select at least one database before continuing.");
+      return;
+    }
+
+    if (selectedDatabaseNames.length === 1) {
+      const [selectedDatabaseName] = selectedDatabaseNames;
+      setReverseEngineering((current) => ({
+        ...current,
+        isDatabaseDialogOpen: false,
+        selectedDatabaseName,
+        highlightedAvailableDatabaseNames: [],
+        highlightedSelectedDatabaseNames: []
+      }));
+      await handleLoadReverseEngineeringCollections(selectedDatabaseName);
+      return;
+    }
+
+    setReverseEngineering((current) => ({
+      ...current,
+      isDatabaseDialogOpen: false,
+      selectedDatabaseName: "",
+      highlightedAvailableDatabaseNames: [],
+      highlightedSelectedDatabaseNames: [],
+      availableCollections: [],
+      selectedCollectionNames: []
+    }));
+    setStatus(`Selected ${selectedDatabaseNames.length} databases for reverse engineering.`);
+  }
+
+  async function handleConnectReverseEngineering() {
+    const provider = normalizeDbEngine(model.project?.database);
+
+    if (!reverseEngineering.connectionString.trim()) {
+      setStatus("Enter a connection string before connecting.");
+      return;
+    }
+
+    setReverseEngineering((current) => ({
+      ...current,
+      isConnecting: true
+    }));
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/modeler/reverse-engineer/databases`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          provider,
+          connectionString: reverseEngineering.connectionString
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          await readErrorMessage(response, "Reverse engineering connection failed.")
+        );
+      }
+
+      const data = await response.json();
+      setReverseEngineering((current) => ({
+        ...current,
+        isConnecting: false,
+        isDatabaseDialogOpen: true,
+        availableDatabases: data.databases ?? [],
+        highlightedAvailableDatabaseNames: [],
+        selectedDatabaseName: "",
+        selectedDatabaseNames: [],
+        highlightedSelectedDatabaseNames: [],
+        availableCollections: [],
+        selectedCollectionNames: []
+      }));
+      setStatus(data.summary ?? "Connection verified.");
+    } catch (error) {
+      setReverseEngineering((current) => ({
+        ...current,
+        isConnecting: false
+      }));
+      setStatus(
+        error instanceof Error
+          ? `Reverse engineering connection failed: ${error.message}`
+          : "Reverse engineering connection failed. Verify the backend is running and the connection string is valid."
+      );
+    }
+  }
+
+  async function handleLoadReverseEngineeringCollections(databaseNameOverride = null) {
+    const provider = normalizeDbEngine(model.project?.database);
+    const selectedDatabaseName = String(
+      databaseNameOverride ?? reverseEngineering.selectedDatabaseName ?? ""
+    ).trim();
+
+    if (!selectedDatabaseName) {
+      setStatus("Select one database before loading collections.");
+      return;
+    }
+
+    setReverseEngineering((current) => ({
+      ...current,
+      isLoadingCollections: true
+    }));
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/modeler/reverse-engineer/collections`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          provider,
+          connectionString: reverseEngineering.connectionString,
+          databaseName: selectedDatabaseName
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          await readErrorMessage(response, "Reverse engineering collection discovery failed.")
+        );
+      }
+
+      const data = await response.json();
+      setReverseEngineering((current) => ({
+        ...current,
+        isLoadingCollections: false,
+        availableCollections: data.collections ?? [],
+        selectedCollectionNames: []
+      }));
+      setStatus(data.summary ?? `Loaded collections for ${selectedDatabaseName}.`);
+    } catch (error) {
+      setReverseEngineering((current) => ({
+        ...current,
+        isLoadingCollections: false
+      }));
+      setStatus(
+        error instanceof Error
+          ? `Collection loading failed: ${error.message}`
+          : "Collection loading failed. Verify the selected database and connection string."
+      );
+    }
+  }
+
   function handleToggleFieldExpansion(entityId, fieldId) {
     setExpandedFieldIds((current) => ({
       ...current,
@@ -3406,6 +3676,7 @@ export default function App() {
         displayLevelOptions={displayLevelOptions}
         viewModeOptions={VIEW_MODE_OPTIONS}
         jsonDraft={jsonDraft}
+        reverseEngineering={reverseEngineering}
         onJsonDraftChange={setJsonDraft}
         onAutoLayout={handleAutoLayout}
         onAddEntity={handleAddEntity}
@@ -3420,6 +3691,10 @@ export default function App() {
         onImportJson={handleImportJson}
         onClearJson={handleClearJson}
         onViewJson={handleViewJson}
+        onToggleReverseEngineering={handleToggleReverseEngineering}
+        onReverseEngineeringChange={handleReverseEngineeringChange}
+        onConnectReverseEngineering={handleConnectReverseEngineering}
+        onLoadReverseEngineeringCollections={handleLoadReverseEngineeringCollections}
       />
 
       {isDesktopLayout ? (
@@ -3552,6 +3827,121 @@ export default function App() {
 
             <div className="json-modal-body">
               <pre>{jsonDraft}</pre>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {reverseEngineering.isDatabaseDialogOpen ? (
+        <div
+          className="json-modal-backdrop"
+          onClick={handleCloseReverseEngineeringDatabaseDialog}
+          role="presentation"
+        >
+          <section
+            className="json-modal reverse-engineering-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reverse-engineering-dialog-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="json-modal-header">
+              <div>
+                <h2 id="reverse-engineering-dialog-title">Available Databases</h2>
+                <p className="reverse-engineering-dialog-copy">
+                  Select one database to load collections, or choose multiple databases for later import.
+                </p>
+              </div>
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleCloseReverseEngineeringDatabaseDialog}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleConfirmReverseEngineeringDatabases}
+                  disabled={(reverseEngineering.selectedDatabaseNames ?? []).length === 0}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+
+            <div className="reverse-engineering-dialog-body">
+              <div className="reverse-engineering-column">
+                <label className="field-group">
+                  <span>Available Databases</span>
+                  <div className="reverse-engineering-dialog-list">
+                    {reverseEngineeringAvailableDatabaseOptions.map((database) => {
+                      const isHighlighted = (reverseEngineering.highlightedAvailableDatabaseNames ?? []).includes(database.name);
+                      return (
+                        <button
+                          key={database.name}
+                          type="button"
+                          className={`reverse-engineering-dialog-item ${isHighlighted ? "selected" : ""}`}
+                          onClick={() => {
+                            const currentHighlight = reverseEngineering.highlightedAvailableDatabaseNames ?? [];
+                            const nextHighlight = currentHighlight.includes(database.name)
+                              ? currentHighlight.filter((name) => name !== database.name)
+                              : [...currentHighlight, database.name];
+                            handleReverseEngineeringChange("highlightedAvailableDatabaseNames", nextHighlight);
+                          }}
+                        >
+                          <span>{database.name}</span>
+                          <span>{database.collectionCount} collections</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </label>
+              </div>
+
+              <div className="reverse-engineering-transfer-buttons">
+                <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringDatabases("add")}>
+                  &gt;
+                </button>
+                <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringDatabases("addAll")}>
+                  &gt;&gt;
+                </button>
+                <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringDatabases("remove")}>
+                  &lt;
+                </button>
+                <button type="button" className="secondary-button" onClick={() => handleMoveReverseEngineeringDatabases("removeAll")}>
+                  &lt;&lt;
+                </button>
+              </div>
+
+              <div className="reverse-engineering-column">
+                <label className="field-group">
+                  <span>Selected Databases</span>
+                  <div className="reverse-engineering-dialog-list">
+                    {reverseEngineeringSelectedDatabaseOptions.map((database) => {
+                      const isHighlighted = (reverseEngineering.highlightedSelectedDatabaseNames ?? []).includes(database.name);
+                      return (
+                        <button
+                          key={database.name}
+                          type="button"
+                          className={`reverse-engineering-dialog-item ${isHighlighted ? "selected" : ""}`}
+                          onClick={() => {
+                            const currentHighlight = reverseEngineering.highlightedSelectedDatabaseNames ?? [];
+                            const nextHighlight = currentHighlight.includes(database.name)
+                              ? currentHighlight.filter((name) => name !== database.name)
+                              : [...currentHighlight, database.name];
+                            handleReverseEngineeringChange("highlightedSelectedDatabaseNames", nextHighlight);
+                          }}
+                        >
+                          <span>{database.name}</span>
+                          <span>{database.collectionCount} collections</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </label>
+              </div>
             </div>
           </section>
         </div>
