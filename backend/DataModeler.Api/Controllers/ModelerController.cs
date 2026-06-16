@@ -81,4 +81,23 @@ public class ModelerController : ControllerBase
                 statusCode: StatusCodes.Status400BadRequest);
         }
     }
+
+    [HttpPost("reverse-engineer/run")]
+    public async Task<IActionResult> ReverseEngineerRun(
+        [FromBody] ReverseEngineeringRunRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _schemaIntrospectionService.ReverseEngineerAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (Exception exception)
+        {
+            return Problem(
+                detail: exception.Message,
+                title: "Reverse engineering run failed",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
 }

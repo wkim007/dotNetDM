@@ -1302,6 +1302,8 @@ function exportModelToWorkspaceJson(model) {
         description: relationship.description ?? "relates_to",
         parent: String(relationship.sourceEntityId),
         child: String(relationship.targetEntityId),
+        parentAttribute: relationship.parentAttribute ?? "Entity header",
+        childAttribute: relationship.childAttribute ?? "Entity header",
         cardinality: relationship.cardinality ?? "1:N",
         relationshipType: relationshipTypeToValue(relationship.relationshipType),
         physicalOnly: false,
@@ -1568,6 +1570,8 @@ function importWorkspaceModel(payload) {
           name: relationship.name ?? getRelationshipName(relationship, source, target),
           physicalName: relationship.physicalName ?? relationship.name ?? relationship.id,
           description: relationship.description ?? relationship.comment ?? "relates_to",
+          parentAttribute: relationship.parentAttribute ?? "Entity header",
+          childAttribute: relationship.childAttribute ?? "Entity header",
           cardinality: relationship.cardinality ?? "1:N",
           relationshipType: relationship.relationshipType ?? "Non-Identifying",
           style: relationship.style ?? "solid"
@@ -1772,6 +1776,7 @@ export default function App() {
     selectedDatabaseNames: [],
     highlightedSelectedDatabaseNames: [],
     isLoadingCollections: false,
+    isRunning: false,
     availableCollections: [],
     selectedCollectionNames: [],
     highlightedAvailableCollectionNames: [],
@@ -3648,6 +3653,72 @@ export default function App() {
     }));
   }
 
+  async function handleRunReverseEngineering() {
+    const provider = normalizeDbEngine(model.project?.database);
+    const selectedCollectionNames = reverseEngineering.selectedCollectionNames ?? [];
+    const selectedDatabaseName = String(reverseEngineering.selectedDatabaseName ?? "").trim();
+
+    if (!selectedDatabaseName) {
+      setStatus("Select one database before running reverse engineering.");
+      return;
+    }
+
+    if (selectedCollectionNames.length === 0) {
+      setStatus("Select at least one collection before running reverse engineering.");
+      return;
+    }
+
+    setReverseEngineering((current) => ({
+      ...current,
+      isRunning: true
+    }));
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/modeler/reverse-engineer/run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          provider,
+          connectionString: reverseEngineering.connectionString,
+          databaseName: selectedDatabaseName,
+          collectionNames: selectedCollectionNames
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          await readErrorMessage(response, "Reverse engineering run failed.")
+        );
+      }
+
+      const data = await response.json();
+      importJsonText(data.modelJson, `${selectedDatabaseName} reverse engineering`);
+      setReverseEngineering((current) => ({
+        ...current,
+        isRunning: false,
+        isDatabaseDialogOpen: false,
+        dialogStep: "databases",
+        highlightedAvailableDatabaseNames: [],
+        highlightedSelectedDatabaseNames: [],
+        highlightedAvailableCollectionNames: [],
+        highlightedSelectedCollectionNames: []
+      }));
+      setStatus(data.summary ?? `Reverse engineered ${selectedCollectionNames.length} collections.`);
+    } catch (error) {
+      setReverseEngineering((current) => ({
+        ...current,
+        isRunning: false
+      }));
+      setStatus(
+        error instanceof Error
+          ? `Reverse engineering run failed: ${error.message}`
+          : "Reverse engineering run failed."
+      );
+    }
+  }
+
   function handleMoveReverseEngineeringCollections(direction) {
     setReverseEngineering((current) => {
       const availableNames = (current.availableCollections ?? []).map((collection) => collection.name);
@@ -3945,9 +4016,10 @@ export default function App() {
                   <button
                     type="button"
                     className="secondary-button"
-                    onClick={handleCloseReverseEngineeringDatabaseDialog}
+                    onClick={handleRunReverseEngineering}
+                    disabled={(reverseEngineering.selectedCollectionNames ?? []).length === 0 || reverseEngineering.isRunning}
                   >
-                    Done
+                    {reverseEngineering.isRunning ? "Running..." : "Run"}
                   </button>
                 ) : (
                   <button

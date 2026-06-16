@@ -121,3 +121,19 @@ public sealed class ReverseEngineeringCollectionsResponse
     public required string Summary { get; init; }
     public required IReadOnlyList<ReverseEngineeringCollectionInfo> Collections { get; init; }
 }
+
+public sealed class ReverseEngineeringRunRequest
+{
+    public required string Provider { get; init; }
+    public required string ConnectionString { get; init; }
+    public required string DatabaseName { get; init; }
+    public required IReadOnlyList<string> CollectionNames { get; init; }
+}
+
+public sealed class ReverseEngineeringRunResponse
+{
+    public required string Provider { get; init; }
+    public required string DatabaseName { get; init; }
+    public required string Summary { get; init; }
+    public required string ModelJson { get; init; }
+}
