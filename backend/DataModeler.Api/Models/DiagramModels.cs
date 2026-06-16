@@ -92,6 +92,7 @@ public sealed class ReverseEngineeringDatabaseInfo
 {
     public required string Name { get; init; }
     public int CollectionCount { get; init; }
+    public string? CollectionLabel { get; init; }
 }
 
 public sealed class ReverseEngineeringResponse
@@ -112,6 +113,7 @@ public sealed class ReverseEngineeringCollectionInfo
 {
     public required string Name { get; init; }
     public long DocumentCount { get; init; }
+    public string? DocumentLabel { get; init; }
 }
 
 public sealed class ReverseEngineeringCollectionsResponse

@@ -54,8 +54,11 @@ export default function LeftSidebar({
   onConnectReverseEngineering
 }) {
   const showReverseEngineering = Boolean(reverseEngineering?.isOpen);
+  const normalizedDatabase = String(project.database ?? "").toLowerCase();
   const reverseEngineeringSupportsConnection =
-    String(project.database ?? "").toLowerCase().includes("mongo");
+    normalizedDatabase.includes("mongo") ||
+    normalizedDatabase.includes("sql server") ||
+    normalizedDatabase.includes("mssql");
   return (
     <aside className="left-sidebar">
       <h1>{project.name}</h1>
@@ -152,7 +155,7 @@ export default function LeftSidebar({
             </div>
 
             {!reverseEngineeringSupportsConnection ? (
-              <p className="empty-state">Reverse engineering UI is currently implemented for MongoDB.</p>
+              <p className="empty-state">Reverse engineering UI is currently implemented for MongoDB and MS SQL Server.</p>
             ) : null}
 
           </div>

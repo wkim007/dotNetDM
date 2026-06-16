@@ -863,6 +863,30 @@ function normalizeDbEngine(databaseName) {
   return normalized || "postgresql";
 }
 
+function getReverseEngineeringLabels(provider) {
+  const normalized = normalizeDbEngine(provider);
+
+  if (normalized === "sqlserver") {
+    return {
+      databaseObjectLabel: "tables",
+      databaseObjectSingular: "table",
+      itemStepTitle: "Tables",
+      itemAvailableTitle: "Available Tables",
+      itemSelectedTitle: "Selected Tables",
+      itemCountLabel: "columns"
+    };
+  }
+
+  return {
+    databaseObjectLabel: "collections",
+    databaseObjectSingular: "collection",
+    itemStepTitle: "Collections",
+    itemAvailableTitle: "Available Collections",
+    itemSelectedTitle: "Selected Collections",
+    itemCountLabel: "documents"
+  };
+}
+
 function isDocumentDatabase(databaseName) {
   return ["mongodb", "couchbase", "json"].includes(normalizeDbEngine(databaseName));
 }
@@ -2007,6 +2031,8 @@ export default function App() {
   const reverseEngineeringSelectedCollectionOptions = (reverseEngineering.availableCollections ?? []).filter(
     (collection) => reverseEngineeringSelectedCollectionSet.has(collection.name)
   );
+  const reverseEngineeringProvider = normalizeDbEngine(model.project?.database);
+  const reverseEngineeringLabels = getReverseEngineeringLabels(reverseEngineeringProvider);
 
   useEffect(() => {
     if (!linkDraft) {
@@ -3508,6 +3534,7 @@ export default function App() {
 
   async function handleConfirmReverseEngineeringDatabases() {
     const selectedDatabaseNames = reverseEngineering.selectedDatabaseNames ?? [];
+    const labels = getReverseEngineeringLabels(normalizeDbEngine(model.project?.database));
 
     if (selectedDatabaseNames.length === 0) {
       setStatus("Select at least one database before continuing.");
@@ -3515,7 +3542,7 @@ export default function App() {
     }
 
     if (selectedDatabaseNames.length !== 1) {
-      setStatus("Select exactly one database to continue to the collections step.");
+      setStatus(`Select exactly one database to continue to the ${labels.itemStepTitle.toLowerCase()} step.`);
       return;
     }
 
@@ -3589,9 +3616,10 @@ export default function App() {
     const selectedDatabaseName = String(
       databaseNameOverride ?? reverseEngineering.selectedDatabaseName ?? ""
     ).trim();
+    const labels = getReverseEngineeringLabels(provider);
 
     if (!selectedDatabaseName) {
-      setStatus("Select one database before loading collections.");
+      setStatus(`Select one database before loading ${labels.databaseObjectLabel}.`);
       return;
     }
 
@@ -3630,7 +3658,7 @@ export default function App() {
         highlightedAvailableCollectionNames: [],
         highlightedSelectedCollectionNames: []
       }));
-      setStatus(data.summary ?? `Loaded collections for ${selectedDatabaseName}.`);
+      setStatus(data.summary ?? `Loaded ${labels.databaseObjectLabel} for ${selectedDatabaseName}.`);
     } catch (error) {
       setReverseEngineering((current) => ({
         ...current,
@@ -3638,8 +3666,8 @@ export default function App() {
       }));
       setStatus(
         error instanceof Error
-          ? `Collection loading failed: ${error.message}`
-          : "Collection loading failed. Verify the selected database and connection string."
+          ? `${labels.itemStepTitle} loading failed: ${error.message}`
+          : `${labels.itemStepTitle} loading failed. Verify the selected database and connection string.`
       );
     }
   }
@@ -3657,6 +3685,7 @@ export default function App() {
     const provider = normalizeDbEngine(model.project?.database);
     const selectedCollectionNames = reverseEngineering.selectedCollectionNames ?? [];
     const selectedDatabaseName = String(reverseEngineering.selectedDatabaseName ?? "").trim();
+    const labels = getReverseEngineeringLabels(provider);
 
     if (!selectedDatabaseName) {
       setStatus("Select one database before running reverse engineering.");
@@ -3664,7 +3693,7 @@ export default function App() {
     }
 
     if (selectedCollectionNames.length === 0) {
-      setStatus("Select at least one collection before running reverse engineering.");
+      setStatus(`Select at least one ${labels.databaseObjectSingular} before running reverse engineering.`);
       return;
     }
 
@@ -3705,7 +3734,9 @@ export default function App() {
         highlightedAvailableCollectionNames: [],
         highlightedSelectedCollectionNames: []
       }));
-      setStatus(data.summary ?? `Reverse engineered ${selectedCollectionNames.length} collections.`);
+      setStatus(
+        data.summary ?? `Reverse engineered ${selectedCollectionNames.length} ${labels.databaseObjectLabel}.`
+      );
     } catch (error) {
       setReverseEngineering((current) => ({
         ...current,
@@ -3987,12 +4018,12 @@ export default function App() {
             <div className="json-modal-header">
               <div>
                 <h2 id="reverse-engineering-dialog-title">
-                  {reverseEngineering.dialogStep === "collections" ? "Collections" : "Available Databases"}
+                  {reverseEngineering.dialogStep === "collections" ? reverseEngineeringLabels.itemStepTitle : "Available Databases"}
                 </h2>
                 <p className="reverse-engineering-dialog-copy">
                   {reverseEngineering.dialogStep === "collections"
-                    ? `Select collections from ${reverseEngineering.selectedDatabaseName}.`
-                    : "Select one database to continue to the collections step."}
+                    ? `Select ${reverseEngineeringLabels.databaseObjectLabel} from ${reverseEngineering.selectedDatabaseName}.`
+                    : `Select one database to continue to the ${reverseEngineeringLabels.itemStepTitle.toLowerCase()} step.`}
                 </p>
               </div>
               <div className="button-row">
@@ -4038,7 +4069,7 @@ export default function App() {
               <div className="reverse-engineering-dialog-body">
                 <div className="reverse-engineering-column">
                   <label className="field-group">
-                    <span>Available Collections</span>
+                    <span>{reverseEngineeringLabels.itemAvailableTitle}</span>
                     <div className="reverse-engineering-dialog-list">
                       {reverseEngineeringAvailableCollectionOptions.map((collection) => {
                         const isHighlighted = (reverseEngineering.highlightedAvailableCollectionNames ?? []).includes(collection.name);
@@ -4056,7 +4087,7 @@ export default function App() {
                             }}
                           >
                             <span>{collection.name}</span>
-                            <span>{collection.documentCount} documents</span>
+                            <span>{collection.documentCount} {collection.documentLabel ?? reverseEngineeringLabels.itemCountLabel}</span>
                           </button>
                         );
                       })}
@@ -4081,7 +4112,7 @@ export default function App() {
 
                 <div className="reverse-engineering-column">
                   <label className="field-group">
-                    <span>Selected Collections</span>
+                    <span>{reverseEngineeringLabels.itemSelectedTitle}</span>
                     <div className="reverse-engineering-dialog-list">
                       {reverseEngineeringSelectedCollectionOptions.map((collection) => {
                         const isHighlighted = (reverseEngineering.highlightedSelectedCollectionNames ?? []).includes(collection.name);
@@ -4099,7 +4130,7 @@ export default function App() {
                             }}
                           >
                             <span>{collection.name}</span>
-                            <span>{collection.documentCount} documents</span>
+                            <span>{collection.documentCount} {collection.documentLabel ?? reverseEngineeringLabels.itemCountLabel}</span>
                           </button>
                         );
                       })}
@@ -4129,7 +4160,7 @@ export default function App() {
                             }}
                           >
                             <span>{database.name}</span>
-                            <span>{database.collectionCount} collections</span>
+                            <span>{database.collectionCount} {database.collectionLabel ?? reverseEngineeringLabels.databaseObjectLabel}</span>
                           </button>
                         );
                       })}
@@ -4172,7 +4203,7 @@ export default function App() {
                             }}
                           >
                             <span>{database.name}</span>
-                            <span>{database.collectionCount} collections</span>
+                            <span>{database.collectionCount} {database.collectionLabel ?? reverseEngineeringLabels.databaseObjectLabel}</span>
                           </button>
                         );
                       })}

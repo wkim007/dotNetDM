@@ -43,6 +43,7 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
 
         return provider switch
         {
+            "sqlserver" => await DiscoverSqlServerDatabasesAsync(request, cancellationToken),
             "mongodb" => await DiscoverMongoDbDatabasesAsync(request, cancellationToken),
             _ => throw new InvalidOperationException($"Reverse engineering is not yet supported for provider '{request.Provider}'.")
         };
@@ -56,6 +57,7 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
 
         return provider switch
         {
+            "sqlserver" => await DiscoverSqlServerTablesAsync(request, cancellationToken),
             "mongodb" => await DiscoverMongoDbCollectionsAsync(request, cancellationToken),
             _ => throw new InvalidOperationException($"Reverse engineering collection discovery is not yet supported for provider '{request.Provider}'.")
         };
@@ -69,6 +71,7 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
 
         return provider switch
         {
+            "sqlserver" => await ReverseEngineerSqlServerAsync(request, cancellationToken),
             "mongodb" => await ReverseEngineerMongoDbAsync(request, cancellationToken),
             _ => throw new InvalidOperationException($"Reverse engineering run is not yet supported for provider '{request.Provider}'.")
         };
@@ -193,7 +196,8 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
             databases.Add(new ReverseEngineeringDatabaseInfo
             {
                 Name = databaseName,
-                CollectionCount = collectionCount.Count
+                CollectionCount = collectionCount.Count,
+                CollectionLabel = "collections"
             });
         }
 
@@ -204,6 +208,55 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
             Databases = databases
                 .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList()
+        };
+    }
+
+    private static async Task<ReverseEngineeringResponse> DiscoverSqlServerDatabasesAsync(
+        ReverseEngineeringRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(BuildSqlServerConnectionString(request.ConnectionString, "master"));
+        await connection.OpenAsync(cancellationToken);
+
+        var databases = new List<ReverseEngineeringDatabaseInfo>();
+        const string sql = """
+            SELECT d.name,
+                   COUNT(t.object_id) AS table_count
+            FROM sys.databases d
+            LEFT JOIN sys.tables t
+                ON d.database_id > 4
+               AND t.is_ms_shipped = 0
+               AND t.type = 'U'
+               AND t.object_id IN (
+                    SELECT object_id
+                    FROM sys.tables
+               )
+            WHERE d.state = 0
+              AND d.database_id > 4
+            GROUP BY d.name
+            ORDER BY d.name;
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var databaseName = reader.GetString(0);
+            var tableCount = await CountSqlServerTablesAsync(request.ConnectionString, databaseName, cancellationToken);
+            databases.Add(new ReverseEngineeringDatabaseInfo
+            {
+                Name = databaseName,
+                CollectionCount = tableCount,
+                CollectionLabel = "tables"
+            });
+        }
+
+        return new ReverseEngineeringResponse
+        {
+            Provider = "sqlserver",
+            Summary = $"SQL Server connection verified. Found {databases.Count} databases.",
+            Databases = databases
         };
     }
 
@@ -231,7 +284,8 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
             collections.Add(new ReverseEngineeringCollectionInfo
             {
                 Name = collectionName,
-                DocumentCount = documentCount
+                DocumentCount = documentCount,
+                DocumentLabel = "documents"
             });
         }
 
@@ -240,6 +294,58 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
             Provider = "mongodb",
             DatabaseName = request.DatabaseName,
             Summary = $"Loaded {collections.Count} collections from '{request.DatabaseName}'.",
+            Collections = collections
+        };
+    }
+
+    private static async Task<ReverseEngineeringCollectionsResponse> DiscoverSqlServerTablesAsync(
+        ReverseEngineeringCollectionsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.DatabaseName))
+        {
+            throw new InvalidOperationException("A database name is required before loading tables.");
+        }
+
+        await using var connection = new SqlConnection(BuildSqlServerConnectionString(request.ConnectionString, request.DatabaseName));
+        await connection.OpenAsync(cancellationToken);
+
+        const string sql = """
+            SELECT t.TABLE_SCHEMA,
+                   t.TABLE_NAME,
+                   COUNT(c.COLUMN_NAME) AS column_count
+            FROM INFORMATION_SCHEMA.TABLES t
+            LEFT JOIN INFORMATION_SCHEMA.COLUMNS c
+              ON c.TABLE_SCHEMA = t.TABLE_SCHEMA
+             AND c.TABLE_NAME = t.TABLE_NAME
+            WHERE t.TABLE_TYPE = 'BASE TABLE'
+              AND t.TABLE_SCHEMA NOT IN ('sys', 'INFORMATION_SCHEMA')
+            GROUP BY t.TABLE_SCHEMA, t.TABLE_NAME
+            ORDER BY t.TABLE_SCHEMA, t.TABLE_NAME;
+            """;
+
+        var collections = new List<ReverseEngineeringCollectionInfo>();
+        await using var command = new SqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var schema = reader.GetString(0);
+            var table = reader.GetString(1);
+            var columnCount = reader.GetInt32(2);
+            collections.Add(new ReverseEngineeringCollectionInfo
+            {
+                Name = $"{schema}.{table}",
+                DocumentCount = columnCount,
+                DocumentLabel = "columns"
+            });
+        }
+
+        return new ReverseEngineeringCollectionsResponse
+        {
+            Provider = "sqlserver",
+            DatabaseName = request.DatabaseName,
+            Summary = $"Loaded {collections.Count} tables from '{request.DatabaseName}'.",
             Collections = collections
         };
     }
@@ -433,6 +539,202 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
         };
     }
 
+    private static async Task<ReverseEngineeringRunResponse> ReverseEngineerSqlServerAsync(
+        ReverseEngineeringRunRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.DatabaseName))
+        {
+            throw new InvalidOperationException("A database name is required before running reverse engineering.");
+        }
+
+        var selectedTableKeys = request.CollectionNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(ParseSqlServerTableKey)
+            .Distinct()
+            .OrderBy(item => item.Schema, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (selectedTableKeys.Count == 0)
+        {
+            throw new InvalidOperationException("Select at least one table before running reverse engineering.");
+        }
+
+        await using var connection = new SqlConnection(BuildSqlServerConnectionString(request.ConnectionString, request.DatabaseName));
+        await connection.OpenAsync(cancellationToken);
+
+        var idAllocator = new SequentialIdAllocator();
+        var entityPayloads = new List<object>();
+        var entityShapePayloads = new List<object>();
+        var entityIdsByTableKey = new Dictionary<SqlServerTableKey, string>();
+        var tableKeysByEntityId = new Dictionary<string, SqlServerTableKey>();
+
+        foreach (var tableKey in selectedTableKeys)
+        {
+            var entityId = idAllocator.Next();
+            entityIdsByTableKey[tableKey] = entityId;
+            tableKeysByEntityId[entityId] = tableKey;
+        }
+
+        var foreignKeys = await LoadSqlServerForeignKeysAsync(connection, cancellationToken);
+        var selectedTableKeySet = selectedTableKeys.ToHashSet();
+        var includedForeignKeys = foreignKeys
+            .Where(foreignKey =>
+                selectedTableKeySet.Contains(foreignKey.ParentTable) &&
+                selectedTableKeySet.Contains(foreignKey.ChildTable))
+            .ToList();
+
+        var relationshipRefsByEntityId = entityIdsByTableKey.Values.ToDictionary(
+            entityId => entityId,
+            _ => new RelationshipRefs());
+        var relationshipPayloads = new List<object>();
+        var relationshipShapePayloads = new List<object>();
+
+        foreach (var foreignKey in includedForeignKeys)
+        {
+            var relationshipId = idAllocator.Next();
+            relationshipPayloads.Add(new
+            {
+                id = relationshipId,
+                name = foreignKey.Name,
+                physicalName = foreignKey.Name,
+                definition = "",
+                comment = "",
+                description = $"References {foreignKey.ParentTable.Schema}.{foreignKey.ParentTable.Name}",
+                parent = entityIdsByTableKey[foreignKey.ParentTable],
+                child = entityIdsByTableKey[foreignKey.ChildTable],
+                parentAttribute = foreignKey.ParentColumn,
+                childAttribute = foreignKey.ChildColumn,
+                cardinality = "1:N",
+                relationshipType = "7",
+                physicalOnly = false,
+                logicalOnly = false,
+                parentToChildVerbPhrase = "",
+                childToParentVerbPhrase = ""
+            });
+            relationshipShapePayloads.Add(new
+            {
+                id = relationshipId,
+                name = foreignKey.Name,
+                physicalName = foreignKey.Name
+            });
+
+            relationshipRefsByEntityId[entityIdsByTableKey[foreignKey.ParentTable]].ChildIds.Add(relationshipId);
+            relationshipRefsByEntityId[entityIdsByTableKey[foreignKey.ChildTable]].ParentIds.Add(relationshipId);
+        }
+
+        for (var index = 0; index < selectedTableKeys.Count; index++)
+        {
+            var tableKey = selectedTableKeys[index];
+            var entityId = entityIdsByTableKey[tableKey];
+            var columns = await LoadSqlServerTableColumnsAsync(connection, tableKey, cancellationToken);
+            var refs = relationshipRefsByEntityId[entityId];
+
+            entityPayloads.Add(new
+            {
+                id = entityId,
+                name = tableKey.Name,
+                physicalName = $"{tableKey.Schema}.{tableKey.Name}",
+                definition = "",
+                comment = "",
+                physicalOnly = false,
+                logicalOnly = false,
+                props = new
+                {
+                    pSchemaRef = tableKey.Schema,
+                    pParentRelationshipsRef = refs.ParentIds,
+                    pChildRelationshipsRef = refs.ChildIds
+                },
+                attributes = columns,
+                indexes = Array.Empty<object>()
+            });
+
+            entityShapePayloads.Add(new
+            {
+                id = entityId,
+                name = tableKey.Name,
+                physicalName = $"{tableKey.Schema}.{tableKey.Name}",
+                displayLevelLogical = "-1",
+                displayLevelPhysical = "-1",
+                x = 160 + (index % 3) * 340,
+                y = 120 + (index / 3) * 260,
+                width = 280,
+                height = 0
+            });
+        }
+
+        var workspacePayload = new
+        {
+            meta = new
+            {
+                db = "1075859016",
+                dbMajorVersion = await LoadSqlServerMajorVersionAsync(connection, cancellationToken),
+                dbMinorVersion = "0",
+                modelType = "3",
+                viewMode = "physical",
+                activeSubjectAreaId = "1",
+                activeDiagramId = "1",
+                nextDiagramSeq = 2,
+                nextSubjectAreaSeq = 2
+            },
+            workspace = new
+            {
+                entities = entityPayloads,
+                views = Array.Empty<object>(),
+                cachedViews = Array.Empty<object>(),
+                relationships = relationshipPayloads,
+                schemas = selectedTableKeys
+                    .Select(tableKey => tableKey.Schema)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(schema => new { id = schema, name = schema, comment = "" })
+                    .ToList(),
+                databases = Array.Empty<object>(),
+                catalogs = Array.Empty<object>(),
+                subjectAreas = new[]
+                {
+                    new
+                    {
+                        id = "1",
+                        name = "<model>",
+                        locked = true,
+                        diagrams = new[]
+                        {
+                            new
+                            {
+                                id = "1",
+                                name = "ER_Diagram_1",
+                                definition = "",
+                                displayLevelLogical = "1",
+                                displayLevelPhysical = "1",
+                                modelShapes = new
+                                {
+                                    entities = entityShapePayloads,
+                                    views = Array.Empty<object>(),
+                                    cachedViews = Array.Empty<object>(),
+                                    relationships = relationshipShapePayloads
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        return new ReverseEngineeringRunResponse
+        {
+            Provider = "sqlserver",
+            DatabaseName = request.DatabaseName,
+            Summary = $"Reverse engineered {selectedTableKeys.Count} tables from '{request.DatabaseName}'.",
+            ModelJson = JsonSerializer.Serialize(
+                workspacePayload,
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                })
+        };
+    }
+
     private static async Task<IntrospectionResponse> BuildRelationalResponseAsync(
         string provider,
         string summary,
@@ -563,6 +865,217 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
                 .Replace("_", " ")
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Select(part => char.ToUpperInvariant(part[0]) + part[1..]));
+    }
+
+    private static string BuildSqlServerConnectionString(string connectionString, string databaseName)
+    {
+        var builder = new SqlConnectionStringBuilder(connectionString)
+        {
+            InitialCatalog = databaseName
+        };
+
+        return builder.ConnectionString;
+    }
+
+    private static async Task<int> CountSqlServerTablesAsync(
+        string connectionString,
+        string databaseName,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(BuildSqlServerConnectionString(connectionString, databaseName));
+        await connection.OpenAsync(cancellationToken);
+
+        const string sql = """
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_TYPE = 'BASE TABLE'
+              AND TABLE_SCHEMA NOT IN ('sys', 'INFORMATION_SCHEMA');
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is int count ? count : Convert.ToInt32(result);
+    }
+
+    private static SqlServerTableKey ParseSqlServerTableKey(string value)
+    {
+        var trimmed = value.Trim();
+        var parts = trimmed.Split('.', 2, StringSplitOptions.TrimEntries);
+        return parts.Length == 2
+            ? new SqlServerTableKey(parts[0], parts[1])
+            : new SqlServerTableKey("dbo", trimmed);
+    }
+
+    private static async Task<string> LoadSqlServerMajorVersionAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        const string sql = "SELECT CAST(SERVERPROPERTY('ProductMajorVersion') AS nvarchar(20));";
+        await using var command = new SqlCommand(sql, connection);
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToString(value) ?? "1";
+    }
+
+    private static async Task<IReadOnlyList<object>> LoadSqlServerTableColumnsAsync(
+        SqlConnection connection,
+        SqlServerTableKey tableKey,
+        CancellationToken cancellationToken)
+    {
+        var primaryKeyColumns = await LoadSqlServerKeyColumnsAsync(connection, tableKey, "PRIMARY KEY", cancellationToken);
+        var foreignKeyColumns = await LoadSqlServerKeyColumnsAsync(connection, tableKey, "FOREIGN KEY", cancellationToken);
+
+        const string sql = """
+            SELECT COLUMN_NAME,
+                   DATA_TYPE,
+                   CHARACTER_MAXIMUM_LENGTH,
+                   NUMERIC_PRECISION,
+                   NUMERIC_SCALE,
+                   IS_NULLABLE
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = @schema
+              AND TABLE_NAME = @table
+            ORDER BY ORDINAL_POSITION;
+            """;
+
+        var attributes = new List<object>();
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@schema", tableKey.Schema);
+        command.Parameters.AddWithValue("@table", tableKey.Name);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var columnName = reader.GetString(0);
+            var dataType = FormatSqlServerDatatype(
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetInt32(2),
+                reader.IsDBNull(3) ? null : Convert.ToInt32(reader.GetByte(3)),
+                reader.IsDBNull(4) ? null : Convert.ToInt32(reader.GetInt32(4)));
+
+            attributes.Add(new
+            {
+                id = $"{tableKey.Schema}.{tableKey.Name}.{columnName}",
+                name = columnName,
+                physicalName = columnName,
+                definition = "",
+                datatype = dataType,
+                comment = "",
+                isPrimary = primaryKeyColumns.Contains(columnName),
+                isFK = foreignKeyColumns.Contains(columnName),
+                isNullable = string.Equals(reader.GetString(5), "YES", StringComparison.OrdinalIgnoreCase),
+                physicalOnly = false,
+                logicalOnly = false
+            });
+        }
+
+        return attributes
+            .OrderBy(item => GetSqlAttributeOrder(item))
+            .ToList();
+    }
+
+    private static int GetSqlAttributeOrder(object attribute)
+    {
+        var isPrimary = (bool)attribute.GetType().GetProperty("isPrimary")!.GetValue(attribute)!;
+        return isPrimary ? 0 : 1;
+    }
+
+    private static async Task<HashSet<string>> LoadSqlServerKeyColumnsAsync(
+        SqlConnection connection,
+        SqlServerTableKey tableKey,
+        string constraintType,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT kcu.COLUMN_NAME
+            FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+                ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
+               AND tc.TABLE_SCHEMA = kcu.TABLE_SCHEMA
+               AND tc.TABLE_NAME = kcu.TABLE_NAME
+            WHERE tc.TABLE_SCHEMA = @schema
+              AND tc.TABLE_NAME = @table
+              AND tc.CONSTRAINT_TYPE = @constraintType;
+            """;
+
+        var columnNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@schema", tableKey.Schema);
+        command.Parameters.AddWithValue("@table", tableKey.Name);
+        command.Parameters.AddWithValue("@constraintType", constraintType);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            columnNames.Add(reader.GetString(0));
+        }
+
+        return columnNames;
+    }
+
+    private static string FormatSqlServerDatatype(
+        string dataType,
+        int? characterMaximumLength,
+        int? numericPrecision,
+        int? numericScale)
+    {
+        var normalized = dataType.ToLowerInvariant();
+        return normalized switch
+        {
+            "varchar" or "nvarchar" or "char" or "nchar" or "binary" or "varbinary"
+                when characterMaximumLength.HasValue
+                => $"{normalized}({(characterMaximumLength.Value == -1 ? "max" : characterMaximumLength.Value)})",
+            "decimal" or "numeric"
+                when numericPrecision.HasValue && numericScale.HasValue
+                => $"{normalized}({numericPrecision.Value},{numericScale.Value})",
+            _ => normalized
+        };
+    }
+
+    private static async Task<IReadOnlyList<SqlServerForeignKeyInfo>> LoadSqlServerForeignKeysAsync(
+        SqlConnection connection,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT fk.name,
+                   parent_schema.name AS parent_schema,
+                   parent_table.name AS parent_table,
+                   parent_column.name AS parent_column,
+                   child_schema.name AS child_schema,
+                   child_table.name AS child_table,
+                   child_column.name AS child_column
+            FROM sys.foreign_keys fk
+            INNER JOIN sys.foreign_key_columns fkc
+                ON fk.object_id = fkc.constraint_object_id
+            INNER JOIN sys.tables parent_table
+                ON fkc.referenced_object_id = parent_table.object_id
+            INNER JOIN sys.schemas parent_schema
+                ON parent_table.schema_id = parent_schema.schema_id
+            INNER JOIN sys.columns parent_column
+                ON parent_column.object_id = parent_table.object_id
+               AND parent_column.column_id = fkc.referenced_column_id
+            INNER JOIN sys.tables child_table
+                ON fkc.parent_object_id = child_table.object_id
+            INNER JOIN sys.schemas child_schema
+                ON child_table.schema_id = child_schema.schema_id
+            INNER JOIN sys.columns child_column
+                ON child_column.object_id = child_table.object_id
+               AND child_column.column_id = fkc.parent_column_id
+            ORDER BY fk.name;
+            """;
+
+        var foreignKeys = new List<SqlServerForeignKeyInfo>();
+        await using var command = new SqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            foreignKeys.Add(new SqlServerForeignKeyInfo(
+                reader.GetString(0),
+                new SqlServerTableKey(reader.GetString(1), reader.GetString(2)),
+                reader.GetString(3),
+                new SqlServerTableKey(reader.GetString(4), reader.GetString(5)),
+                reader.GetString(6)));
+        }
+
+        return foreignKeys;
     }
 
     private static IReadOnlyList<object> InferMongoDbAttributes(
@@ -917,6 +1430,15 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
         string ChildAttribute,
         string Cardinality,
         string Description);
+
+    private sealed record SqlServerTableKey(string Schema, string Name);
+
+    private sealed record SqlServerForeignKeyInfo(
+        string Name,
+        SqlServerTableKey ParentTable,
+        string ParentColumn,
+        SqlServerTableKey ChildTable,
+        string ChildColumn);
 
     private sealed class RelationshipRefs
     {
