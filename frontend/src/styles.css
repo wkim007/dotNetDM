@@ -401,6 +401,15 @@ body.panel-resizing {
   transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
+.diagram-box-item span:last-child {
+  display: block;
+  width: 100%;
+  font-size: 0.84rem;
+  line-height: 1.1;
+  word-break: break-word;
+  text-wrap: balance;
+}
+
 .diagram-box-item:hover,
 .diagram-box-item:focus-visible {
   background: #3a4f6d;
