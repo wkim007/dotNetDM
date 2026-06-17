@@ -55,10 +55,13 @@ export default function LeftSidebar({
 }) {
   const showReverseEngineering = Boolean(reverseEngineering?.isOpen);
   const normalizedDatabase = String(project.database ?? "").toLowerCase();
+  const reverseEngineeringProvider = normalizedDatabase.includes("sql server") || normalizedDatabase.includes("mssql")
+    ? "sqlserver"
+    : normalizedDatabase.includes("mongo")
+      ? "mongodb"
+      : "other";
   const reverseEngineeringSupportsConnection =
-    normalizedDatabase.includes("mongo") ||
-    normalizedDatabase.includes("sql server") ||
-    normalizedDatabase.includes("mssql");
+    reverseEngineeringProvider === "mongodb" || reverseEngineeringProvider === "sqlserver";
   return (
     <aside className="left-sidebar">
       <h1>{project.name}</h1>
@@ -134,14 +137,64 @@ export default function LeftSidebar({
               <input value={project.database} readOnly />
             </div>
 
-            <label className="field-group">
-              <span>Connection String</span>
-              <textarea
-                value={reverseEngineering?.connectionString ?? ""}
-                onChange={(event) => onReverseEngineeringChange("connectionString", event.target.value)}
-                placeholder="Enter connection string"
-              />
-            </label>
+            {reverseEngineeringProvider === "sqlserver" ? (
+              <>
+                <label className="field-group">
+                  <span>Server</span>
+                  <input
+                    value={reverseEngineering?.server ?? ""}
+                    onChange={(event) => onReverseEngineeringChange("server", event.target.value)}
+                    placeholder="localhost"
+                  />
+                </label>
+
+                <label className="field-group">
+                  <span>Database</span>
+                  <input
+                    value={reverseEngineering?.databaseNameInput ?? ""}
+                    onChange={(event) => onReverseEngineeringChange("databaseNameInput", event.target.value)}
+                    placeholder="master"
+                  />
+                </label>
+
+                <label className="field-group">
+                  <span>User Name</span>
+                  <input
+                    value={reverseEngineering?.userName ?? ""}
+                    onChange={(event) => onReverseEngineeringChange("userName", event.target.value)}
+                    placeholder="sa"
+                  />
+                </label>
+
+                <label className="field-group">
+                  <span>Password</span>
+                  <input
+                    type="password"
+                    value={reverseEngineering?.password ?? ""}
+                    onChange={(event) => onReverseEngineeringChange("password", event.target.value)}
+                    placeholder="Enter password"
+                  />
+                </label>
+
+                <label className="reverse-engineering-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(reverseEngineering?.useEncryptedConnection)}
+                    onChange={(event) => onReverseEngineeringChange("useEncryptedConnection", event.target.checked)}
+                  />
+                  <span>Use Encrypted Connection</span>
+                </label>
+              </>
+            ) : (
+              <label className="field-group">
+                <span>Connection String</span>
+                <textarea
+                  value={reverseEngineering?.connectionString ?? ""}
+                  onChange={(event) => onReverseEngineeringChange("connectionString", event.target.value)}
+                  placeholder="Enter connection string"
+                />
+              </label>
+            )}
 
             <div className="button-row">
               <button

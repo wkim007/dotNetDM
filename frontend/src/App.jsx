@@ -887,6 +887,29 @@ function getReverseEngineeringLabels(provider) {
   };
 }
 
+function buildReverseEngineeringConnectionString(provider, reverseEngineering) {
+  const normalized = normalizeDbEngine(provider);
+
+  if (normalized === "sqlserver") {
+    const server = String(reverseEngineering.server ?? "").trim();
+    const database = String(reverseEngineering.databaseNameInput ?? "").trim() || "master";
+    const userName = String(reverseEngineering.userName ?? "").trim();
+    const password = String(reverseEngineering.password ?? "");
+    const encrypt = Boolean(reverseEngineering.useEncryptedConnection);
+
+    return [
+      `Server=${server}`,
+      `Database=${database}`,
+      `User Id=${userName}`,
+      `Password=${password}`,
+      `TrustServerCertificate=True`,
+      `Encrypt=${encrypt ? "True" : "False"}`
+    ].join(";");
+  }
+
+  return String(reverseEngineering.connectionString ?? "").trim();
+}
+
 function isDocumentDatabase(databaseName) {
   return ["mongodb", "couchbase", "json"].includes(normalizeDbEngine(databaseName));
 }
@@ -1794,6 +1817,11 @@ export default function App() {
     isDatabaseDialogOpen: false,
     dialogStep: "databases",
     connectionString: "",
+    server: "",
+    databaseNameInput: "master",
+    userName: "",
+    password: "",
+    useEncryptedConnection: false,
     availableDatabases: [],
     highlightedAvailableDatabaseNames: [],
     selectedDatabaseName: "",
@@ -3552,8 +3580,24 @@ export default function App() {
 
   async function handleConnectReverseEngineering() {
     const provider = normalizeDbEngine(model.project?.database);
+    const connectionString = buildReverseEngineeringConnectionString(provider, reverseEngineering);
 
-    if (!reverseEngineering.connectionString.trim()) {
+    if (provider === "sqlserver") {
+      if (!String(reverseEngineering.server ?? "").trim()) {
+        setStatus("Enter a server name before connecting.");
+        return;
+      }
+
+      if (!String(reverseEngineering.userName ?? "").trim()) {
+        setStatus("Enter a user name before connecting.");
+        return;
+      }
+
+      if (!String(reverseEngineering.password ?? "").trim()) {
+        setStatus("Enter a password before connecting.");
+        return;
+      }
+    } else if (!connectionString) {
       setStatus("Enter a connection string before connecting.");
       return;
     }
@@ -3571,7 +3615,7 @@ export default function App() {
         },
         body: JSON.stringify({
           provider,
-          connectionString: reverseEngineering.connectionString
+          connectionString
         })
       });
 
@@ -3613,6 +3657,7 @@ export default function App() {
 
   async function handleLoadReverseEngineeringCollections(databaseNameOverride = null) {
     const provider = normalizeDbEngine(model.project?.database);
+    const connectionString = buildReverseEngineeringConnectionString(provider, reverseEngineering);
     const selectedDatabaseName = String(
       databaseNameOverride ?? reverseEngineering.selectedDatabaseName ?? ""
     ).trim();
@@ -3636,7 +3681,7 @@ export default function App() {
         },
         body: JSON.stringify({
           provider,
-          connectionString: reverseEngineering.connectionString,
+          connectionString,
           databaseName: selectedDatabaseName
         })
       });
@@ -3683,6 +3728,7 @@ export default function App() {
 
   async function handleRunReverseEngineering() {
     const provider = normalizeDbEngine(model.project?.database);
+    const connectionString = buildReverseEngineeringConnectionString(provider, reverseEngineering);
     const selectedCollectionNames = reverseEngineering.selectedCollectionNames ?? [];
     const selectedDatabaseName = String(reverseEngineering.selectedDatabaseName ?? "").trim();
     const labels = getReverseEngineeringLabels(provider);
@@ -3710,7 +3756,7 @@ export default function App() {
         },
         body: JSON.stringify({
           provider,
-          connectionString: reverseEngineering.connectionString,
+          connectionString,
           databaseName: selectedDatabaseName,
           collectionNames: selectedCollectionNames
         })
