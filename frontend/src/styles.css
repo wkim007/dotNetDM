@@ -711,6 +711,19 @@ body.panel-resizing {
   filter: drop-shadow(0 0 10px rgba(241, 223, 119, 0.18));
 }
 
+.diagram-link-child-marker {
+  fill: #93a6bd;
+  stroke: #d8e1ec;
+  stroke-width: 1.5px;
+  cursor: pointer;
+}
+
+.diagram-link-child-marker.selected {
+  fill: #f1df77;
+  stroke: #fff1a8;
+  filter: drop-shadow(0 0 10px rgba(241, 223, 119, 0.18));
+}
+
 .diagram-link-subcategory-marker {
   fill: rgba(12, 19, 30, 0.98);
   stroke: var(--accent);

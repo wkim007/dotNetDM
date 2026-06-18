@@ -253,11 +253,26 @@ function DiagramLink({
   const midY = (start.y + end.y) / 2 - 10;
   const markerX = ((start.x + controlOneX) / 2 + (controlTwoX + end.x) / 2) / 2;
   const markerY = ((start.y + controlOneY) / 2 + (controlTwoY + end.y) / 2) / 2;
+  const endVectorX = start.x - end.x;
+  const endVectorY = start.y - end.y;
+  const endVectorLength = Math.hypot(endVectorX, endVectorY) || 1;
+  const childMarkerOffset = 10;
+  const childMarkerX = end.x + (endVectorX / endVectorLength) * childMarkerOffset;
+  const childMarkerY = end.y + (endVectorY / endVectorLength) * childMarkerOffset;
+  const adjustedEndX = childMarkerX;
+  const adjustedEndY = childMarkerY;
+  const adjustedControlTwoX = horizontalFirst ? adjustedEndX - Math.sign(deltaX || 1) * curveStrength : adjustedEndX;
+  const adjustedControlTwoY = horizontalFirst ? adjustedEndY : adjustedEndY - Math.sign(deltaY || 1) * curveStrength;
+  const adjustedPath = `M ${start.x} ${start.y} C ${controlOneX} ${controlOneY}, ${adjustedControlTwoX} ${adjustedControlTwoY}, ${adjustedEndX} ${adjustedEndY}`;
+  const adjustedMidX = (start.x + adjustedEndX) / 2;
+  const adjustedMidY = (start.y + adjustedEndY) / 2 - 10;
+  const adjustedMarkerX = ((start.x + controlOneX) / 2 + (adjustedControlTwoX + adjustedEndX) / 2) / 2;
+  const adjustedMarkerY = ((start.y + controlOneY) / 2 + (adjustedControlTwoY + adjustedEndY) / 2) / 2;
 
   return (
     <>
       <path
-        d={path}
+        d={adjustedPath}
         className="diagram-link-hit-area"
         onClick={(event) => {
           event.stopPropagation();
@@ -265,8 +280,18 @@ function DiagramLink({
         }}
       />
       <path
-        d={path}
+        d={adjustedPath}
         className={`diagram-link ${lineVariant} ${isSelected ? "selected" : ""}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelectRelationship(relationship.id);
+        }}
+      />
+      <circle
+        cx={childMarkerX}
+        cy={childMarkerY}
+        r="5.5"
+        className={`diagram-link-child-marker ${isSelected ? "selected" : ""}`}
         onClick={(event) => {
           event.stopPropagation();
           onSelectRelationship(relationship.id);
@@ -274,8 +299,8 @@ function DiagramLink({
       />
       {lineVariant === "sub-category" ? (
         <circle
-          cx={markerX}
-          cy={markerY}
+          cx={adjustedMarkerX}
+          cy={adjustedMarkerY}
           r="9"
           className={`diagram-link-subcategory-marker ${isSelected ? "selected" : ""}`}
           onClick={(event) => {
@@ -284,7 +309,7 @@ function DiagramLink({
           }}
         />
       ) : null}
-      <text x={midX} y={midY} className="diagram-link-label">
+      <text x={adjustedMidX} y={adjustedMidY} className="diagram-link-label">
         {relationship.cardinality}
       </text>
       {isSelected ? (
@@ -295,8 +320,8 @@ function DiagramLink({
             onDeleteRelationship(relationship.id);
           }}
         >
-          <rect x={midX - 14} y={midY - 28} rx="8" ry="8" width="28" height="28" />
-          <text x={midX} y={midY - 14}>
+          <rect x={adjustedMidX - 14} y={adjustedMidY - 28} rx="8" ry="8" width="28" height="28" />
+          <text x={adjustedMidX} y={adjustedMidY - 14}>
             ×
           </text>
         </g>
