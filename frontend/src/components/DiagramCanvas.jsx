@@ -272,10 +272,11 @@ function DiagramLink({
   const midY = (start.y + end.y) / 2 - 10;
   const markerX = ((start.x + controlOneX) / 2 + (controlTwoX + end.x) / 2) / 2;
   const markerY = ((start.y + controlOneY) / 2 + (controlTwoY + end.y) / 2) / 2;
+  const normalizedNotationStyle = normalizeNotationStyle(notationStyle);
   const endVectorX = start.x - end.x;
   const endVectorY = start.y - end.y;
   const endVectorLength = Math.hypot(endVectorX, endVectorY) || 1;
-  const childMarkerOffset = 10;
+  const childMarkerOffset = normalizedNotationStyle === "information-engineering" ? 22 : 10;
   const childMarkerX = end.x + (endVectorX / endVectorLength) * childMarkerOffset;
   const childMarkerY = end.y + (endVectorY / endVectorLength) * childMarkerOffset;
   const adjustedEndX = childMarkerX;
@@ -287,33 +288,28 @@ function DiagramLink({
   const adjustedMidY = (start.y + adjustedEndY) / 2 - 10;
   const adjustedMarkerX = ((start.x + controlOneX) / 2 + (adjustedControlTwoX + adjustedEndX) / 2) / 2;
   const adjustedMarkerY = ((start.y + controlOneY) / 2 + (adjustedControlTwoY + adjustedEndY) / 2) / 2;
-  const normalizedNotationStyle = normalizeNotationStyle(notationStyle);
   const dirX = (end.x - start.x) / endVectorLength;
   const dirY = (end.y - start.y) / endVectorLength;
   const perpX = -dirY;
   const perpY = dirX;
+  const isMostlyVertical = Math.abs(dirY) >= Math.abs(dirX);
   const parentMarkerInset = 12;
   const parentMarkerCenterX = start.x + dirX * parentMarkerInset;
   const parentMarkerCenterY = start.y + dirY * parentMarkerInset;
-  const ieBarHalfLength = 7;
+  const ieBarHalfLength = isMostlyVertical ? 8 : 7;
   const ieBarStartX = parentMarkerCenterX - perpX * ieBarHalfLength;
   const ieBarStartY = parentMarkerCenterY - perpY * ieBarHalfLength;
   const ieBarEndX = parentMarkerCenterX + perpX * ieBarHalfLength;
   const ieBarEndY = parentMarkerCenterY + perpY * ieBarHalfLength;
-  const ieBackInset = 12;
-  const ieBackX = childMarkerX - dirX * ieBackInset;
-  const ieBackY = childMarkerY - dirY * ieBackInset;
-  const ieProngSpread = 8;
-  const ieCircleRadius = 5.5;
-  const ieCrowFootLength = 11;
-  const ieCrowFootStartX = childMarkerX + dirX * ieCircleRadius;
-  const ieCrowFootStartY = childMarkerY + dirY * ieCircleRadius;
-  const ieCrowFootCenterX = ieCrowFootStartX + dirX * ieCrowFootLength;
-  const ieCrowFootCenterY = ieCrowFootStartY + dirY * ieCrowFootLength;
-  const ieCrowFootLeftX = ieCrowFootCenterX + perpX * ieProngSpread;
-  const ieCrowFootLeftY = ieCrowFootCenterY + perpY * ieProngSpread;
-  const ieCrowFootRightX = ieCrowFootCenterX - perpX * ieProngSpread;
-  const ieCrowFootRightY = ieCrowFootCenterY - perpY * ieProngSpread;
+  const ieProngSpread = isMostlyVertical ? 7 : 5.5;
+  const ieCircleRadius = isMostlyVertical ? 5.5 : 5;
+  const ieStemLength = isMostlyVertical ? 10 : 8;
+  const ieStemEndX = childMarkerX + dirX * ieStemLength;
+  const ieStemEndY = childMarkerY + dirY * ieStemLength;
+  const ieCrowFootLeftX = ieStemEndX + perpX * ieProngSpread;
+  const ieCrowFootLeftY = ieStemEndY + perpY * ieProngSpread;
+  const ieCrowFootRightX = ieStemEndX - perpX * ieProngSpread;
+  const ieCrowFootRightY = ieStemEndY - perpY * ieProngSpread;
   const arrowLength = 16;
   const arrowSpread = 7;
   const arrowBaseX = childMarkerX - dirX * arrowLength;
@@ -354,27 +350,6 @@ function DiagramLink({
             y2={ieBarEndY}
             className="diagram-link-parent-bar"
           />
-          <line
-            x1={ieBackX + perpX * ieProngSpread}
-            y1={ieBackY + perpY * ieProngSpread}
-            x2={childMarkerX}
-            y2={childMarkerY}
-            className="diagram-link-ie-prong"
-          />
-          <line
-            x1={ieBackX}
-            y1={ieBackY}
-            x2={childMarkerX}
-            y2={childMarkerY}
-            className="diagram-link-ie-prong"
-          />
-          <line
-            x1={ieBackX - perpX * ieProngSpread}
-            y1={ieBackY - perpY * ieProngSpread}
-            x2={childMarkerX}
-            y2={childMarkerY}
-            className="diagram-link-ie-prong"
-          />
           <circle
             cx={childMarkerX}
             cy={childMarkerY}
@@ -382,22 +357,22 @@ function DiagramLink({
             className="diagram-link-ie-circle"
           />
           <line
-            x1={ieCrowFootStartX}
-            y1={ieCrowFootStartY}
-            x2={ieCrowFootCenterX}
-            y2={ieCrowFootCenterY}
+            x1={childMarkerX}
+            y1={childMarkerY}
+            x2={ieStemEndX}
+            y2={ieStemEndY}
             className="diagram-link-ie-prong"
           />
           <line
-            x1={ieCrowFootStartX}
-            y1={ieCrowFootStartY}
+            x1={childMarkerX}
+            y1={childMarkerY}
             x2={ieCrowFootLeftX}
             y2={ieCrowFootLeftY}
             className="diagram-link-ie-prong"
           />
           <line
-            x1={ieCrowFootStartX}
-            y1={ieCrowFootStartY}
+            x1={childMarkerX}
+            y1={childMarkerY}
             x2={ieCrowFootRightX}
             y2={ieCrowFootRightY}
             className="diagram-link-ie-prong"
