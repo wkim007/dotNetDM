@@ -235,6 +235,16 @@ body.panel-resizing {
   width: min(940px, calc(100vw - 48px));
 }
 
+.model-properties-modal {
+  width: min(620px, 100%);
+}
+
+.model-properties-body {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
 .reverse-engineering-dialog-copy {
   margin: 8px 0 0;
   color: var(--muted);
@@ -719,6 +729,48 @@ body.panel-resizing {
 }
 
 .diagram-link-child-marker.selected {
+  fill: #f1df77;
+  stroke: #fff1a8;
+  filter: drop-shadow(0 0 10px rgba(241, 223, 119, 0.18));
+}
+
+.diagram-link-notation {
+  cursor: pointer;
+}
+
+.diagram-link-parent-bar,
+.diagram-link-ie-prong {
+  fill: none;
+  stroke: #93a6bd;
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.diagram-link-ie-circle {
+  fill: rgba(12, 19, 30, 0.98);
+  stroke: #d8e1ec;
+  stroke-width: 1.8px;
+}
+
+.diagram-link-notation.selected .diagram-link-parent-bar,
+.diagram-link-notation.selected .diagram-link-ie-prong {
+  stroke: #f1df77;
+  filter: drop-shadow(0 0 10px rgba(241, 223, 119, 0.18));
+}
+
+.diagram-link-notation.selected .diagram-link-ie-circle {
+  stroke: #fff1a8;
+  filter: drop-shadow(0 0 10px rgba(241, 223, 119, 0.18));
+}
+
+.diagram-link-graph-arrow {
+  fill: #93a6bd;
+  stroke: #d8e1ec;
+  stroke-width: 1.2px;
+  stroke-linejoin: round;
+}
+
+.diagram-link-notation.selected .diagram-link-graph-arrow {
   fill: #f1df77;
   stroke: #fff1a8;
   filter: drop-shadow(0 0 10px rgba(241, 223, 119, 0.18));

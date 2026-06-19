@@ -36,6 +36,7 @@ export default function LeftSidebar({
   jsonDraft,
   reverseEngineering,
   onJsonDraftChange,
+  onOpenModelProperties,
   onAutoLayout,
   onAddEntity,
   onAddView,
@@ -117,6 +118,10 @@ export default function LeftSidebar({
             <span>Links</span>
           </div>
         </div>
+
+        <button type="button" className="secondary-button full-width-button" onClick={onOpenModelProperties}>
+          Model Properties
+        </button>
 
         <button type="button" className="secondary-button full-width-button" onClick={onAutoLayout}>
           Auto-layout

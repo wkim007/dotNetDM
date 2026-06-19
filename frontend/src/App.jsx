@@ -123,6 +123,8 @@ const DISPLAY_LEVEL_OPTIONS_LOGICAL = [
   { value: "5", label: "PrimaryKey" },
   { value: "7", label: "Icon" }
 ];
+const LOGICAL_NOTATION_OPTIONS = ["IDEF1x", "Information Engineering"];
+const PHYSICAL_NOTATION_OPTIONS = ["IDEF1x", "Information Engineering", "Data Warehousing", "Graph"];
 const GENERIC_TYPES = ["integer", "bigint", "numeric", "varchar", "text", "boolean", "date", "timestamp"];
 const ORACLE_TYPES = [
   "number",
@@ -670,6 +672,13 @@ function syncProjectWithActiveDiagram(modelLike, nextProject = modelLike.project
       diagramDefinition: activeDiagram?.definition ?? "",
       displayLevel: getDisplayLevelValueForViewMode(nextProject.viewMode, getDiagramDisplayLevelValue(activeDiagram, nextProject.viewMode))
     }
+  };
+}
+
+function mergeProjectDefaults(project) {
+  return {
+    ...sampleModel.project,
+    ...(project ?? {})
   };
 }
 
@@ -1647,6 +1656,8 @@ function importWorkspaceModel(payload) {
       viewMode,
       database: dbMeta.label,
       databaseVersion: `${dbMeta.major}${dbMeta.minor ? `.${dbMeta.minor}` : ""}`,
+      logicalNotation: sampleModel.project.logicalNotation,
+      physicalNotation: sampleModel.project.physicalNotation,
       schemas: (workspace?.schemas ?? []).map((schema) => ({
         id: String(schema.id),
         name: schema.name ?? "",
@@ -1737,14 +1748,16 @@ async function readErrorMessage(response, fallbackMessage) {
 
 function normalizeModel(rawModel) {
   const baseModel = clone(rawModel ?? sampleModel);
+  const normalizedProject = mergeProjectDefaults(baseModel.project);
 
   if (baseModel?.workspace?.subjectAreas || baseModel?.data?.subjectAreas || baseModel?.subjectAreas) {
-    return importWorkspaceModel(baseModel);
+    return syncProjectWithActiveDiagram(importWorkspaceModel(baseModel));
   }
 
   if (Array.isArray(baseModel.diagrams) && baseModel.diagrams.length > 0) {
     return syncProjectWithActiveDiagram({
       ...baseModel,
+      project: normalizedProject,
       diagrams: baseModel.diagrams.map((diagram) => ({
         ...diagram,
         displayLevelLogical: String(
@@ -1764,7 +1777,7 @@ function normalizeModel(rawModel) {
   const diagramId = "er-diagram-1";
 
   return {
-    project: baseModel.project ?? sampleModel.project,
+    project: normalizedProject,
     activeDiagramId: diagramId,
     diagrams: [
       {
@@ -1783,6 +1796,7 @@ export default function App() {
   const [model, setModel] = useState(initialModel);
   const [jsonDraft, setJsonDraft] = useState(() => readJsonDraft());
   const [isJsonViewerOpen, setIsJsonViewerOpen] = useState(false);
+  const [isModelPropertiesOpen, setIsModelPropertiesOpen] = useState(false);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [selectedEntityIds, setSelectedEntityIds] = useState(() =>
     initialModel.diagrams[0]?.entities[0]?.id ? [initialModel.diagrams[0].entities[0].id] : []
@@ -2364,6 +2378,16 @@ export default function App() {
 
     if (field === "databaseVersion") {
       setStatus(`Changed database version to ${value}.`);
+      return;
+    }
+
+    if (field === "logicalNotation") {
+      setStatus(`Changed logical notation to ${value}.`);
+      return;
+    }
+
+    if (field === "physicalNotation") {
+      setStatus(`Changed physical notation to ${value}.`);
     }
   }
 
@@ -3894,6 +3918,7 @@ export default function App() {
         jsonDraft={jsonDraft}
         reverseEngineering={reverseEngineering}
         onJsonDraftChange={setJsonDraft}
+        onOpenModelProperties={() => setIsModelPropertiesOpen(true)}
         onAutoLayout={handleAutoLayout}
         onAddEntity={handleAddEntity}
         onAddView={handleAddView}
@@ -3941,6 +3966,11 @@ export default function App() {
           selectedAttributeId={selectedAttributeId}
           displayLevel={model.project.displayLevel}
           viewMode={model.project.viewMode}
+          notationStyle={
+            model.project.viewMode === "Logical View"
+              ? model.project.logicalNotation
+              : model.project.physicalNotation
+          }
           isLinkingRelationship={Boolean(linkDraft)}
           zoom={zoom}
           expandedFieldIds={expandedFieldIds}
@@ -4043,6 +4073,67 @@ export default function App() {
 
             <div className="json-modal-body">
               <pre>{jsonDraft}</pre>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isModelPropertiesOpen ? (
+        <div
+          className="json-modal-backdrop"
+          onClick={() => setIsModelPropertiesOpen(false)}
+          role="presentation"
+        >
+          <section
+            className="json-modal model-properties-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="model-properties-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="json-modal-header">
+              <h2 id="model-properties-title">Model Properties</h2>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setIsModelPropertiesOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="json-modal-body model-properties-body">
+              <section className="panel">
+                <div className="panel-label">Notation</div>
+
+                <label className="field-group">
+                  <span>Logical Notation</span>
+                  <select
+                    value={model.project.logicalNotation ?? sampleModel.project.logicalNotation}
+                    onChange={(event) => handleProjectChange("logicalNotation", event.target.value)}
+                  >
+                    {LOGICAL_NOTATION_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field-group">
+                  <span>Physical Notation</span>
+                  <select
+                    value={model.project.physicalNotation ?? sampleModel.project.physicalNotation}
+                    onChange={(event) => handleProjectChange("physicalNotation", event.target.value)}
+                  >
+                    {PHYSICAL_NOTATION_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </section>
             </div>
           </section>
         </div>

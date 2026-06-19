@@ -226,12 +226,31 @@ function getAnchor(entity, target, displayLevel, viewMode, expandedFieldIds) {
   };
 }
 
+function normalizeNotationStyle(notationStyle) {
+  const normalized = String(notationStyle ?? "IDEF1x").trim().toLowerCase();
+
+  if (normalized === "information engineering") {
+    return "information-engineering";
+  }
+
+  if (normalized === "data warehousing") {
+    return "data-warehousing";
+  }
+
+  if (normalized === "graph") {
+    return "graph";
+  }
+
+  return "idef1x";
+}
+
 function DiagramLink({
   relationship,
   source,
   target,
   displayLevel,
   viewMode,
+  notationStyle,
   expandedFieldIds,
   lineVariant,
   isSelected,
@@ -268,6 +287,135 @@ function DiagramLink({
   const adjustedMidY = (start.y + adjustedEndY) / 2 - 10;
   const adjustedMarkerX = ((start.x + controlOneX) / 2 + (adjustedControlTwoX + adjustedEndX) / 2) / 2;
   const adjustedMarkerY = ((start.y + controlOneY) / 2 + (adjustedControlTwoY + adjustedEndY) / 2) / 2;
+  const normalizedNotationStyle = normalizeNotationStyle(notationStyle);
+  const dirX = (end.x - start.x) / endVectorLength;
+  const dirY = (end.y - start.y) / endVectorLength;
+  const perpX = -dirY;
+  const perpY = dirX;
+  const parentMarkerInset = 12;
+  const parentMarkerCenterX = start.x + dirX * parentMarkerInset;
+  const parentMarkerCenterY = start.y + dirY * parentMarkerInset;
+  const ieBarHalfLength = 7;
+  const ieBarStartX = parentMarkerCenterX - perpX * ieBarHalfLength;
+  const ieBarStartY = parentMarkerCenterY - perpY * ieBarHalfLength;
+  const ieBarEndX = parentMarkerCenterX + perpX * ieBarHalfLength;
+  const ieBarEndY = parentMarkerCenterY + perpY * ieBarHalfLength;
+  const ieBackInset = 12;
+  const ieBackX = childMarkerX - dirX * ieBackInset;
+  const ieBackY = childMarkerY - dirY * ieBackInset;
+  const ieProngSpread = 8;
+  const ieCircleRadius = 5.5;
+  const ieCrowFootLength = 11;
+  const ieCrowFootStartX = childMarkerX + dirX * ieCircleRadius;
+  const ieCrowFootStartY = childMarkerY + dirY * ieCircleRadius;
+  const ieCrowFootCenterX = ieCrowFootStartX + dirX * ieCrowFootLength;
+  const ieCrowFootCenterY = ieCrowFootStartY + dirY * ieCrowFootLength;
+  const ieCrowFootLeftX = ieCrowFootCenterX + perpX * ieProngSpread;
+  const ieCrowFootLeftY = ieCrowFootCenterY + perpY * ieProngSpread;
+  const ieCrowFootRightX = ieCrowFootCenterX - perpX * ieProngSpread;
+  const ieCrowFootRightY = ieCrowFootCenterY - perpY * ieProngSpread;
+  const arrowLength = 16;
+  const arrowSpread = 7;
+  const arrowBaseX = childMarkerX - dirX * arrowLength;
+  const arrowBaseY = childMarkerY - dirY * arrowLength;
+  const arrowLeftX = arrowBaseX + perpX * arrowSpread;
+  const arrowLeftY = arrowBaseY + perpY * arrowSpread;
+  const arrowRightX = arrowBaseX - perpX * arrowSpread;
+  const arrowRightY = arrowBaseY - perpY * arrowSpread;
+
+  function handleMarkerSelect(event) {
+    event.stopPropagation();
+    onSelectRelationship(relationship.id);
+  }
+
+  function renderNotationMarkers() {
+    if (normalizedNotationStyle === "data-warehousing") {
+      return null;
+    }
+
+    if (normalizedNotationStyle === "graph") {
+      return (
+        <g className={`diagram-link-notation ${isSelected ? "selected" : ""}`} onClick={handleMarkerSelect}>
+          <polygon
+            points={`${childMarkerX},${childMarkerY} ${arrowLeftX},${arrowLeftY} ${arrowRightX},${arrowRightY}`}
+            className="diagram-link-graph-arrow"
+          />
+        </g>
+      );
+    }
+
+    if (normalizedNotationStyle === "information-engineering") {
+      return (
+        <g className={`diagram-link-notation ${isSelected ? "selected" : ""}`} onClick={handleMarkerSelect}>
+          <line
+            x1={ieBarStartX}
+            y1={ieBarStartY}
+            x2={ieBarEndX}
+            y2={ieBarEndY}
+            className="diagram-link-parent-bar"
+          />
+          <line
+            x1={ieBackX + perpX * ieProngSpread}
+            y1={ieBackY + perpY * ieProngSpread}
+            x2={childMarkerX}
+            y2={childMarkerY}
+            className="diagram-link-ie-prong"
+          />
+          <line
+            x1={ieBackX}
+            y1={ieBackY}
+            x2={childMarkerX}
+            y2={childMarkerY}
+            className="diagram-link-ie-prong"
+          />
+          <line
+            x1={ieBackX - perpX * ieProngSpread}
+            y1={ieBackY - perpY * ieProngSpread}
+            x2={childMarkerX}
+            y2={childMarkerY}
+            className="diagram-link-ie-prong"
+          />
+          <circle
+            cx={childMarkerX}
+            cy={childMarkerY}
+            r={ieCircleRadius}
+            className="diagram-link-ie-circle"
+          />
+          <line
+            x1={ieCrowFootStartX}
+            y1={ieCrowFootStartY}
+            x2={ieCrowFootCenterX}
+            y2={ieCrowFootCenterY}
+            className="diagram-link-ie-prong"
+          />
+          <line
+            x1={ieCrowFootStartX}
+            y1={ieCrowFootStartY}
+            x2={ieCrowFootLeftX}
+            y2={ieCrowFootLeftY}
+            className="diagram-link-ie-prong"
+          />
+          <line
+            x1={ieCrowFootStartX}
+            y1={ieCrowFootStartY}
+            x2={ieCrowFootRightX}
+            y2={ieCrowFootRightY}
+            className="diagram-link-ie-prong"
+          />
+        </g>
+      );
+    }
+
+    return (
+      <circle
+        cx={childMarkerX}
+        cy={childMarkerY}
+        r="5.5"
+        className={`diagram-link-child-marker ${isSelected ? "selected" : ""}`}
+        onClick={handleMarkerSelect}
+      />
+    );
+  }
 
   return (
     <>
@@ -282,21 +430,9 @@ function DiagramLink({
       <path
         d={adjustedPath}
         className={`diagram-link ${lineVariant} ${isSelected ? "selected" : ""}`}
-        onClick={(event) => {
-          event.stopPropagation();
-          onSelectRelationship(relationship.id);
-        }}
+        onClick={handleMarkerSelect}
       />
-      <circle
-        cx={childMarkerX}
-        cy={childMarkerY}
-        r="5.5"
-        className={`diagram-link-child-marker ${isSelected ? "selected" : ""}`}
-        onClick={(event) => {
-          event.stopPropagation();
-          onSelectRelationship(relationship.id);
-        }}
-      />
+      {renderNotationMarkers()}
       {lineVariant === "sub-category" ? (
         <circle
           cx={adjustedMarkerX}
@@ -492,6 +628,7 @@ export default function DiagramCanvas({
   selectedAttributeId,
   displayLevel,
   viewMode,
+  notationStyle,
   isLinkingRelationship,
   zoom,
   expandedFieldIds,
@@ -865,6 +1002,7 @@ export default function DiagramCanvas({
                   target={target}
                   displayLevel={displayLevel}
                   viewMode={viewMode}
+                  notationStyle={notationStyle}
                   expandedFieldIds={expandedFieldIds}
                   lineVariant={
                     String(relationship.relationshipType ?? "").trim().toLowerCase() === "subtype" &&

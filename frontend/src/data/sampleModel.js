@@ -7,7 +7,9 @@ export const sampleModel = {
     subjectArea: "<model>",
     definition: "Drag entities, define attributes, and wire relationships.",
     diagramDefinition: "Sample bookstore and fulfillment domain.",
-    displayLevel: "Column"
+    displayLevel: "Column",
+    logicalNotation: "IDEF1x",
+    physicalNotation: "IDEF1x"
   },
   activeDiagramId: "er-diagram-1",
   diagrams: [
