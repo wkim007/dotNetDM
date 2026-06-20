@@ -244,6 +244,17 @@ function normalizeNotationStyle(notationStyle) {
   return "idef1x";
 }
 
+function buildLogicalRelationshipPhrase(relationship) {
+  const parentToChild = String(relationship?.parentToChildVerbPhrase ?? "").trim();
+  const childToParent = String(relationship?.childToParentVerbPhrase ?? "").trim();
+
+  if (parentToChild && childToParent) {
+    return `${parentToChild} / ${childToParent}`;
+  }
+
+  return parentToChild || childToParent || "";
+}
+
 function DiagramLink({
   relationship,
   source,
@@ -288,6 +299,7 @@ function DiagramLink({
   const adjustedMidY = (start.y + adjustedEndY) / 2 - 10;
   const adjustedMarkerX = ((start.x + controlOneX) / 2 + (adjustedControlTwoX + adjustedEndX) / 2) / 2;
   const adjustedMarkerY = ((start.y + controlOneY) / 2 + (adjustedControlTwoY + adjustedEndY) / 2) / 2;
+  const logicalRelationshipPhrase = buildLogicalRelationshipPhrase(relationship);
   const dirX = (end.x - start.x) / endVectorLength;
   const dirY = (end.y - start.y) / endVectorLength;
   const perpX = -dirY;
@@ -318,6 +330,8 @@ function DiagramLink({
   const arrowLeftY = arrowBaseY + perpY * arrowSpread;
   const arrowRightX = arrowBaseX - perpX * arrowSpread;
   const arrowRightY = arrowBaseY - perpY * arrowSpread;
+  const phraseAnchorX = start.x + (adjustedEndX - start.x) * 0.56 + perpX * 18;
+  const phraseAnchorY = start.y + (adjustedEndY - start.y) * 0.56 + perpY * 18;
 
   function handleMarkerSelect(event) {
     event.stopPropagation();
@@ -423,6 +437,11 @@ function DiagramLink({
       <text x={adjustedMidX} y={adjustedMidY} className="diagram-link-label">
         {relationship.cardinality}
       </text>
+      {String(viewMode ?? "").trim().toLowerCase() === "logical view" && logicalRelationshipPhrase ? (
+        <text x={phraseAnchorX} y={phraseAnchorY} className="diagram-link-phrase">
+          {logicalRelationshipPhrase}
+        </text>
+      ) : null}
       {isSelected ? (
         <g
           className="relationship-delete-badge"

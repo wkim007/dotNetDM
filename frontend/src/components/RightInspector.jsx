@@ -81,6 +81,7 @@ function ObjectBrowserSection({ title, items, onEditEntity, onGoToEntity }) {
 }
 
 export default function RightInspector({
+  viewMode,
   selectedEntity,
   selectedAttribute,
   selectedRelationship,
@@ -319,6 +320,20 @@ export default function RightInspector({
               }
               onChange={(value) => onRelationshipChange("relationshipType", value)}
             />
+            {viewMode === "Logical View" ? (
+              <>
+                <TextField
+                  label="Parent To Child Verb Phrase"
+                  value={selectedRelationship.parentToChildVerbPhrase ?? ""}
+                  onChange={(value) => onRelationshipChange("parentToChildVerbPhrase", value)}
+                />
+                <TextField
+                  label="Child To Parent Verb Phrase"
+                  value={selectedRelationship.childToParentVerbPhrase ?? ""}
+                  onChange={(value) => onRelationshipChange("childToParentVerbPhrase", value)}
+                />
+              </>
+            ) : null}
             <div className="button-row">
               <button className="danger-button" type="button" onClick={onDeleteRelationship}>
                 Delete Relationship

@@ -804,6 +804,14 @@ body.panel-resizing {
   pointer-events: none;
 }
 
+.diagram-link-phrase {
+  fill: #59d8ff;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
 .relationship-delete-badge {
   cursor: pointer;
   pointer-events: all;

@@ -1626,6 +1626,8 @@ function importWorkspaceModel(payload) {
           name: relationship.name ?? getRelationshipName(relationship, source, target),
           physicalName: relationship.physicalName ?? relationship.name ?? relationship.id,
           description: relationship.description ?? relationship.comment ?? "relates_to",
+          parentToChildVerbPhrase: relationship.parentToChildVerbPhrase ?? "",
+          childToParentVerbPhrase: relationship.childToParentVerbPhrase ?? "",
           parentAttribute: relationship.parentAttribute ?? "Entity header",
           childAttribute: relationship.childAttribute ?? "Entity header",
           cardinality: relationship.cardinality ?? "1:N",
@@ -1723,6 +1725,8 @@ function normalizeRelationship(relationship) {
     name: relationship.name ?? relationship.id,
     physicalName: relationship.physicalName ?? relationship.id,
     description: relationship.description ?? "relates_to",
+    parentToChildVerbPhrase: relationship.parentToChildVerbPhrase ?? "",
+    childToParentVerbPhrase: relationship.childToParentVerbPhrase ?? "",
     parentAttribute: relationship.parentAttribute ?? "Entity header",
     childAttribute: relationship.childAttribute ?? "Entity header",
     migratedKeyIndex: relationship.migratedKeyIndex ?? "Select parent index",
@@ -4000,7 +4004,8 @@ export default function App() {
         />
       ) : null}
 
-        <RightInspector
+      <RightInspector
+          viewMode={model.project.viewMode}
           selectedEntity={selectedEntity}
           selectedAttribute={selectedAttribute}
           selectedRelationship={selectedRelationship}
