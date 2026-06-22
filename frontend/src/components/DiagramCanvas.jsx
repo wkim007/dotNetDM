@@ -113,6 +113,17 @@ function getVisibleFields(entity, displayLevel, expandedFieldIds) {
 }
 
 function getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds) {
+  if (entity?.objectType === "drawing") {
+    const drawingText = String(entity.drawingText ?? "").trim() || "Drawing";
+    const lines = drawingText.split(/\r?\n/);
+    const longestLineWidth = Math.max(...lines.map((line) => estimateTextWidth(line, 8.2)), 90);
+
+    return {
+      width: Math.min(440, Math.max(120, Math.ceil(longestLineWidth + 44))),
+      height: Math.max(90, Math.min(320, 28 + lines.length * 24))
+    };
+  }
+
   if (entity?.objectType === "annotation") {
     const annotationText = String(entity.annotationText ?? "").trim() || "Type annotation";
     const lines = annotationText.split(/\r?\n/);
@@ -161,6 +172,13 @@ function getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds
 
 function getRenderedEntitySize(entity, displayLevel, viewMode, expandedFieldIds) {
   const preferredSize = getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds);
+
+  if (entity?.objectType === "drawing") {
+    return {
+      width: Math.max(entity.width ?? 0, preferredSize.width),
+      height: Math.max(entity.height ?? 0, preferredSize.height)
+    };
+  }
 
   if (entity?.objectType === "annotation") {
     return {
@@ -367,6 +385,10 @@ function DiagramLink({
   }
 
   function renderNotationMarkers() {
+    if (lineVariant === "connector") {
+      return null;
+    }
+
     if (normalizedNotationStyle === "data-warehousing") {
       return null;
     }
@@ -464,9 +486,11 @@ function DiagramLink({
           }}
         />
       ) : null}
-      <text x={adjustedMidX} y={adjustedMidY} className="diagram-link-label">
-        {relationship.cardinality}
-      </text>
+      {relationship.cardinality ? (
+        <text x={adjustedMidX} y={adjustedMidY} className="diagram-link-label">
+          {relationship.cardinality}
+        </text>
+      ) : null}
       {String(viewMode ?? "").trim().toLowerCase() === "logical view" && logicalRelationshipPhrase ? (
         <text x={phraseAnchorX} y={phraseAnchorY} className="diagram-link-phrase">
           {logicalRelationshipPhrase}
@@ -503,6 +527,10 @@ function FieldTreeMarker({ expanded }) {
 }
 
 function getEntityCardVariant(entity) {
+  if (entity?.objectType === "drawing") {
+    return "drawing";
+  }
+
   if (entity?.objectType === "annotation") {
     return "annotation";
   }
@@ -516,6 +544,162 @@ function getEntityCardVariant(entity) {
   }
 
   return "entity";
+}
+
+function DrawingShapeSvg({ shape }) {
+  if (shape === "ellipse") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <ellipse cx="50" cy="50" rx="46" ry="42" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
+  if (shape === "diamond") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="50,4 96,50 50,96 4,50" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
+  if (shape === "hexagon") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="24,6 76,6 96,50 76,94 24,94 4,50" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
+  if (shape === "star") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon
+          points="50,4 61,35 96,35 68,56 79,92 50,70 21,92 32,56 4,35 39,35"
+          className="drawing-shape-fill"
+        />
+      </svg>
+    );
+  }
+
+  if (shape === "arrow") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="6,20 60,20 60,6 94,50 60,94 60,80 6,80" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
+  if (shape === "rounded") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <rect x="4" y="6" width="92" height="88" rx="16" ry="16" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <rect x="4" y="6" width="92" height="88" className="drawing-shape-fill" />
+    </svg>
+  );
+}
+
+function getDrawingTextareaClass(shape) {
+  if (shape === "diamond") {
+    return "drawing-textarea inset-diamond";
+  }
+
+  if (shape === "ellipse") {
+    return "drawing-textarea inset-ellipse";
+  }
+
+  if (shape === "hexagon") {
+    return "drawing-textarea inset-hexagon";
+  }
+
+  if (shape === "star") {
+    return "drawing-textarea inset-star";
+  }
+
+  if (shape === "arrow") {
+    return "drawing-textarea inset-arrow";
+  }
+
+  return "drawing-textarea";
+}
+
+function DrawingCard({
+  entity,
+  isSelected,
+  onPointerDown,
+  onResizeStart,
+  onSelect,
+  onChangeText,
+  onDelete
+}) {
+  const { width, height } = getRenderedEntitySize(entity, "comment", "Physical View", {});
+  const shape = entity.drawingShape ?? "rectangle";
+
+  return (
+    <article
+      className={`drawing-card shape-${shape} ${isSelected ? "selected" : ""}`}
+      style={{ left: entity.x, top: entity.y, width, height }}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect(entity.id, {
+          additive: false,
+          toggle: false
+        });
+      }}
+    >
+      <div className="drawing-grab-strip" onPointerDown={(event) => onPointerDown(event, entity.id)} />
+      <DrawingShapeSvg shape={shape} />
+      <button
+        type="button"
+        className="drawing-close"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete(entity.id);
+        }}
+      >
+        ×
+      </button>
+      <textarea
+        className={getDrawingTextareaClass(shape)}
+        value={entity.drawingText ?? ""}
+        placeholder="Drawing"
+        onPointerDown={(event) => {
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(entity.id, {
+            additive: false,
+            toggle: false
+          });
+        }}
+        onFocus={() =>
+          onSelect(entity.id, {
+            additive: false,
+            toggle: false
+          })
+        }
+        onChange={(event) => onChangeText(entity.id, event.target.value)}
+      />
+      <button
+        type="button"
+        className="entity-resize-handle"
+        aria-label={`Resize drawing ${entity.name ?? "Drawing"}`}
+        onPointerDown={(event) => onResizeStart(event, entity.id)}
+        onClick={(event) => event.stopPropagation()}
+      />
+    </article>
+  );
 }
 
 function AnnotationCard({
@@ -744,6 +928,7 @@ export default function DiagramCanvas({
   onMoveRelationship,
   onResizeEntity,
   onChangeAnnotationText,
+  onChangeDrawingText,
   onSelectAttribute,
   onDeleteEntity,
   onDeleteRelationship,
@@ -1056,6 +1241,7 @@ export default function DiagramCanvas({
       target instanceof Element &&
       (
         target.closest(".entity-card") ||
+        target.closest(".drawing-card") ||
         target.closest(".annotation-card") ||
         target.closest(".relationship-delete-badge") ||
         target.closest(".diagram-link") ||
@@ -1076,6 +1262,7 @@ export default function DiagramCanvas({
       target instanceof Element &&
       (
         target.closest(".entity-card") ||
+        target.closest(".drawing-card") ||
         target.closest(".annotation-card") ||
         target.closest(".diagram-link") ||
         target.closest(".diagram-link-hit-area") ||
@@ -1150,7 +1337,9 @@ export default function DiagramCanvas({
                   notationStyle={notationStyle}
                   expandedFieldIds={expandedFieldIds}
                   lineVariant={
-                    String(relationship.relationshipType ?? "").trim().toLowerCase() === "subtype" &&
+                    String(relationship.relationshipType ?? "").trim().toLowerCase() === "connector"
+                      ? "connector"
+                    : String(relationship.relationshipType ?? "").trim().toLowerCase() === "subtype" &&
                     String(viewMode ?? "").trim().toLowerCase() === "logical view"
                       ? "sub-category"
                       : String(relationship.relationshipType ?? "").trim().toLowerCase() === "derived"
@@ -1174,7 +1363,18 @@ export default function DiagramCanvas({
           </svg>
 
           {entities.map((entity) =>
-            entity?.objectType === "annotation" ? (
+            entity?.objectType === "drawing" ? (
+              <DrawingCard
+                key={entity.id}
+                entity={entity}
+                isSelected={selectedEntityIds.includes(entity.id)}
+                onPointerDown={handlePointerDown}
+                onResizeStart={handleResizeStart}
+                onSelect={onSelectEntity}
+                onChangeText={onChangeDrawingText}
+                onDelete={onDeleteEntity}
+              />
+            ) : entity?.objectType === "annotation" ? (
               <AnnotationCard
                 key={entity.id}
                 entity={entity}

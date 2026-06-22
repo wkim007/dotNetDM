@@ -1012,8 +1012,16 @@ function isAnnotationEntity(entity) {
   return entity?.objectType === "annotation";
 }
 
+function isDrawingEntity(entity) {
+  return entity?.objectType === "drawing";
+}
+
 function normalizeRelationshipType(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
+
+  if (normalized === "connector") {
+    return "Connector";
+  }
 
   if (
     normalized === "9" ||
@@ -1047,6 +1055,10 @@ function normalizeRelationshipType(value) {
 function relationshipTypeToValue(value) {
   const normalized = normalizeRelationshipType(value);
 
+  if (normalized === "Connector") {
+    return "Connector";
+  }
+
   if (normalized === "Subtype") {
     return "9";
   }
@@ -1063,10 +1075,14 @@ function relationshipTypeToValue(value) {
     return "2";
   }
 
-  return "7";
+  return normalized === "Connector" ? "Connector" : "7";
 }
 
 function getEntityObjectType(entity) {
+  if (entity?.objectType === "drawing") {
+    return "drawing";
+  }
+
   if (entity?.objectType === "annotation") {
     return "annotation";
   }
@@ -1710,6 +1726,20 @@ function flattenFieldsForLayout(fields, depth = 0) {
 }
 
 function getPreferredEntitySize(entity) {
+  if (isDrawingEntity(entity)) {
+    const drawingText = String(entity.drawingText ?? entity.comment ?? "").trim() || "Drawing";
+    const longestLineWidth = Math.max(
+      ...drawingText.split(/\r?\n/).map((line) => estimateTextWidth(line, 8.2)),
+      90
+    );
+    const lineCount = Math.max(1, drawingText.split(/\r?\n/).length);
+
+    return {
+      width: Math.min(CARD_MAX_WIDTH, Math.max(120, Math.ceil(longestLineWidth + 44))),
+      height: Math.max(90, 26 + lineCount * 24)
+    };
+  }
+
   if (isAnnotationEntity(entity)) {
     const annotationText = String(entity.annotationText ?? entity.comment ?? "").trim() || "Annotation";
     const longestLineWidth = Math.max(
@@ -2190,8 +2220,8 @@ export default function App() {
       return entities;
     }
 
-    const annotationEntities = entities.filter((entity) => isAnnotationEntity(entity));
-    const layoutEntities = entities.filter((entity) => !isAnnotationEntity(entity));
+    const fixedEntities = entities.filter((entity) => isAnnotationEntity(entity) || isDrawingEntity(entity));
+    const layoutEntities = entities.filter((entity) => !isAnnotationEntity(entity) && !isDrawingEntity(entity));
 
     if (layoutEntities.length === 0) {
       return entities;
@@ -2275,7 +2305,7 @@ export default function App() {
     });
 
     const positionedMap = new Map(
-      orderedEntities.map((entity) => [
+      [...orderedEntities, ...fixedEntities].map((entity) => [
         entity.id,
         positionedEntities.find((positionedEntity) => positionedEntity.id === entity.id) ?? entity
       ])
@@ -2830,6 +2860,40 @@ export default function App() {
       linkDraft.relationshipType ?? "Non-Identifying"
     );
 
+    if (requestedRelationshipType === "Connector") {
+      const relationshipId = `relationship-${Date.now()}`;
+      const newRelationship = normalizeRelationship({
+        id: relationshipId,
+        sourceEntityId: linkDraft.sourceEntityId,
+        targetEntityId: entityId,
+        name: `${source?.physicalName ?? source?.name ?? "Object"} -> ${target?.physicalName ?? target?.name ?? "Object"}`,
+        physicalName: `${linkDraft.sourceEntityId}-${entityId}`,
+        description: "",
+        cardinality: "",
+        style: "solid",
+        relationshipType: "Connector"
+      });
+
+      setModel((current) => ({
+        ...current,
+        diagrams: current.diagrams.map((diagram) =>
+          diagram.id === current.activeDiagramId
+            ? {
+                ...diagram,
+                relationships: [...diagram.relationships, newRelationship]
+              }
+            : diagram
+        )
+      }));
+
+      setLinkDraft(null);
+      setSelectedEntityIds([]);
+      setSelectedAttributeId(null);
+      setSelectedRelationshipId(relationshipId);
+      setStatus(`Created connector ${newRelationship.name}.`);
+      return;
+    }
+
     if (requestedRelationshipType === "Subtype" && (sourceIsViewLike || targetIsViewLike)) {
       setStatus("Sub-Category relationships are only allowed between entities.");
       return;
@@ -2996,6 +3060,10 @@ export default function App() {
     handleStartRelationshipLink("Subtype");
   }
 
+  function handleStartConnectorRelationship() {
+    handleStartRelationshipLink("Connector");
+  }
+
   function updateSelectedEntity(update) {
     if (!selectedEntityId) {
       return;
@@ -3024,6 +3092,14 @@ export default function App() {
 
       if (field === "annotationText") {
         return { annotationText: value };
+      }
+
+      if (field === "drawingText") {
+        return { drawingText: value };
+      }
+
+      if (field === "drawingShape") {
+        return { drawingShape: value };
       }
 
       if (fieldId) {
@@ -3129,6 +3205,22 @@ export default function App() {
               ...diagram,
               entities: diagram.entities.map((entity) =>
                 entity.id === entityId ? { ...entity, annotationText: value } : entity
+              )
+            }
+          : diagram
+      )
+    }));
+  }
+
+  function handleChangeDrawingText(entityId, value) {
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: diagram.entities.map((entity) =>
+                entity.id === entityId ? { ...entity, drawingText: value } : entity
               )
             }
           : diagram
@@ -3282,6 +3374,39 @@ export default function App() {
     setSelectedRelationshipId(null);
     setLinkDraft(null);
     setStatus("Created a new annotation.");
+  }
+
+  function handleAddDrawing(shape = "rectangle") {
+    const [entityId] = getNextNumericWorkspaceIds(model, 1);
+    const newDrawing = {
+      id: entityId,
+      name: "Drawing",
+      physicalName: "Drawing",
+      objectType: "drawing",
+      drawingShape: shape,
+      drawingText: "Drawing",
+      x: 260,
+      y: 220,
+      width: 140,
+      height: 110,
+      fields: []
+    };
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: [...diagram.entities, newDrawing]
+            }
+          : diagram
+      )
+    }));
+    setSelectedEntityIds([entityId]);
+    setSelectedRelationshipId(null);
+    setLinkDraft(null);
+    setStatus("Created a new drawing.");
   }
 
   function handleAddDiagram() {
@@ -4052,12 +4177,14 @@ export default function App() {
         onAutoLayout={handleAutoLayout}
         onAddEntity={handleAddEntity}
         onAddAnnotation={handleAddAnnotation}
+        onAddDrawing={handleAddDrawing}
         onAddView={handleAddView}
         onAddMaterializedView={handleAddMaterializedView}
         onStartIdentifyingRelationship={handleStartIdentifyingRelationship}
         onStartNonIdentifyingRelationship={handleStartNonIdentifyingRelationship}
         onStartDerivedRelationship={handleStartDerivedRelationship}
         onStartSubCategoryRelationship={handleStartSubCategoryRelationship}
+        onStartConnectorRelationship={handleStartConnectorRelationship}
         onProjectChange={handleProjectChange}
         onExportJson={handleExportJson}
         onImportJson={handleImportJson}
@@ -4116,6 +4243,7 @@ export default function App() {
           onMoveRelationship={handleMoveRelationship}
           onResizeEntity={handleResizeEntity}
           onChangeAnnotationText={handleChangeAnnotationText}
+          onChangeDrawingText={handleChangeDrawingText}
           onDeleteEntity={handleDeleteEntityById}
           onDeleteRelationship={handleDeleteRelationship}
           onToggleFieldExpansion={handleToggleFieldExpansion}

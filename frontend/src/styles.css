@@ -396,6 +396,10 @@ body.panel-resizing {
   gap: 10px;
 }
 
+.diagram-box-popover {
+  position: relative;
+}
+
 .diagram-box-item {
   display: flex;
   flex-direction: column;
@@ -457,6 +461,65 @@ body.panel-resizing {
 .diagram-box-icon-svg svg {
   width: 18px;
   height: 18px;
+}
+
+.diagram-shape-palette {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  width: 232px;
+  padding: 10px;
+  border: 1px solid rgba(122, 145, 171, 0.22);
+  border-radius: 16px;
+  background: rgba(18, 28, 42, 0.98);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.34);
+}
+
+.diagram-shape-palette-title {
+  margin-bottom: 8px;
+  color: #dce7f5;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.diagram-shape-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.diagram-shape-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 66px;
+  padding: 8px 6px;
+  border: 1px solid rgba(122, 145, 171, 0.2);
+  border-radius: 12px;
+  background: #23354d;
+  color: #eff5ff;
+  font: inherit;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.diagram-shape-option:hover,
+.diagram-shape-option:focus-visible {
+  background: #30425c;
+  border-color: rgba(140, 255, 184, 0.52);
+  box-shadow: inset 0 0 0 1px rgba(150, 255, 183, 0.3), 0 0 16px rgba(81, 236, 146, 0.16);
+  transform: translateY(-1px);
+}
+
+.diagram-shape-option span:last-child {
+  font-size: 0.78rem;
+  line-height: 1.1;
+  text-align: center;
 }
 
 .select-shell,
@@ -852,6 +915,113 @@ body.panel-resizing {
   cursor: grab;
   touch-action: none;
   min-height: 84px;
+}
+
+.drawing-card {
+  position: absolute;
+  overflow: visible;
+  cursor: grab;
+  touch-action: none;
+  min-height: 90px;
+  min-width: 120px;
+}
+
+.drawing-card.selected {
+  filter: drop-shadow(0 0 12px rgba(241, 191, 82, 0.25));
+}
+
+.drawing-shape-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.drawing-shape-fill {
+  fill: rgba(240, 244, 250, 0.98);
+  stroke: rgba(133, 150, 171, 0.72);
+  stroke-width: 2.2px;
+}
+
+.drawing-card.selected .drawing-shape-fill {
+  stroke: rgba(241, 191, 82, 0.96);
+}
+
+.drawing-grab-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 30px;
+  height: 18px;
+  cursor: grab;
+  z-index: 3;
+}
+
+.drawing-textarea {
+  position: absolute;
+  inset: 18px 14px 22px;
+  width: auto;
+  height: auto;
+  border: 0;
+  background: transparent;
+  color: #142133;
+  font: inherit;
+  line-height: 1.35;
+  text-align: center;
+  resize: none;
+  outline: none;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.drawing-textarea.inset-diamond {
+  inset: 24px 24px 28px;
+}
+
+.drawing-textarea.inset-ellipse {
+  inset: 24px 24px 26px;
+}
+
+.drawing-textarea.inset-hexagon {
+  inset: 20px 24px 24px;
+}
+
+.drawing-textarea.inset-star {
+  inset: 26px 26px 28px;
+}
+
+.drawing-textarea.inset-arrow {
+  inset: 24px 34px 24px 16px;
+}
+
+.drawing-textarea::placeholder {
+  color: #52657d;
+}
+
+.drawing-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #5d6f86;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 4;
+}
+
+.drawing-close:hover {
+  background: rgba(87, 106, 129, 0.12);
+  color: #142133;
 }
 
 .annotation-grab-strip {

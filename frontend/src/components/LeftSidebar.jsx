@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+
 function SelectField({ label, value, options, onChange, disabled = false }) {
   return (
     <label className="field-group">
@@ -40,8 +42,10 @@ export default function LeftSidebar({
   onAutoLayout,
   onAddEntity,
   onAddAnnotation,
+  onAddDrawing,
   onAddView,
   onAddMaterializedView,
+  onStartConnectorRelationship,
   onStartIdentifyingRelationship,
   onStartNonIdentifyingRelationship,
   onStartDerivedRelationship,
@@ -56,6 +60,8 @@ export default function LeftSidebar({
   onConnectReverseEngineering
 }) {
   const showReverseEngineering = Boolean(reverseEngineering?.isOpen);
+  const [isDrawingPaletteOpen, setIsDrawingPaletteOpen] = useState(false);
+  const drawingPaletteRef = useRef(null);
   const normalizedDatabase = String(project.database ?? "").toLowerCase();
   const reverseEngineeringProvider = normalizedDatabase.includes("sql server") || normalizedDatabase.includes("mssql")
     ? "sqlserver"
@@ -64,6 +70,37 @@ export default function LeftSidebar({
       : "other";
   const reverseEngineeringSupportsConnection =
     reverseEngineeringProvider === "mongodb" || reverseEngineeringProvider === "sqlserver";
+
+  useEffect(() => {
+    if (!isDrawingPaletteOpen) {
+      return undefined;
+    }
+
+    function handlePointerDown(event) {
+      if (!drawingPaletteRef.current?.contains(event.target)) {
+        setIsDrawingPaletteOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isDrawingPaletteOpen]);
+
+  function handleChooseDrawingShape(shape) {
+    onAddDrawing(shape);
+    setIsDrawingPaletteOpen(false);
+  }
+
+  const drawingShapeOptions = [
+    { value: "rectangle", label: "Rectangle", icon: "▭" },
+    { value: "rounded", label: "Rounded", icon: "▢" },
+    { value: "ellipse", label: "Ellipse", icon: "◯" },
+    { value: "diamond", label: "Diamond", icon: "◇" },
+    { value: "hexagon", label: "Hexagon", icon: "⬡" },
+    { value: "star", label: "Star", icon: "★" },
+    { value: "arrow", label: "Arrow", icon: "➜" }
+  ];
+
   return (
     <aside className="left-sidebar">
       <h1>{project.name}</h1>
@@ -340,6 +377,53 @@ export default function LeftSidebar({
                 <span>View/Materized Rel.</span>
               </button>
             ) : null}
+          </div>
+        </div>
+
+        <div className="field-group diagram-box-field">
+          <span>Drawing Box</span>
+          <div className="diagram-box-grid">
+            <div className="diagram-box-popover" ref={drawingPaletteRef}>
+              <button
+                type="button"
+                className={`secondary-button diagram-box-item ${isDrawingPaletteOpen ? "active" : ""}`}
+                onClick={() => setIsDrawingPaletteOpen((current) => !current)}
+                title="Add Drawing"
+              >
+                <span className="diagram-box-icon">◇</span>
+                <span>Drawing</span>
+              </button>
+
+              {isDrawingPaletteOpen ? (
+                <div className="diagram-shape-palette">
+                  <div className="diagram-shape-palette-title">Choose Shape</div>
+                  <div className="diagram-shape-palette-grid">
+                    {drawingShapeOptions.map((shape) => (
+                      <button
+                        key={shape.value}
+                        type="button"
+                        className="diagram-shape-option"
+                        title={`Add ${shape.label}`}
+                        onClick={() => handleChooseDrawingShape(shape.value)}
+                      >
+                        <span className="diagram-box-icon">{shape.icon}</span>
+                        <span>{shape.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              className={`secondary-button diagram-box-item ${activeRelationshipTool === "Connector" ? "active" : ""}`}
+              onClick={onStartConnectorRelationship}
+              title="Add Connector"
+            >
+              <span className="diagram-box-icon">╱</span>
+              <span>Connector</span>
+            </button>
           </div>
         </div>
       </section>

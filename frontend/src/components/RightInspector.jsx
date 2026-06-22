@@ -39,6 +39,10 @@ function parseDatatypeParts(dataType) {
 }
 
 function getObjectTypeLabel(entity) {
+  if (entity?.objectType === "drawing") {
+    return "Drawing";
+  }
+
   if (entity?.objectType === "annotation") {
     return "Annotation";
   }
@@ -155,10 +159,12 @@ export default function RightInspector({
   );
   const sortedEntityObjects = sortedEntities.filter(
     (entity) =>
+      entity.objectType !== "drawing" &&
       entity.objectType !== "view" &&
       entity.objectType !== "materializedView" &&
       entity.objectType !== "annotation"
   );
+  const sortedDrawingObjects = sortedEntities.filter((entity) => entity.objectType === "drawing");
   const sortedViewObjects = sortedEntities.filter((entity) => entity.objectType === "view");
   const sortedMaterializedViewObjects = sortedEntities.filter((entity) => entity.objectType === "materializedView");
   const sortedAnnotationObjects = sortedEntities.filter((entity) => entity.objectType === "annotation");
@@ -322,7 +328,9 @@ export default function RightInspector({
               label="Relationship Type"
               value={selectedRelationship.relationshipType ?? "Non-Identifying"}
               options={
-                selectedRelationship.relationshipType === "Subtype"
+                selectedRelationship.relationshipType === "Connector"
+                  ? ["Connector"]
+                  : selectedRelationship.relationshipType === "Subtype"
                   ? ["Subtype"]
                   : derivedRelationshipOnly
                     ? ["Derived"]
@@ -387,7 +395,32 @@ export default function RightInspector({
             <span className="panel-label">{selectedEntitySectionLabel}</span>
           </div>
 
-          {selectedEntity.objectType === "annotation" ? (
+          {selectedEntity.objectType === "drawing" ? (
+            <>
+              <TextField
+                label="Name"
+                value={selectedEntity.name ?? ""}
+                onChange={(value) => onEntityChange("name", value)}
+              />
+              <SelectField
+                label="Shape"
+                value={selectedEntity.drawingShape ?? "rectangle"}
+                options={["rectangle", "rounded", "ellipse", "diamond", "hexagon", "star", "arrow"]}
+                onChange={(value) => onEntityChange("drawingShape", value)}
+              />
+              <TextField
+                label="Text"
+                value={selectedEntity.drawingText ?? ""}
+                onChange={(value) => onEntityChange("drawingText", value)}
+                tall
+              />
+              <div className="button-row">
+                <button className="danger-button" type="button" onClick={onDeleteEntity}>
+                  Delete Drawing
+                </button>
+              </div>
+            </>
+          ) : selectedEntity.objectType === "annotation" ? (
             <>
               <TextField
                 label="Name"
@@ -572,6 +605,12 @@ export default function RightInspector({
 
       {!selectedEntity ? (
         <>
+          <ObjectBrowserSection
+            title="Drawing"
+            items={sortedDrawingObjects}
+            onEditEntity={onEditEntity}
+            onGoToEntity={onGoToEntity}
+          />
           <ObjectBrowserSection
             title="Annotation"
             items={sortedAnnotationObjects}
