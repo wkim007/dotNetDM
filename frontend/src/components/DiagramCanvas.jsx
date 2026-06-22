@@ -645,6 +645,22 @@ function DrawingShapeSvg({ shape }) {
     );
   }
 
+  if (shape === "octagon") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="30,4 70,4 96,30 96,70 70,96 30,96 4,70 4,30" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
+  if (shape === "pentagon") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="50,4 94,36 78,92 22,92 6,36" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
   if (shape === "star") {
     return (
       <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -660,6 +676,57 @@ function DrawingShapeSvg({ shape }) {
     return (
       <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
         <polygon points="6,20 60,20 60,6 94,50 60,94 60,80 6,80" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
+  if (shape === "parallelogram") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="24,6 96,6 76,94 4,94" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
+  if (shape === "triangle-up") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="50,6 96,94 4,94" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
+  if (shape === "triangle-down") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="4,6 96,6 50,94" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
+  if (shape === "triangle-left") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="6,50 94,6 94,94" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
+  if (shape === "triangle-right") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="6,6 94,50 6,94" className="drawing-shape-fill" />
+      </svg>
+    );
+  }
+
+  if (shape === "cross") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon
+          points="38,6 62,6 62,38 94,38 94,62 62,62 62,94 38,94 38,62 6,62 6,38 38,38"
+          className="drawing-shape-fill"
+        />
       </svg>
     );
   }
@@ -692,12 +759,37 @@ function getDrawingTextareaClass(shape) {
     return "drawing-textarea inset-hexagon";
   }
 
+  if (shape === "octagon") {
+    return "drawing-textarea inset-octagon";
+  }
+
+  if (shape === "pentagon") {
+    return "drawing-textarea inset-pentagon";
+  }
+
   if (shape === "star") {
     return "drawing-textarea inset-star";
   }
 
   if (shape === "arrow") {
     return "drawing-textarea inset-arrow";
+  }
+
+  if (shape === "parallelogram") {
+    return "drawing-textarea inset-parallelogram";
+  }
+
+  if (
+    shape === "triangle-up" ||
+    shape === "triangle-down" ||
+    shape === "triangle-left" ||
+    shape === "triangle-right"
+  ) {
+    return `drawing-textarea inset-${shape}`;
+  }
+
+  if (shape === "cross") {
+    return "drawing-textarea inset-cross";
   }
 
   return "drawing-textarea";

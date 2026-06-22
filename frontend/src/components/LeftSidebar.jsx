@@ -97,12 +97,19 @@ export default function LeftSidebar({
 
   const drawingShapeOptions = [
     { value: "rectangle", label: "Rectangle", icon: "▭" },
-    { value: "rounded", label: "Rounded", icon: "▢" },
+    { value: "rounded", label: "Round Rectangle", icon: "▢" },
     { value: "ellipse", label: "Ellipse", icon: "◯" },
     { value: "diamond", label: "Diamond", icon: "◇" },
     { value: "hexagon", label: "Hexagon", icon: "⬡" },
+    { value: "octagon", label: "Octagon", icon: "⯃" },
+    { value: "parallelogram", label: "Parallelogram", icon: "▱" },
+    { value: "pentagon", label: "Pentagon", icon: "⬠" },
     { value: "star", label: "Star", icon: "★" },
-    { value: "arrow", label: "Arrow", icon: "➜" },
+    { value: "cross", label: "Cross", icon: "✚" },
+    { value: "triangle-up", label: "Triangle Up", icon: "▲" },
+    { value: "triangle-down", label: "Triangle Down", icon: "▼" },
+    { value: "triangle-left", label: "Triangle Left", icon: "◀" },
+    { value: "triangle-right", label: "Triangle Right", icon: "▶" },
     { value: "connector", label: "Connector", icon: "╱" }
   ];
 

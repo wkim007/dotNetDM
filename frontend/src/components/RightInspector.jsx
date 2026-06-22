@@ -5,11 +5,17 @@ function SelectField({ label, value, options, onChange, disabled = false }) {
     <label className="field-group">
       <span>{label}</span>
       <select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled}>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
+        {options.map((option) => {
+          const resolvedOption = typeof option === "string"
+            ? { value: option, label: option }
+            : option;
+
+          return (
+            <option key={resolvedOption.value} value={resolvedOption.value}>
+              {resolvedOption.label}
+            </option>
+          );
+        })}
       </select>
     </label>
   );
@@ -405,7 +411,23 @@ export default function RightInspector({
               <SelectField
                 label="Type"
                 value={selectedEntity.drawingShape ?? "rectangle"}
-                options={["rectangle", "rounded", "ellipse", "diamond", "hexagon", "star", "arrow", "line"]}
+                options={[
+                  { value: "rectangle", label: "Rectangle" },
+                  { value: "rounded", label: "Round Rectangle" },
+                  { value: "ellipse", label: "Ellipse" },
+                  { value: "diamond", label: "Diamond" },
+                  { value: "hexagon", label: "Hexagon" },
+                  { value: "octagon", label: "Octagon" },
+                  { value: "parallelogram", label: "Parallelogram" },
+                  { value: "pentagon", label: "Pentagon" },
+                  { value: "star", label: "Star" },
+                  { value: "cross", label: "Cross" },
+                  { value: "triangle-up", label: "Triangle Up" },
+                  { value: "triangle-down", label: "Triangle Down" },
+                  { value: "triangle-left", label: "Triangle Left" },
+                  { value: "triangle-right", label: "Triangle Right" },
+                  { value: "line", label: "Line" }
+                ]}
                 onChange={(value) => onEntityChange("drawingShape", value)}
               />
               {selectedEntity.drawingShape !== "line" ? (

@@ -1010,6 +1010,14 @@ body.panel-resizing {
   inset: 20px 24px 24px;
 }
 
+.drawing-textarea.inset-octagon {
+  inset: 20px 22px 24px;
+}
+
+.drawing-textarea.inset-pentagon {
+  inset: 26px 20px 20px;
+}
+
 .drawing-textarea.inset-star {
   inset: 30px 28px 34px;
   padding-top: 18px;
@@ -1018,6 +1026,30 @@ body.panel-resizing {
 
 .drawing-textarea.inset-arrow {
   inset: 24px 34px 24px 16px;
+}
+
+.drawing-textarea.inset-parallelogram {
+  inset: 18px 18px 22px 28px;
+}
+
+.drawing-textarea.inset-triangle-up {
+  inset: 30px 22px 14px;
+}
+
+.drawing-textarea.inset-triangle-down {
+  inset: 14px 22px 30px;
+}
+
+.drawing-textarea.inset-triangle-left {
+  inset: 18px 14px 18px 34px;
+}
+
+.drawing-textarea.inset-triangle-right {
+  inset: 18px 34px 18px 14px;
+}
+
+.drawing-textarea.inset-cross {
+  inset: 24px 24px 28px;
 }
 
 .drawing-textarea::placeholder {
