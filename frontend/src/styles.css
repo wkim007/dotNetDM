@@ -989,7 +989,9 @@ body.panel-resizing {
 }
 
 .drawing-textarea.inset-star {
-  inset: 26px 26px 28px;
+  inset: 30px 28px 34px;
+  padding-top: 18px;
+  padding-bottom: 10px;
 }
 
 .drawing-textarea.inset-arrow {
