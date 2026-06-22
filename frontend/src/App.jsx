@@ -1020,6 +1020,36 @@ function isDrawingLineEntity(entity) {
   return entity?.objectType === "drawing" && entity?.drawingShape === "line";
 }
 
+const DRAWING_SHAPE_TYPE_MAP = {
+  rectangle: "0",
+  rounded: "1",
+  ellipse: "2",
+  pentagon: "3",
+  hexagon: "4",
+  octagon: "6",
+  "triangle-up": "7",
+  "triangle-down": "8",
+  "triangle-left": "9",
+  "triangle-right": "10",
+  diamond: "11",
+  parallelogram: "12",
+  star: "13",
+  cross: "14",
+  line: "15"
+};
+
+const DRAWING_SHAPE_TYPE_REVERSE_MAP = Object.fromEntries(
+  Object.entries(DRAWING_SHAPE_TYPE_MAP).map(([shape, value]) => [value, shape])
+);
+
+function drawingShapeToTypeValue(shape) {
+  return DRAWING_SHAPE_TYPE_MAP[String(shape ?? "rectangle").trim()] ?? "0";
+}
+
+function drawingTypeValueToShape(value) {
+  return DRAWING_SHAPE_TYPE_REVERSE_MAP[String(value ?? "0").trim()] ?? "rectangle";
+}
+
 function normalizeRelationshipType(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
 
@@ -1346,6 +1376,10 @@ function exportModelToWorkspaceJson(model) {
       };
 
       const objectType = getEntityObjectType(entity);
+      if (objectType === "drawing") {
+        return;
+      }
+
       if (objectType === "view") {
         allViews.push({
           ...serializedEntity,
@@ -1506,7 +1540,33 @@ function exportModelToWorkspaceJson(model) {
               physicalName: relationship.physicalName ?? relationship.id,
               lineOffsetX: Number(relationship?.props?.lineOffsetX ?? 0),
               lineOffsetY: Number(relationship?.props?.lineOffsetY ?? 0)
-            }))
+            })),
+            Shapes: diagram.entities
+              .filter((entity) => getEntityObjectType(entity) === "drawing")
+              .map((entity) => {
+                const baseShape = {
+                  id: String(entity.id),
+                  text: entity.drawingText ?? "Drawing",
+                  definition: entity.definition ?? "",
+                  shape_type: drawingShapeToTypeValue(entity.drawingShape),
+                  x: Number(entity.x ?? 100),
+                  y: Number(entity.y ?? 0),
+                  width: Number(entity.width ?? getPreferredEntitySize(entity).width),
+                  height: Number(entity.height ?? getPreferredEntitySize(entity).height)
+                };
+
+                if (isDrawingLineEntity(entity)) {
+                  return {
+                    ...baseShape,
+                    parent: String(entity.lineSourceId ?? ""),
+                    child: String(entity.lineTargetId ?? ""),
+                    lineOffsetX: Number(entity.lineOffsetX ?? 0),
+                    lineOffsetY: Number(entity.lineOffsetY ?? 0)
+                  };
+                }
+
+                return baseShape;
+              })
           }
         }))
       }
@@ -1567,6 +1627,7 @@ function importWorkspaceModel(payload) {
     const entityShapes = diagram.modelShapes?.entities ?? [];
     const viewShapes = diagram.modelShapes?.views ?? [];
     const cachedViewShapes = diagram.modelShapes?.cachedViews ?? [];
+    const drawingShapes = diagram.modelShapes?.Shapes ?? [];
     const skippedEntityIds = new Set();
     const includedShapeEntries = [
       ...entityShapes.map((shape) => ({ shape, sourceEntity: entityMap.get(String(shape.id)), objectType: "entity" })),
@@ -1629,6 +1690,36 @@ function importWorkspaceModel(payload) {
       };
     });
 
+    const drawingEntities = drawingShapes.map((shape, shapeIndex) => {
+      const drawingShape = drawingTypeValueToShape(shape?.shape_type);
+      const fallbackId = `${diagram.id}-shape-${shapeIndex + 1}`;
+      const fallbackText = String(shape?.text ?? "").trim() || "Drawing";
+
+      return {
+        id: String(shape?.id ?? fallbackId),
+        name: String(shape?.name ?? fallbackText).trim() || `Shape_${shapeIndex + 1}`,
+        physicalName: String(shape?.physicalName ?? shape?.name ?? fallbackText).trim() || `Shape_${shapeIndex + 1}`,
+        definition: shape?.definition ?? "",
+        comment: shape?.comment ?? "",
+        objectType: "drawing",
+        drawingShape,
+        drawingText: fallbackText,
+        x: Number(shape?.x ?? 100),
+        y: Number(shape?.y ?? 0),
+        ...(shape?.width != null ? { width: Number(shape.width) } : {}),
+        ...(shape?.height != null ? { height: Number(shape.height) } : {}),
+        ...(drawingShape === "line"
+          ? {
+              lineSourceId: String(shape?.parent ?? ""),
+              lineTargetId: String(shape?.child ?? ""),
+              lineOffsetX: Number(shape?.lineOffsetX ?? 0),
+              lineOffsetY: Number(shape?.lineOffsetY ?? 0)
+            }
+          : {}),
+        fields: []
+      };
+    });
+
     const relationshipShapeIds = new Set((diagram.modelShapes?.relationships ?? []).map((shape) => String(shape.id)));
     const relationships = (workspace.relationships ?? [])
       .filter((relationship) => {
@@ -1678,7 +1769,7 @@ function importWorkspaceModel(payload) {
       definition: diagram.definition ?? "",
       displayLevelLogical: String(diagram.displayLevelLogical ?? "1"),
       displayLevelPhysical: String(diagram.displayLevelPhysical ?? "1"),
-      entities,
+      entities: [...entities, ...drawingEntities],
       relationships
     };
   });
