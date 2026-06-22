@@ -1016,6 +1016,10 @@ function isDrawingEntity(entity) {
   return entity?.objectType === "drawing";
 }
 
+function isDrawingLineEntity(entity) {
+  return entity?.objectType === "drawing" && entity?.drawingShape === "line";
+}
+
 function normalizeRelationshipType(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
 
@@ -2802,6 +2806,32 @@ export default function App() {
     }));
   }
 
+  function handleMoveDrawingLine(entityId, lineOffsetX, lineOffsetY) {
+    if (!entityId) {
+      return;
+    }
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: diagram.entities.map((entity) =>
+                entity.id === entityId
+                  ? {
+                      ...entity,
+                      lineOffsetX: Math.round(lineOffsetX),
+                      lineOffsetY: Math.round(lineOffsetY)
+                    }
+                  : entity
+              )
+            }
+          : diagram
+      )
+    }));
+  }
+
   function handleSetSelectedEntities(entityIds) {
     setSelectedEntityIds(entityIds);
     if (entityIds.length !== 1) {
@@ -2861,18 +2891,28 @@ export default function App() {
     );
 
     if (requestedRelationshipType === "Connector") {
-      const relationshipId = `relationship-${Date.now()}`;
-      const newRelationship = normalizeRelationship({
-        id: relationshipId,
-        sourceEntityId: linkDraft.sourceEntityId,
-        targetEntityId: entityId,
-        name: `${source?.physicalName ?? source?.name ?? "Object"} -> ${target?.physicalName ?? target?.name ?? "Object"}`,
-        physicalName: `${linkDraft.sourceEntityId}-${entityId}`,
-        description: "",
-        cardinality: "",
-        style: "solid",
-        relationshipType: "Connector"
-      });
+      const lineId = getNextNumericWorkspaceId(model);
+      const sourceCenterX = (source?.x ?? 0) + ((source?.width ?? 140) / 2);
+      const sourceCenterY = (source?.y ?? 0) + ((source?.height ?? 100) / 2);
+      const targetCenterX = (target?.x ?? 0) + ((target?.width ?? 140) / 2);
+      const targetCenterY = (target?.y ?? 0) + ((target?.height ?? 100) / 2);
+      const newLine = {
+        id: lineId,
+        name: `Shape_${lineId}`,
+        physicalName: `Shape_${lineId}`,
+        objectType: "drawing",
+        drawingShape: "line",
+        drawingText: "",
+        lineSourceId: linkDraft.sourceEntityId,
+        lineTargetId: entityId,
+        lineOffsetX: 0,
+        lineOffsetY: 0,
+        x: Math.min(sourceCenterX, targetCenterX),
+        y: Math.min(sourceCenterY, targetCenterY),
+        width: Math.max(24, Math.abs(targetCenterX - sourceCenterX)),
+        height: Math.max(24, Math.abs(targetCenterY - sourceCenterY)),
+        fields: []
+      };
 
       setModel((current) => ({
         ...current,
@@ -2880,17 +2920,17 @@ export default function App() {
           diagram.id === current.activeDiagramId
             ? {
                 ...diagram,
-                relationships: [...diagram.relationships, newRelationship]
+                entities: [...diagram.entities, newLine]
               }
             : diagram
         )
       }));
 
       setLinkDraft(null);
-      setSelectedEntityIds([]);
+      setSelectedEntityIds([lineId]);
       setSelectedAttributeId(null);
-      setSelectedRelationshipId(relationshipId);
-      setStatus(`Created connector ${newRelationship.name}.`);
+      setSelectedRelationshipId(null);
+      setStatus(`Created drawing line ${newLine.name}.`);
       return;
     }
 
@@ -3519,7 +3559,15 @@ export default function App() {
     setModel((current) => {
       const currentDiagram =
         current.diagrams.find((diagram) => diagram.id === current.activeDiagramId) ?? current.diagrams[0];
-      const nextEntities = currentDiagram?.entities.filter((entity) => !idsToDelete.has(entity.id)) ?? [];
+      const nextEntities =
+        currentDiagram?.entities.filter(
+          (entity) =>
+            !idsToDelete.has(entity.id) &&
+            !(
+              isDrawingLineEntity(entity) &&
+              (idsToDelete.has(entity.lineSourceId) || idsToDelete.has(entity.lineTargetId))
+            )
+        ) ?? [];
       nextSelectedIds = nextEntities[0]?.id ? [nextEntities[0].id] : [];
 
       return {
@@ -3528,7 +3576,14 @@ export default function App() {
           diagram.id === current.activeDiagramId
             ? {
                 ...diagram,
-                entities: diagram.entities.filter((entity) => !idsToDelete.has(entity.id)),
+                entities: diagram.entities.filter(
+                  (entity) =>
+                    !idsToDelete.has(entity.id) &&
+                    !(
+                      isDrawingLineEntity(entity) &&
+                      (idsToDelete.has(entity.lineSourceId) || idsToDelete.has(entity.lineTargetId))
+                    )
+                ),
                 relationships: diagram.relationships.filter(
                   (relationship) =>
                     !idsToDelete.has(relationship.sourceEntityId) &&
@@ -4241,6 +4296,7 @@ export default function App() {
           onMoveEntity={handleMoveEntity}
           onMoveEntities={handleMoveEntities}
           onMoveRelationship={handleMoveRelationship}
+          onMoveDrawingLine={handleMoveDrawingLine}
           onResizeEntity={handleResizeEntity}
           onChangeAnnotationText={handleChangeAnnotationText}
           onChangeDrawingText={handleChangeDrawingText}

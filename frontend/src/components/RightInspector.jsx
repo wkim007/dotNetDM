@@ -403,17 +403,19 @@ export default function RightInspector({
                 onChange={(value) => onEntityChange("name", value)}
               />
               <SelectField
-                label="Shape"
+                label="Type"
                 value={selectedEntity.drawingShape ?? "rectangle"}
-                options={["rectangle", "rounded", "ellipse", "diamond", "hexagon", "star", "arrow"]}
+                options={["rectangle", "rounded", "ellipse", "diamond", "hexagon", "star", "arrow", "line"]}
                 onChange={(value) => onEntityChange("drawingShape", value)}
               />
-              <TextField
-                label="Text"
-                value={selectedEntity.drawingText ?? ""}
-                onChange={(value) => onEntityChange("drawingText", value)}
-                tall
-              />
+              {selectedEntity.drawingShape !== "line" ? (
+                <TextField
+                  label="Text"
+                  value={selectedEntity.drawingText ?? ""}
+                  onChange={(value) => onEntityChange("drawingText", value)}
+                  tall
+                />
+              ) : null}
               <div className="button-row">
                 <button className="danger-button" type="button" onClick={onDeleteEntity}>
                   Delete Drawing

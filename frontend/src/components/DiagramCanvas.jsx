@@ -263,6 +263,25 @@ function getAnchor(entity, target, displayLevel, viewMode, expandedFieldIds) {
   };
 }
 
+function getOutlineCenterAnchor(entity, target, displayLevel, viewMode, expandedFieldIds) {
+  const bounds = getCardBounds(entity, displayLevel, viewMode, expandedFieldIds);
+  const targetBounds = getCardBounds(target, displayLevel, viewMode, expandedFieldIds);
+  const horizontalGap = targetBounds.centerX - bounds.centerX;
+  const verticalGap = targetBounds.centerY - bounds.centerY;
+
+  if (Math.abs(horizontalGap) >= Math.abs(verticalGap)) {
+    return {
+      x: horizontalGap >= 0 ? bounds.right : bounds.left,
+      y: bounds.centerY
+    };
+  }
+
+  return {
+    x: bounds.centerX,
+    y: verticalGap >= 0 ? bounds.bottom : bounds.top
+  };
+}
+
 function normalizeNotationStyle(notationStyle) {
   const normalized = String(notationStyle ?? "IDEF1x").trim().toLowerCase();
 
@@ -296,6 +315,13 @@ function getRelationshipDragOffset(relationship) {
   return {
     x: Number(relationship?.props?.lineOffsetX ?? 0),
     y: Number(relationship?.props?.lineOffsetY ?? 0)
+  };
+}
+
+function getDrawingLineDragOffset(entity) {
+  return {
+    x: Number(entity?.lineOffsetX ?? 0),
+    y: Number(entity?.lineOffsetY ?? 0)
   };
 }
 
@@ -544,6 +570,54 @@ function getEntityCardVariant(entity) {
   }
 
   return "entity";
+}
+
+function DrawingLine({
+  entity,
+  source,
+  target,
+  displayLevel,
+  viewMode,
+  expandedFieldIds,
+  isSelected,
+  onSelect,
+  onPointerDown
+}) {
+  const start = getOutlineCenterAnchor(source, target, displayLevel, viewMode, expandedFieldIds);
+  const end = getOutlineCenterAnchor(target, source, displayLevel, viewMode, expandedFieldIds);
+  const drawingOffset = getDrawingLineDragOffset(entity);
+  const middleX = (start.x + end.x) / 2 + drawingOffset.x;
+  const middleY = (start.y + end.y) / 2 + drawingOffset.y;
+  const points = `${start.x},${start.y} ${middleX},${start.y} ${middleX},${middleY} ${end.x},${middleY} ${end.x},${end.y}`;
+
+  return (
+    <>
+      <polyline
+        points={points}
+        className="drawing-line-hit-area"
+        onPointerDown={(event) => onPointerDown(event, entity.id)}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(entity.id, {
+            additive: false,
+            toggle: false
+          });
+        }}
+      />
+      <polyline
+        points={points}
+        className={`drawing-line ${isSelected ? "selected" : ""}`}
+        onPointerDown={(event) => onPointerDown(event, entity.id)}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(entity.id, {
+            additive: false,
+            toggle: false
+          });
+        }}
+      />
+    </>
+  );
 }
 
 function DrawingShapeSvg({ shape }) {
@@ -926,6 +1000,7 @@ export default function DiagramCanvas({
   onMoveEntity,
   onMoveEntities,
   onMoveRelationship,
+  onMoveDrawingLine,
   onResizeEntity,
   onChangeAnnotationText,
   onChangeDrawingText,
@@ -1144,6 +1219,36 @@ export default function DiagramCanvas({
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
+  function handleDrawingLinePointerDown(event, entityId) {
+    if (isLinkingRelationship) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const entity = entityMap[entityId];
+    if (!entity) {
+      return;
+    }
+
+    const offset = getDrawingLineDragOffset(entity);
+    interactionState.current = {
+      mode: "drawing-line-drag",
+      entityId,
+      pointerStart: getCanvasPoint(event),
+      initialOffsetX: offset.x,
+      initialOffsetY: offset.y
+    };
+
+    setDraggingId(`drawing-line-${entityId}`);
+    onSelectEntity(entityId, {
+      additive: false,
+      toggle: false
+    });
+    onSelectRelationship(null);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
   function handlePointerMove(event) {
     if (!interactionState.current) {
       return;
@@ -1213,6 +1318,18 @@ export default function DiagramCanvas({
       return;
     }
 
+    if (interactionState.current.mode === "drawing-line-drag") {
+      const point = getCanvasPoint(event);
+      const deltaX = point.x - interactionState.current.pointerStart.x;
+      const deltaY = point.y - interactionState.current.pointerStart.y;
+      onMoveDrawingLine(
+        interactionState.current.entityId,
+        interactionState.current.initialOffsetX + deltaX,
+        interactionState.current.initialOffsetY + deltaY
+      );
+      return;
+    }
+
     const { entityId, startX, startY, initialWidth, initialHeight, minHeight, minWidth } = interactionState.current;
     const width = Math.max(minWidth, Math.round(initialWidth + (event.clientX - startX)));
     const height = Math.max(minHeight, CARD_MIN_HEIGHT, Math.round(initialHeight + (event.clientY - startY)));
@@ -1241,6 +1358,8 @@ export default function DiagramCanvas({
       target instanceof Element &&
       (
         target.closest(".entity-card") ||
+        target.closest(".drawing-line") ||
+        target.closest(".drawing-line-hit-area") ||
         target.closest(".drawing-card") ||
         target.closest(".annotation-card") ||
         target.closest(".relationship-delete-badge") ||
@@ -1262,6 +1381,8 @@ export default function DiagramCanvas({
       target instanceof Element &&
       (
         target.closest(".entity-card") ||
+        target.closest(".drawing-line") ||
+        target.closest(".drawing-line-hit-area") ||
         target.closest(".drawing-card") ||
         target.closest(".annotation-card") ||
         target.closest(".diagram-link") ||
@@ -1318,6 +1439,32 @@ export default function DiagramCanvas({
             preserveAspectRatio="none"
             style={{ width: worldSize.width, height: worldSize.height }}
           >
+            {entities
+              .filter((entity) => entity?.objectType === "drawing" && entity?.drawingShape === "line")
+              .map((entity) => {
+                const source = entityMap[entity.lineSourceId];
+                const target = entityMap[entity.lineTargetId];
+
+                if (!source || !target) {
+                  return null;
+                }
+
+                return (
+                  <DrawingLine
+                    key={entity.id}
+                    entity={entity}
+                    source={source}
+                    target={target}
+                    displayLevel={displayLevel}
+                    viewMode={viewMode}
+                  expandedFieldIds={expandedFieldIds}
+                  isSelected={selectedEntityIds.includes(entity.id)}
+                  onSelect={onSelectEntity}
+                  onPointerDown={handleDrawingLinePointerDown}
+                />
+              );
+            })}
+
             {relationships.map((relationship) => {
               const source = entityMap[relationship.sourceEntityId];
               const target = entityMap[relationship.targetEntityId];
@@ -1363,7 +1510,7 @@ export default function DiagramCanvas({
           </svg>
 
           {entities.map((entity) =>
-            entity?.objectType === "drawing" ? (
+            entity?.objectType === "drawing" && entity?.drawingShape === "line" ? null : entity?.objectType === "drawing" ? (
               <DrawingCard
                 key={entity.id}
                 entity={entity}

@@ -859,6 +859,28 @@ body.panel-resizing {
   pointer-events: stroke;
 }
 
+.drawing-line-hit-area {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 18px;
+  cursor: pointer;
+  pointer-events: stroke;
+}
+
+.drawing-line {
+  fill: none;
+  stroke: #7ea6ff;
+  stroke-width: 2.2px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.drawing-line.selected {
+  stroke: #f1bf52;
+  filter: drop-shadow(0 0 8px rgba(241, 191, 82, 0.22));
+}
+
 .diagram-link-label {
   fill: #b4d8ef;
   font-size: 13px;
