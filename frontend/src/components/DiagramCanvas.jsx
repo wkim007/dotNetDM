@@ -255,6 +255,13 @@ function buildLogicalRelationshipPhrase(relationship) {
   return parentToChild || childToParent || "";
 }
 
+function getRelationshipDragOffset(relationship) {
+  return {
+    x: Number(relationship?.props?.lineOffsetX ?? 0),
+    y: Number(relationship?.props?.lineOffsetY ?? 0)
+  };
+}
+
 function DiagramLink({
   relationship,
   source,
@@ -265,6 +272,7 @@ function DiagramLink({
   expandedFieldIds,
   lineVariant,
   isSelected,
+  onRelationshipPointerDown,
   onSelectRelationship,
   onDeleteRelationship
 }) {
@@ -274,10 +282,11 @@ function DiagramLink({
   const deltaY = end.y - start.y;
   const curveStrength = Math.max(36, Math.min(140, Math.abs(deltaX) * 0.35 + Math.abs(deltaY) * 0.1));
   const horizontalFirst = Math.abs(deltaX) >= Math.abs(deltaY);
-  const controlOneX = horizontalFirst ? start.x + Math.sign(deltaX || 1) * curveStrength : start.x;
-  const controlOneY = horizontalFirst ? start.y : start.y + Math.sign(deltaY || 1) * curveStrength;
-  const controlTwoX = horizontalFirst ? end.x - Math.sign(deltaX || 1) * curveStrength : end.x;
-  const controlTwoY = horizontalFirst ? end.y : end.y - Math.sign(deltaY || 1) * curveStrength;
+  const relationshipOffset = getRelationshipDragOffset(relationship);
+  const controlOneX = (horizontalFirst ? start.x + Math.sign(deltaX || 1) * curveStrength : start.x) + relationshipOffset.x;
+  const controlOneY = (horizontalFirst ? start.y : start.y + Math.sign(deltaY || 1) * curveStrength) + relationshipOffset.y;
+  const controlTwoX = (horizontalFirst ? end.x - Math.sign(deltaX || 1) * curveStrength : end.x) + relationshipOffset.x;
+  const controlTwoY = (horizontalFirst ? end.y : end.y - Math.sign(deltaY || 1) * curveStrength) + relationshipOffset.y;
   const path = `M ${start.x} ${start.y} C ${controlOneX} ${controlOneY}, ${controlTwoX} ${controlTwoY}, ${end.x} ${end.y}`;
   const midX = (start.x + end.x) / 2;
   const midY = (start.y + end.y) / 2 - 10;
@@ -292,11 +301,11 @@ function DiagramLink({
   const childMarkerY = end.y + (endVectorY / endVectorLength) * childMarkerOffset;
   const adjustedEndX = childMarkerX;
   const adjustedEndY = childMarkerY;
-  const adjustedControlTwoX = horizontalFirst ? adjustedEndX - Math.sign(deltaX || 1) * curveStrength : adjustedEndX;
-  const adjustedControlTwoY = horizontalFirst ? adjustedEndY : adjustedEndY - Math.sign(deltaY || 1) * curveStrength;
+  const adjustedControlTwoX = (horizontalFirst ? adjustedEndX - Math.sign(deltaX || 1) * curveStrength : adjustedEndX) + relationshipOffset.x;
+  const adjustedControlTwoY = (horizontalFirst ? adjustedEndY : adjustedEndY - Math.sign(deltaY || 1) * curveStrength) + relationshipOffset.y;
   const adjustedPath = `M ${start.x} ${start.y} C ${controlOneX} ${controlOneY}, ${adjustedControlTwoX} ${adjustedControlTwoY}, ${adjustedEndX} ${adjustedEndY}`;
-  const adjustedMidX = (start.x + adjustedEndX) / 2;
-  const adjustedMidY = (start.y + adjustedEndY) / 2 - 10;
+  const adjustedMidX = (start.x + adjustedEndX) / 2 + relationshipOffset.x * 0.5;
+  const adjustedMidY = (start.y + adjustedEndY) / 2 + relationshipOffset.y * 0.5 - 10;
   const adjustedMarkerX = ((start.x + controlOneX) / 2 + (adjustedControlTwoX + adjustedEndX) / 2) / 2;
   const adjustedMarkerY = ((start.y + controlOneY) / 2 + (adjustedControlTwoY + adjustedEndY) / 2) / 2;
   const logicalRelationshipPhrase = buildLogicalRelationshipPhrase(relationship);
@@ -330,8 +339,8 @@ function DiagramLink({
   const arrowLeftY = arrowBaseY + perpY * arrowSpread;
   const arrowRightX = arrowBaseX - perpX * arrowSpread;
   const arrowRightY = arrowBaseY - perpY * arrowSpread;
-  const phraseAnchorX = start.x + (adjustedEndX - start.x) * 0.56 + perpX * 18;
-  const phraseAnchorY = start.y + (adjustedEndY - start.y) * 0.56 + perpY * 18;
+  const phraseAnchorX = start.x + (adjustedEndX - start.x) * 0.56 + relationshipOffset.x * 0.6 + perpX * 18;
+  const phraseAnchorY = start.y + (adjustedEndY - start.y) * 0.56 + relationshipOffset.y * 0.6 + perpY * 18;
 
   function handleMarkerSelect(event) {
     event.stopPropagation();
@@ -411,6 +420,7 @@ function DiagramLink({
       <path
         d={adjustedPath}
         className="diagram-link-hit-area"
+        onPointerDown={(event) => onRelationshipPointerDown(event, relationship.id)}
         onClick={(event) => {
           event.stopPropagation();
           onSelectRelationship(relationship.id);
@@ -419,6 +429,7 @@ function DiagramLink({
       <path
         d={adjustedPath}
         className={`diagram-link ${lineVariant} ${isSelected ? "selected" : ""}`}
+        onPointerDown={(event) => onRelationshipPointerDown(event, relationship.id)}
         onClick={handleMarkerSelect}
       />
       {renderNotationMarkers()}
@@ -633,6 +644,7 @@ export default function DiagramCanvas({
   onSelectRelationship,
   onMoveEntity,
   onMoveEntities,
+  onMoveRelationship,
   onResizeEntity,
   onSelectAttribute,
   onDeleteEntity,
@@ -744,8 +756,9 @@ export default function DiagramCanvas({
 
     const start = getAnchor(source, target, displayLevel, viewMode, expandedFieldIds);
     const end = getAnchor(target, source, displayLevel, viewMode, expandedFieldIds);
-    const focusX = (start.x + end.x) / 2;
-    const focusY = (start.y + end.y) / 2;
+    const relationshipOffset = getRelationshipDragOffset(relationship);
+    const focusX = (start.x + end.x) / 2 + relationshipOffset.x * 0.5;
+    const focusY = (start.y + end.y) / 2 + relationshipOffset.y * 0.5;
     const element = canvasRef.current;
     const targetLeft = Math.max(0, focusX * zoom - element.clientWidth / 2);
     const targetTop = Math.max(0, focusY * zoom - element.clientHeight / 2);
@@ -822,6 +835,32 @@ export default function DiagramCanvas({
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
+  function handleRelationshipPointerDown(event, relationshipId) {
+    if (isLinkingRelationship) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const relationship = relationships.find((item) => item.id === relationshipId);
+    if (!relationship) {
+      return;
+    }
+
+    const offset = getRelationshipDragOffset(relationship);
+    interactionState.current = {
+      mode: "relationship-drag",
+      relationshipId,
+      pointerStart: getCanvasPoint(event),
+      initialOffsetX: offset.x,
+      initialOffsetY: offset.y
+    };
+
+    setDraggingId(`relationship-${relationshipId}`);
+    onSelectRelationship(relationshipId);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
   function handlePointerMove(event) {
     if (!interactionState.current) {
       return;
@@ -876,6 +915,18 @@ export default function DiagramCanvas({
         ? Array.from(new Set([...interactionState.current.baseSelection, ...hits]))
         : hits;
       onSelectEntities(nextSelection);
+      return;
+    }
+
+    if (interactionState.current.mode === "relationship-drag") {
+      const point = getCanvasPoint(event);
+      const deltaX = point.x - interactionState.current.pointerStart.x;
+      const deltaY = point.y - interactionState.current.pointerStart.y;
+      onMoveRelationship(
+        interactionState.current.relationshipId,
+        interactionState.current.initialOffsetX + deltaX,
+        interactionState.current.initialOffsetY + deltaY
+      );
       return;
     }
 
@@ -1014,6 +1065,7 @@ export default function DiagramCanvas({
                         : "identifying"
                   }
                   isSelected={relationship.id === selectedRelationshipId}
+                  onRelationshipPointerDown={handleRelationshipPointerDown}
                   onSelectRelationship={onSelectRelationship}
                   onDeleteRelationship={onDeleteRelationship}
                 />

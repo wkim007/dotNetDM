@@ -1364,6 +1364,9 @@ function exportModelToWorkspaceJson(model) {
         relationshipType: relationshipTypeToValue(relationship.relationshipType),
         physicalOnly: false,
         logicalOnly: false,
+        props: {
+          ...(relationship.props ?? {})
+        },
         parentToChildVerbPhrase: relationship.parentToChildVerbPhrase ?? "",
         childToParentVerbPhrase: relationship.childToParentVerbPhrase ?? ""
       });
@@ -1472,7 +1475,9 @@ function exportModelToWorkspaceJson(model) {
             relationships: diagram.relationships.map((relationship) => ({
               id: String(relationship.id),
               name: relationship.name ?? relationship.physicalName ?? relationship.id,
-              physicalName: relationship.physicalName ?? relationship.id
+              physicalName: relationship.physicalName ?? relationship.id,
+              lineOffsetX: Number(relationship?.props?.lineOffsetX ?? 0),
+              lineOffsetY: Number(relationship?.props?.lineOffsetY ?? 0)
             }))
           }
         }))
@@ -1626,6 +1631,9 @@ function importWorkspaceModel(payload) {
           name: relationship.name ?? getRelationshipName(relationship, source, target),
           physicalName: relationship.physicalName ?? relationship.name ?? relationship.id,
           description: relationship.description ?? relationship.comment ?? "relates_to",
+          props: {
+            ...(relationship.props ?? {})
+          },
           parentToChildVerbPhrase: relationship.parentToChildVerbPhrase ?? "",
           childToParentVerbPhrase: relationship.childToParentVerbPhrase ?? "",
           parentAttribute: relationship.parentAttribute ?? "Entity header",
@@ -1727,6 +1735,9 @@ function normalizeRelationship(relationship) {
     description: relationship.description ?? "relates_to",
     parentToChildVerbPhrase: relationship.parentToChildVerbPhrase ?? "",
     childToParentVerbPhrase: relationship.childToParentVerbPhrase ?? "",
+    props: {
+      ...(relationship.props ?? {})
+    },
     parentAttribute: relationship.parentAttribute ?? "Entity header",
     childAttribute: relationship.childAttribute ?? "Entity header",
     migratedKeyIndex: relationship.migratedKeyIndex ?? "Select parent index",
@@ -2696,6 +2707,35 @@ export default function App() {
     setSelectedEntityIds([]);
     setSelectedAttributeId(null);
     setLinkDraft(null);
+  }
+
+  function handleMoveRelationship(relationshipId, lineOffsetX, lineOffsetY) {
+    if (!relationshipId) {
+      return;
+    }
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              relationships: diagram.relationships.map((relationship) =>
+                relationship.id === relationshipId
+                  ? {
+                      ...relationship,
+                      props: {
+                        ...(relationship.props ?? {}),
+                        lineOffsetX: Math.round(lineOffsetX),
+                        lineOffsetY: Math.round(lineOffsetY)
+                      }
+                    }
+                  : relationship
+              )
+            }
+          : diagram
+      )
+    }));
   }
 
   function handleSetSelectedEntities(entityIds) {
@@ -3986,6 +4026,7 @@ export default function App() {
           onSelectAttribute={handleSelectAttribute}
           onMoveEntity={handleMoveEntity}
           onMoveEntities={handleMoveEntities}
+          onMoveRelationship={handleMoveRelationship}
           onResizeEntity={handleResizeEntity}
           onDeleteEntity={handleDeleteEntityById}
           onDeleteRelationship={handleDeleteRelationship}
