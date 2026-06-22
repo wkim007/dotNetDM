@@ -1008,6 +1008,10 @@ function isViewLikeEntity(entity) {
   return entity?.objectType === "view" || entity?.objectType === "materializedView";
 }
 
+function isAnnotationEntity(entity) {
+  return entity?.objectType === "annotation";
+}
+
 function normalizeRelationshipType(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
 
@@ -1063,6 +1067,10 @@ function relationshipTypeToValue(value) {
 }
 
 function getEntityObjectType(entity) {
+  if (entity?.objectType === "annotation") {
+    return "annotation";
+  }
+
   if (entity?.objectType === "materializedView") {
     return "materializedView";
   }
@@ -1702,6 +1710,20 @@ function flattenFieldsForLayout(fields, depth = 0) {
 }
 
 function getPreferredEntitySize(entity) {
+  if (isAnnotationEntity(entity)) {
+    const annotationText = String(entity.annotationText ?? entity.comment ?? "").trim() || "Annotation";
+    const longestLineWidth = Math.max(
+      ...annotationText.split(/\r?\n/).map((line) => estimateTextWidth(line, 8.2)),
+      110
+    );
+    const lineCount = Math.max(1, annotationText.split(/\r?\n/).length);
+
+    return {
+      width: Math.min(CARD_MAX_WIDTH, Math.max(160, Math.ceil(longestLineWidth + 36))),
+      height: Math.max(84, 18 + lineCount * 24)
+    };
+  }
+
   const fields = flattenFieldsForLayout(entity.fields ?? []);
   const hasNestedFields = fields.some((field) => field.hasChildren || field.depth > 0);
   const headerWidth = estimateTextWidth(entity.physicalName ?? entity.name ?? "Entity", 12) + 92;
@@ -2168,12 +2190,19 @@ export default function App() {
       return entities;
     }
 
+    const annotationEntities = entities.filter((entity) => isAnnotationEntity(entity));
+    const layoutEntities = entities.filter((entity) => !isAnnotationEntity(entity));
+
+    if (layoutEntities.length === 0) {
+      return entities;
+    }
+
     const padding = 48;
     const gapX = 42;
     const gapY = 42;
     const usableWidth = Math.max(viewport.width - padding * 2, 480);
     const usableHeight = Math.max(viewport.height - padding * 2, 480);
-    const orderedEntities = [...entities].sort((left, right) => {
+    const orderedEntities = [...layoutEntities].sort((left, right) => {
       const leftDegree = relationships.filter(
         (relationship) =>
           relationship.sourceEntityId === left.id || relationship.targetEntityId === left.id
@@ -2245,9 +2274,14 @@ export default function App() {
       currentX += column.width + gapX;
     });
 
-    return orderedEntities.map(
-      (entity) => positionedEntities.find((positionedEntity) => positionedEntity.id === entity.id) ?? entity
+    const positionedMap = new Map(
+      orderedEntities.map((entity) => [
+        entity.id,
+        positionedEntities.find((positionedEntity) => positionedEntity.id === entity.id) ?? entity
+      ])
     );
+
+    return entities.map((entity) => positionedMap.get(entity.id) ?? entity);
   }
 
   async function loadProviders() {
@@ -2988,6 +3022,10 @@ export default function App() {
         return { [field]: value };
       }
 
+      if (field === "annotationText") {
+        return { annotationText: value };
+      }
+
       if (fieldId) {
         return {
           fields: mapFieldTree(entity.fields, (item) =>
@@ -3075,6 +3113,22 @@ export default function App() {
               ...diagram,
               entities: diagram.entities.map((entity) =>
                 entity.id === entityId ? { ...entity, width, height } : entity
+              )
+            }
+          : diagram
+      )
+    }));
+  }
+
+  function handleChangeAnnotationText(entityId, value) {
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: diagram.entities.map((entity) =>
+                entity.id === entityId ? { ...entity, annotationText: value } : entity
               )
             }
           : diagram
@@ -3196,6 +3250,38 @@ export default function App() {
     setSelectedRelationshipId(null);
     setLinkDraft(null);
     setStatus(`Created a new ${cachedViewUiName.toLowerCase()}.`);
+  }
+
+  function handleAddAnnotation() {
+    const [entityId] = getNextNumericWorkspaceIds(model, 1);
+    const newAnnotation = {
+      id: entityId,
+      name: "Annotation",
+      physicalName: "Annotation",
+      objectType: "annotation",
+      annotationText: "Type annotation",
+      x: 220,
+      y: 180,
+      width: 180,
+      height: 92,
+      fields: []
+    };
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: [...diagram.entities, newAnnotation]
+            }
+          : diagram
+      )
+    }));
+    setSelectedEntityIds([entityId]);
+    setSelectedRelationshipId(null);
+    setLinkDraft(null);
+    setStatus("Created a new annotation.");
   }
 
   function handleAddDiagram() {
@@ -3965,6 +4051,7 @@ export default function App() {
         onOpenModelProperties={() => setIsModelPropertiesOpen(true)}
         onAutoLayout={handleAutoLayout}
         onAddEntity={handleAddEntity}
+        onAddAnnotation={handleAddAnnotation}
         onAddView={handleAddView}
         onAddMaterializedView={handleAddMaterializedView}
         onStartIdentifyingRelationship={handleStartIdentifyingRelationship}
@@ -4028,6 +4115,7 @@ export default function App() {
           onMoveEntities={handleMoveEntities}
           onMoveRelationship={handleMoveRelationship}
           onResizeEntity={handleResizeEntity}
+          onChangeAnnotationText={handleChangeAnnotationText}
           onDeleteEntity={handleDeleteEntityById}
           onDeleteRelationship={handleDeleteRelationship}
           onToggleFieldExpansion={handleToggleFieldExpansion}

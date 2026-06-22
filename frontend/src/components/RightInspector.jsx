@@ -39,6 +39,10 @@ function parseDatatypeParts(dataType) {
 }
 
 function getObjectTypeLabel(entity) {
+  if (entity?.objectType === "annotation") {
+    return "Annotation";
+  }
+
   if (entity?.objectType === "view") {
     return "View";
   }
@@ -149,9 +153,15 @@ export default function RightInspector({
   const sortedEntities = [...(allEntities ?? [])].sort((left, right) =>
     String(left.physicalName ?? left.name ?? "").localeCompare(String(right.physicalName ?? right.name ?? ""))
   );
-  const sortedEntityObjects = sortedEntities.filter((entity) => entity.objectType !== "view" && entity.objectType !== "materializedView");
+  const sortedEntityObjects = sortedEntities.filter(
+    (entity) =>
+      entity.objectType !== "view" &&
+      entity.objectType !== "materializedView" &&
+      entity.objectType !== "annotation"
+  );
   const sortedViewObjects = sortedEntities.filter((entity) => entity.objectType === "view");
   const sortedMaterializedViewObjects = sortedEntities.filter((entity) => entity.objectType === "materializedView");
+  const sortedAnnotationObjects = sortedEntities.filter((entity) => entity.objectType === "annotation");
   const sortedRelationships = [...(allRelationships ?? [])].sort((left, right) =>
     String(left.name ?? left.physicalName ?? "").localeCompare(String(right.name ?? right.physicalName ?? ""))
   );
@@ -377,7 +387,27 @@ export default function RightInspector({
             <span className="panel-label">{selectedEntitySectionLabel}</span>
           </div>
 
-          <>
+          {selectedEntity.objectType === "annotation" ? (
+            <>
+              <TextField
+                label="Name"
+                value={selectedEntity.name ?? ""}
+                onChange={(value) => onEntityChange("name", value)}
+              />
+              <TextField
+                label="Text"
+                value={selectedEntity.annotationText ?? ""}
+                onChange={(value) => onEntityChange("annotationText", value)}
+                tall
+              />
+              <div className="button-row">
+                <button className="danger-button" type="button" onClick={onDeleteEntity}>
+                  Delete Annotation
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
             <TextField
               label="Name"
               value={selectedEntity.name}
@@ -535,12 +565,19 @@ export default function RightInspector({
             )}
 
             <div className="divider" />
-          </>
+            </>
+          )}
         </section>
       ) : null}
 
       {!selectedEntity ? (
         <>
+          <ObjectBrowserSection
+            title="Annotation"
+            items={sortedAnnotationObjects}
+            onEditEntity={onEditEntity}
+            onGoToEntity={onGoToEntity}
+          />
           <ObjectBrowserSection
             title="View"
             items={sortedViewObjects}

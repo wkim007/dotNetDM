@@ -39,6 +39,7 @@ export default function LeftSidebar({
   onOpenModelProperties,
   onAutoLayout,
   onAddEntity,
+  onAddAnnotation,
   onAddView,
   onAddMaterializedView,
   onStartIdentifyingRelationship,
@@ -242,6 +243,16 @@ export default function LeftSidebar({
             <button type="button" className="secondary-button diagram-box-item" onClick={onAddEntity} title="Add Entity">
               <span className="diagram-box-icon">▦</span>
               <span>Entity</span>
+            </button>
+
+            <button
+              type="button"
+              className="secondary-button diagram-box-item"
+              onClick={onAddAnnotation}
+              title="Add Annotation"
+            >
+              <span className="diagram-box-icon">≡</span>
+              <span>Annotation</span>
             </button>
 
             {showViewObjectsUi ? (

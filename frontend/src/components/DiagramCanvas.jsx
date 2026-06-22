@@ -113,6 +113,17 @@ function getVisibleFields(entity, displayLevel, expandedFieldIds) {
 }
 
 function getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds) {
+  if (entity?.objectType === "annotation") {
+    const annotationText = String(entity.annotationText ?? "").trim() || "Type annotation";
+    const lines = annotationText.split(/\r?\n/);
+    const longestLineWidth = Math.max(...lines.map((line) => estimateTextWidth(line, 8.2)), 120);
+
+    return {
+      width: Math.min(440, Math.max(180, Math.ceil(longestLineWidth + 34))),
+      height: Math.max(92, Math.min(280, 28 + lines.length * 24))
+    };
+  }
+
   const headerWidth = estimateTextWidth(entity.physicalName ?? entity.name ?? "Entity", 12) + 92;
   const commentMode = isCommentDisplayLevel(displayLevel);
 
@@ -150,6 +161,14 @@ function getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds
 
 function getRenderedEntitySize(entity, displayLevel, viewMode, expandedFieldIds) {
   const preferredSize = getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds);
+
+  if (entity?.objectType === "annotation") {
+    return {
+      width: Math.max(entity.width ?? 0, preferredSize.width),
+      height: Math.max(entity.height ?? 0, preferredSize.height)
+    };
+  }
+
   const normalizedDisplayLevel = normalizeDisplayLevel(displayLevel);
   const shouldPreserveManualHeight =
     normalizedDisplayLevel !== "table" &&
@@ -484,6 +503,10 @@ function FieldTreeMarker({ expanded }) {
 }
 
 function getEntityCardVariant(entity) {
+  if (entity?.objectType === "annotation") {
+    return "annotation";
+  }
+
   if (entity?.objectType === "materializedView") {
     return "materialized-view";
   }
@@ -493,6 +516,80 @@ function getEntityCardVariant(entity) {
   }
 
   return "entity";
+}
+
+function AnnotationCard({
+  entity,
+  isSelected,
+  onPointerDown,
+  onResizeStart,
+  onSelect,
+  onChangeText,
+  onDelete
+}) {
+  const { width, height } = getRenderedEntitySize(entity, "comment", "Physical View", {});
+
+  return (
+    <article
+      className={`annotation-card ${isSelected ? "selected" : ""}`}
+      style={{ left: entity.x, top: entity.y, width, height }}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect(entity.id, {
+          additive: false,
+          toggle: false
+        });
+      }}
+    >
+      <div
+        className="annotation-grab-strip"
+        onPointerDown={(event) => onPointerDown(event, entity.id)}
+      />
+      <button
+        type="button"
+        className="annotation-close"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete(entity.id);
+        }}
+      >
+        ×
+      </button>
+      <textarea
+        className="annotation-textarea"
+        value={entity.annotationText ?? ""}
+        placeholder="Type annotation"
+        onPointerDown={(event) => {
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(entity.id, {
+            additive: false,
+            toggle: false
+          });
+        }}
+        onFocus={() =>
+          onSelect(entity.id, {
+            additive: false,
+            toggle: false
+          })
+        }
+        onChange={(event) => onChangeText(entity.id, event.target.value)}
+      />
+      <button
+        type="button"
+        className="entity-resize-handle"
+        aria-label={`Resize annotation ${entity.name ?? "Annotation"}`}
+        onPointerDown={(event) => onResizeStart(event, entity.id)}
+        onClick={(event) => event.stopPropagation()}
+      />
+    </article>
+  );
 }
 
 function EntityCard({
@@ -646,6 +743,7 @@ export default function DiagramCanvas({
   onMoveEntities,
   onMoveRelationship,
   onResizeEntity,
+  onChangeAnnotationText,
   onSelectAttribute,
   onDeleteEntity,
   onDeleteRelationship,
@@ -958,6 +1056,7 @@ export default function DiagramCanvas({
       target instanceof Element &&
       (
         target.closest(".entity-card") ||
+        target.closest(".annotation-card") ||
         target.closest(".relationship-delete-badge") ||
         target.closest(".diagram-link") ||
         target.closest(".diagram-link-hit-area")
@@ -977,6 +1076,7 @@ export default function DiagramCanvas({
       target instanceof Element &&
       (
         target.closest(".entity-card") ||
+        target.closest(".annotation-card") ||
         target.closest(".diagram-link") ||
         target.closest(".diagram-link-hit-area") ||
         target.closest(".relationship-delete-badge")
@@ -1073,24 +1173,37 @@ export default function DiagramCanvas({
             })}
           </svg>
 
-          {entities.map((entity) => (
-            <EntityCard
-              key={entity.id}
-              entity={entity}
-              displayLevel={displayLevel}
-              viewMode={viewMode}
-              expandedFieldIds={expandedFieldIds}
-              isSelected={selectedEntityIds.includes(entity.id)}
-              selectedAttributeId={selectedEntityIds.includes(entity.id) ? selectedAttributeId : null}
-              isLinkingRelationship={isLinkingRelationship}
-              onPointerDown={handlePointerDown}
-              onResizeStart={handleResizeStart}
-              onSelect={onSelectEntity}
-              onSelectAttribute={onSelectAttribute}
-              onToggleFieldExpansion={onToggleFieldExpansion}
-              onDelete={onDeleteEntity}
-            />
-          ))}
+          {entities.map((entity) =>
+            entity?.objectType === "annotation" ? (
+              <AnnotationCard
+                key={entity.id}
+                entity={entity}
+                isSelected={selectedEntityIds.includes(entity.id)}
+                onPointerDown={handlePointerDown}
+                onResizeStart={handleResizeStart}
+                onSelect={onSelectEntity}
+                onChangeText={onChangeAnnotationText}
+                onDelete={onDeleteEntity}
+              />
+            ) : (
+              <EntityCard
+                key={entity.id}
+                entity={entity}
+                displayLevel={displayLevel}
+                viewMode={viewMode}
+                expandedFieldIds={expandedFieldIds}
+                isSelected={selectedEntityIds.includes(entity.id)}
+                selectedAttributeId={selectedEntityIds.includes(entity.id) ? selectedAttributeId : null}
+                isLinkingRelationship={isLinkingRelationship}
+                onPointerDown={handlePointerDown}
+                onResizeStart={handleResizeStart}
+                onSelect={onSelectEntity}
+                onSelectAttribute={onSelectAttribute}
+                onToggleFieldExpansion={onToggleFieldExpansion}
+                onDelete={onDeleteEntity}
+              />
+            )
+          )}
 
           {marqueeRect ? (
             <div
