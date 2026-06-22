@@ -87,7 +87,11 @@ export default function LeftSidebar({
   }, [isDrawingPaletteOpen]);
 
   function handleChooseDrawingShape(shape) {
-    onAddDrawing(shape);
+    if (shape === "connector") {
+      onStartConnectorRelationship();
+    } else {
+      onAddDrawing(shape);
+    }
     setIsDrawingPaletteOpen(false);
   }
 
@@ -98,7 +102,8 @@ export default function LeftSidebar({
     { value: "diamond", label: "Diamond", icon: "◇" },
     { value: "hexagon", label: "Hexagon", icon: "⬡" },
     { value: "star", label: "Star", icon: "★" },
-    { value: "arrow", label: "Arrow", icon: "➜" }
+    { value: "arrow", label: "Arrow", icon: "➜" },
+    { value: "connector", label: "Connector", icon: "╱" }
   ];
 
   return (
@@ -386,7 +391,7 @@ export default function LeftSidebar({
             <div className="diagram-box-popover" ref={drawingPaletteRef}>
               <button
                 type="button"
-                className={`secondary-button diagram-box-item ${isDrawingPaletteOpen ? "active" : ""}`}
+                className={`secondary-button diagram-box-item ${isDrawingPaletteOpen || activeRelationshipTool === "Connector" ? "active" : ""}`}
                 onClick={() => setIsDrawingPaletteOpen((current) => !current)}
                 title="Add Drawing"
               >
@@ -414,16 +419,6 @@ export default function LeftSidebar({
                 </div>
               ) : null}
             </div>
-
-            <button
-              type="button"
-              className={`secondary-button diagram-box-item ${activeRelationshipTool === "Connector" ? "active" : ""}`}
-              onClick={onStartConnectorRelationship}
-              title="Add Connector"
-            >
-              <span className="diagram-box-icon">╱</span>
-              <span>Connector</span>
-            </button>
           </div>
         </div>
       </section>
