@@ -1546,6 +1546,8 @@ function exportModelToWorkspaceJson(model) {
               .map((entity) => {
                 const baseShape = {
                   id: String(entity.id),
+                  name: entity.name ?? entity.physicalName ?? `shape_${entity.id}`,
+                  physicalOnly: Boolean(entity.physicalOnly),
                   text: entity.drawingText ?? "Drawing",
                   definition: entity.definition ?? "",
                   shape_type: drawingShapeToTypeValue(entity.drawingShape),
@@ -1701,6 +1703,7 @@ function importWorkspaceModel(payload) {
         physicalName: String(shape?.physicalName ?? shape?.name ?? fallbackText).trim() || `Shape_${shapeIndex + 1}`,
         definition: shape?.definition ?? "",
         comment: shape?.comment ?? "",
+        physicalOnly: Boolean(shape?.physicalOnly),
         objectType: "drawing",
         drawingShape,
         drawingText: fallbackText,
@@ -2016,6 +2019,13 @@ export default function App() {
     () => model.diagrams.find((diagram) => diagram.id === model.activeDiagramId) ?? model.diagrams[0],
     [model]
   );
+  const visibleDiagramEntities = useMemo(
+    () =>
+      (activeDiagram?.entities ?? []).filter(
+        (entity) => !(model.project.viewMode === "Logical View" && isDrawingEntity(entity) && entity.physicalOnly)
+      ),
+    [activeDiagram, model.project.viewMode]
+  );
   const tabs = useMemo(
     () =>
       model.diagrams.map((diagram) => ({
@@ -2051,6 +2061,18 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(JSON_DRAFT_STORAGE_KEY, jsonDraft);
   }, [jsonDraft]);
+
+  useEffect(() => {
+    if (!selectedEntityId) {
+      return;
+    }
+
+    const stillVisible = visibleDiagramEntities.some((entity) => entity.id === selectedEntityId);
+    if (!stillVisible) {
+      setSelectedEntityIds([]);
+      setSelectedAttributeId(null);
+    }
+  }, [selectedEntityId, visibleDiagramEntities]);
 
   useEffect(() => {
     if (!selectedEntity) {
@@ -2992,6 +3014,7 @@ export default function App() {
         name: `Shape_${lineId}`,
         physicalName: `Shape_${lineId}`,
         objectType: "drawing",
+        physicalOnly: false,
         drawingShape: "line",
         drawingText: "",
         lineSourceId: linkDraft.sourceEntityId,
@@ -3231,6 +3254,10 @@ export default function App() {
 
       if (field === "drawingShape") {
         return { drawingShape: value };
+      }
+
+      if (field === "physicalOnly") {
+        return { physicalOnly: value };
       }
 
       if (fieldId) {
@@ -3514,6 +3541,7 @@ export default function App() {
       name: "Drawing",
       physicalName: "Drawing",
       objectType: "drawing",
+      physicalOnly: false,
       drawingShape: shape,
       drawingText: "Drawing",
       x: 260,
@@ -4363,7 +4391,7 @@ export default function App() {
         />
         <div className="workspace-status">{status}</div>
         <DiagramCanvas
-          entities={activeDiagram?.entities ?? []}
+          entities={visibleDiagramEntities}
           relationships={activeDiagram?.relationships ?? []}
           selectedEntityIds={selectedEntityIds}
           selectedRelationshipId={selectedRelationshipId}
@@ -4413,7 +4441,7 @@ export default function App() {
           selectedEntity={selectedEntity}
           selectedAttribute={selectedAttribute}
           selectedRelationship={selectedRelationship}
-          allEntities={activeDiagram?.entities ?? []}
+          allEntities={visibleDiagramEntities}
           allRelationships={activeDiagram?.relationships ?? []}
           schemas={model.project?.schemas ?? []}
           datatypeOptions={datatypeOptions}

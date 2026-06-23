@@ -1415,6 +1415,10 @@ body.panel-resizing {
   height: 16px;
 }
 
+.drawing-physical-only {
+  margin-bottom: 12px;
+}
+
 .mini-list-item strong {
   font-size: 0.95rem;
 }

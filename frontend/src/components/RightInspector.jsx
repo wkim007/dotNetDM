@@ -438,6 +438,14 @@ export default function RightInspector({
                   tall
                 />
               ) : null}
+              <label className="checkbox-field drawing-physical-only">
+                <input
+                  type="checkbox"
+                  checked={!!selectedEntity.physicalOnly}
+                  onChange={(event) => onEntityChange("physicalOnly", event.target.checked)}
+                />
+                <span>Physical Only</span>
+              </label>
               <div className="button-row">
                 <button className="danger-button" type="button" onClick={onDeleteEntity}>
                   Delete Drawing
