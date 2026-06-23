@@ -64,6 +64,16 @@ function getCommentText(entity, viewMode) {
   return String(useDefinition ? entity.definition ?? "" : entity.comment ?? "").trim();
 }
 
+function getEntityDisplayName(entity, viewMode) {
+  const normalizedViewMode = String(viewMode ?? "").trim().toLowerCase();
+
+  if (normalizedViewMode === "logical view") {
+    return entity?.name ?? entity?.physicalName ?? "Entity";
+  }
+
+  return entity?.physicalName ?? entity?.name ?? "Entity";
+}
+
 function sortFieldsForDisplay(fields) {
   return [...fields].sort((left, right) => {
     const leftRank = left.kind === "PK" ? 0 : 1;
@@ -135,7 +145,7 @@ function getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds
     };
   }
 
-  const headerWidth = estimateTextWidth(entity.physicalName ?? entity.name ?? "Entity", 12) + 92;
+  const headerWidth = estimateTextWidth(getEntityDisplayName(entity, viewMode), 12) + 92;
   const commentMode = isCommentDisplayLevel(displayLevel);
 
   if (commentMode) {
@@ -975,6 +985,7 @@ function EntityCard({
   const preferredSize = getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds);
   const { width, height } = getRenderedEntitySize(entity, displayLevel, viewMode, expandedFieldIds);
   const variantClass = getEntityCardVariant(entity);
+  const displayName = getEntityDisplayName(entity, viewMode);
 
   return (
     <article
@@ -1000,9 +1011,9 @@ function EntityCard({
           toggle: false
         });
       }}
-    >
+      >
       <header className="entity-card-header">
-        <h3>{entity.physicalName}</h3>
+        <h3>{displayName}</h3>
         <button
           type="button"
           className="entity-close"
@@ -1076,7 +1087,7 @@ function EntityCard({
       <button
         type="button"
         className="entity-resize-handle"
-        aria-label={`Resize ${entity.physicalName}`}
+        aria-label={`Resize ${displayName}`}
         onPointerDown={(event) => onResizeStart(event, entity.id)}
         onClick={(event) => event.stopPropagation()}
       />

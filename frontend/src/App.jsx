@@ -1365,8 +1365,8 @@ function exportModelToWorkspaceJson(model) {
         physicalName: entity.physicalName ?? "",
         definition: entity.definition ?? "",
         comment: entity.comment ?? "",
-        physicalOnly: false,
-        logicalOnly: false,
+        physicalOnly: Boolean(entity.physicalOnly),
+        logicalOnly: Boolean(entity.logicalOnly),
         indexes: entity.indexes ?? [],
         attributes: (entity.fields ?? []).map(serializeFieldToAttribute),
         props: {
@@ -1428,8 +1428,8 @@ function exportModelToWorkspaceJson(model) {
         childAttribute: relationship.childAttribute ?? "Entity header",
         cardinality: relationship.cardinality ?? "1:N",
         relationshipType: relationshipTypeToValue(relationship.relationshipType),
-        physicalOnly: false,
-        logicalOnly: false,
+        physicalOnly: Boolean(relationship.physicalOnly),
+        logicalOnly: Boolean(relationship.logicalOnly),
         props: {
           ...(relationship.props ?? {})
         },
@@ -1699,6 +1699,8 @@ function importWorkspaceModel(payload) {
         physicalName: sourceEntity?.physicalName || shape.physicalName || sourceEntity?.name || shape.name || fallbackName,
         definition: sourceEntity?.definition ?? "",
         comment: sourceEntity?.comment ?? "",
+        physicalOnly: Boolean(sourceEntity?.physicalOnly),
+        logicalOnly: Boolean(sourceEntity?.logicalOnly),
         objectType,
         x: Number(shape.x ?? 160),
         y: Number(shape.y ?? 120),
@@ -2063,12 +2065,17 @@ export default function App() {
   const visibleDiagramEntities = useMemo(
     () =>
       (activeDiagram?.entities ?? []).filter(
-        (entity) =>
-          !(
-            model.project.viewMode === "Logical View" &&
-            (isDrawingEntity(entity) || isAnnotationEntity(entity)) &&
-            entity.physicalOnly
-          )
+        (entity) => {
+          if (model.project.viewMode === "Logical View") {
+            return !entity.physicalOnly;
+          }
+
+          if (model.project.viewMode === "Physical View") {
+            return !entity.logicalOnly;
+          }
+
+          return true;
+        }
       ),
     [activeDiagram, model.project.viewMode]
   );
@@ -3310,6 +3317,10 @@ export default function App() {
         return { physicalOnly: value };
       }
 
+      if (field === "logicalOnly") {
+        return { logicalOnly: value };
+      }
+
       if (fieldId) {
         return {
           fields: mapFieldTree(entity.fields, (item) =>
@@ -3443,6 +3454,8 @@ export default function App() {
       name: "New Entity",
       physicalName: "NewEntity",
       comment: "Describe this entity.",
+      physicalOnly: false,
+      logicalOnly: false,
       x: 160,
       y: 140,
       width: 280,
@@ -3481,6 +3494,8 @@ export default function App() {
       name: "New View",
       physicalName: "NewView",
       comment: "Describe this view.",
+      physicalOnly: false,
+      logicalOnly: false,
       objectType: "view",
       x: 180,
       y: 160,
@@ -3520,6 +3535,8 @@ export default function App() {
       name: cachedViewUiName,
       physicalName: String(cachedViewUiName).replace(/\s+/g, ""),
       comment: `Describe this ${cachedViewUiName.toLowerCase()}.`,
+      physicalOnly: false,
+      logicalOnly: false,
       objectType: "materializedView",
       x: 200,
       y: 180,

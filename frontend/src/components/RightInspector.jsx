@@ -521,6 +521,26 @@ export default function RightInspector({
               onChange={(value) => onEntityChange("comment", value)}
               tall
             />
+            {viewMode === "Physical View" ? (
+              <label className="checkbox-field drawing-physical-only">
+                <input
+                  type="checkbox"
+                  checked={!!selectedEntity.physicalOnly}
+                  onChange={(event) => onEntityChange("physicalOnly", event.target.checked)}
+                />
+                <span>Physical Only</span>
+              </label>
+            ) : null}
+            {viewMode === "Logical View" ? (
+              <label className="checkbox-field drawing-physical-only">
+                <input
+                  type="checkbox"
+                  checked={!!selectedEntity.logicalOnly}
+                  onChange={(event) => onEntityChange("logicalOnly", event.target.checked)}
+                />
+                <span>Logical Only</span>
+              </label>
+            ) : null}
 
             <div className="button-row">
               <button className="secondary-button" type="button" onClick={onAddAttribute}>
