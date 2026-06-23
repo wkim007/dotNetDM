@@ -829,6 +829,7 @@ function DrawingCard({
     <article
       className={`drawing-card shape-${shape} ${isSelected ? "selected" : ""}`}
       style={{ left: entity.x, top: entity.y, width, height }}
+      onPointerDown={(event) => onPointerDown(event, entity.id)}
       onClick={(event) => {
         event.stopPropagation();
         onSelect(entity.id, {
@@ -902,6 +903,7 @@ function AnnotationCard({
     <article
       className={`annotation-card shape-${shape} ${isSelected ? "selected" : ""}`}
       style={{ left: entity.x, top: entity.y, width, height }}
+      onPointerDown={(event) => onPointerDown(event, entity.id)}
       onClick={(event) => {
         event.stopPropagation();
         onSelect(entity.id, {
