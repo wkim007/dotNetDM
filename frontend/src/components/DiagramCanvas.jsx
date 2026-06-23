@@ -621,6 +621,14 @@ function DrawingLine({
 }
 
 function DrawingShapeSvg({ shape }) {
+  if (shape === "line") {
+    return (
+      <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="8" y1="50" x2="92" y2="50" className="drawing-shape-line" />
+      </svg>
+    );
+  }
+
   if (shape === "ellipse") {
     return (
       <svg className="drawing-shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -878,10 +886,11 @@ function AnnotationCard({
   onDelete
 }) {
   const { width, height } = getRenderedEntitySize(entity, "comment", "Physical View", {});
+  const shape = entity.annotationShape ?? "rectangle";
 
   return (
     <article
-      className={`annotation-card ${isSelected ? "selected" : ""}`}
+      className={`annotation-card shape-${shape} ${isSelected ? "selected" : ""}`}
       style={{ left: entity.x, top: entity.y, width, height }}
       onClick={(event) => {
         event.stopPropagation();
@@ -895,6 +904,7 @@ function AnnotationCard({
         className="annotation-grab-strip"
         onPointerDown={(event) => onPointerDown(event, entity.id)}
       />
+      <DrawingShapeSvg shape={shape} />
       <button
         type="button"
         className="annotation-close"
@@ -909,28 +919,30 @@ function AnnotationCard({
       >
         ×
       </button>
-      <textarea
-        className="annotation-textarea"
-        value={entity.annotationText ?? ""}
-        placeholder="Type annotation"
-        onPointerDown={(event) => {
-          event.stopPropagation();
-        }}
-        onClick={(event) => {
-          event.stopPropagation();
-          onSelect(entity.id, {
-            additive: false,
-            toggle: false
-          });
-        }}
-        onFocus={() =>
-          onSelect(entity.id, {
-            additive: false,
-            toggle: false
-          })
-        }
-        onChange={(event) => onChangeText(entity.id, event.target.value)}
-      />
+      {shape !== "line" ? (
+        <textarea
+          className={getDrawingTextareaClass(shape).replace("drawing-textarea", "annotation-textarea")}
+          value={entity.annotationText ?? ""}
+          placeholder="Type annotation"
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelect(entity.id, {
+              additive: false,
+              toggle: false
+            });
+          }}
+          onFocus={() =>
+            onSelect(entity.id, {
+              additive: false,
+              toggle: false
+            })
+          }
+          onChange={(event) => onChangeText(entity.id, event.target.value)}
+        />
+      ) : null}
       <button
         type="button"
         className="entity-resize-handle"

@@ -1380,6 +1380,10 @@ function exportModelToWorkspaceJson(model) {
         return;
       }
 
+      if (objectType === "annotation") {
+        return;
+      }
+
       if (objectType === "view") {
         allViews.push({
           ...serializedEntity,
@@ -1568,7 +1572,21 @@ function exportModelToWorkspaceJson(model) {
                 }
 
                 return baseShape;
-              })
+              }),
+            Annotations: diagram.entities
+              .filter((entity) => getEntityObjectType(entity) === "annotation")
+              .map((entity) => ({
+                id: String(entity.id),
+                name: entity.name ?? entity.physicalName ?? `annotation_${entity.id}`,
+                physicalOnly: Boolean(entity.physicalOnly),
+                text: entity.annotationText ?? "Annotation",
+                definition: entity.definition ?? "",
+                shape_type: drawingShapeToTypeValue(entity.annotationShape ?? "rectangle"),
+                x: Number(entity.x ?? 260),
+                y: Number(entity.y ?? 220),
+                width: Number(entity.width ?? getPreferredEntitySize(entity).width),
+                height: Number(entity.height ?? getPreferredEntitySize(entity).height)
+              }))
           }
         }))
       }
@@ -1630,6 +1648,7 @@ function importWorkspaceModel(payload) {
     const viewShapes = diagram.modelShapes?.views ?? [];
     const cachedViewShapes = diagram.modelShapes?.cachedViews ?? [];
     const drawingShapes = diagram.modelShapes?.Shapes ?? [];
+    const annotationShapes = diagram.modelShapes?.Annotations ?? [];
     const skippedEntityIds = new Set();
     const includedShapeEntries = [
       ...entityShapes.map((shape) => ({ shape, sourceEntity: entityMap.get(String(shape.id)), objectType: "entity" })),
@@ -1723,6 +1742,28 @@ function importWorkspaceModel(payload) {
       };
     });
 
+    const annotationEntities = annotationShapes.map((shape, shapeIndex) => {
+      const fallbackId = `${diagram.id}-annotation-${shapeIndex + 1}`;
+      const fallbackText = String(shape?.text ?? "").trim() || "Annotation";
+
+      return {
+        id: String(shape?.id ?? fallbackId),
+        name: String(shape?.name ?? fallbackText).trim() || `Annotation_${shapeIndex + 1}`,
+        physicalName: String(shape?.physicalName ?? shape?.name ?? fallbackText).trim() || `Annotation_${shapeIndex + 1}`,
+        definition: shape?.definition ?? "",
+        comment: shape?.comment ?? "",
+        physicalOnly: Boolean(shape?.physicalOnly),
+        objectType: "annotation",
+        annotationShape: drawingTypeValueToShape(shape?.shape_type),
+        annotationText: fallbackText,
+        x: Number(shape?.x ?? 260),
+        y: Number(shape?.y ?? 220),
+        ...(shape?.width != null ? { width: Number(shape.width) } : {}),
+        ...(shape?.height != null ? { height: Number(shape.height) } : {}),
+        fields: []
+      };
+    });
+
     const relationshipShapeIds = new Set((diagram.modelShapes?.relationships ?? []).map((shape) => String(shape.id)));
     const relationships = (workspace.relationships ?? [])
       .filter((relationship) => {
@@ -1772,7 +1813,7 @@ function importWorkspaceModel(payload) {
       definition: diagram.definition ?? "",
       displayLevelLogical: String(diagram.displayLevelLogical ?? "1"),
       displayLevelPhysical: String(diagram.displayLevelPhysical ?? "1"),
-      entities: [...entities, ...drawingEntities],
+      entities: [...entities, ...drawingEntities, ...annotationEntities],
       relationships
     };
   });
@@ -2022,7 +2063,12 @@ export default function App() {
   const visibleDiagramEntities = useMemo(
     () =>
       (activeDiagram?.entities ?? []).filter(
-        (entity) => !(model.project.viewMode === "Logical View" && isDrawingEntity(entity) && entity.physicalOnly)
+        (entity) =>
+          !(
+            model.project.viewMode === "Logical View" &&
+            (isDrawingEntity(entity) || isAnnotationEntity(entity)) &&
+            entity.physicalOnly
+          )
       ),
     [activeDiagram, model.project.viewMode]
   );
@@ -3248,6 +3294,10 @@ export default function App() {
         return { annotationText: value };
       }
 
+      if (field === "annotationShape") {
+        return { annotationShape: value };
+      }
+
       if (field === "drawingText") {
         return { drawingText: value };
       }
@@ -3509,6 +3559,8 @@ export default function App() {
       name: "Annotation",
       physicalName: "Annotation",
       objectType: "annotation",
+      annotationShape: "rectangle",
+      physicalOnly: false,
       annotationText: "Type annotation",
       x: 220,
       y: 180,

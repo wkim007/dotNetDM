@@ -459,12 +459,44 @@ export default function RightInspector({
                 value={selectedEntity.name ?? ""}
                 onChange={(value) => onEntityChange("name", value)}
               />
-              <TextField
-                label="Text"
-                value={selectedEntity.annotationText ?? ""}
-                onChange={(value) => onEntityChange("annotationText", value)}
-                tall
+              <SelectField
+                label="Type"
+                value={selectedEntity.annotationShape ?? "rectangle"}
+                options={[
+                  { value: "rectangle", label: "Rectangle" },
+                  { value: "rounded", label: "Round Rectangle" },
+                  { value: "ellipse", label: "Ellipse" },
+                  { value: "diamond", label: "Diamond" },
+                  { value: "hexagon", label: "Hexagon" },
+                  { value: "octagon", label: "Octagon" },
+                  { value: "parallelogram", label: "Parallelogram" },
+                  { value: "pentagon", label: "Pentagon" },
+                  { value: "star", label: "Star" },
+                  { value: "cross", label: "Cross" },
+                  { value: "triangle-up", label: "Triangle Up" },
+                  { value: "triangle-down", label: "Triangle Down" },
+                  { value: "triangle-left", label: "Triangle Left" },
+                  { value: "triangle-right", label: "Triangle Right" },
+                  { value: "line", label: "Line" }
+                ]}
+                onChange={(value) => onEntityChange("annotationShape", value)}
               />
+              {selectedEntity.annotationShape !== "line" ? (
+                <TextField
+                  label="Text"
+                  value={selectedEntity.annotationText ?? ""}
+                  onChange={(value) => onEntityChange("annotationText", value)}
+                  tall
+                />
+              ) : null}
+              <label className="checkbox-field drawing-physical-only">
+                <input
+                  type="checkbox"
+                  checked={!!selectedEntity.physicalOnly}
+                  onChange={(event) => onEntityChange("physicalOnly", event.target.checked)}
+                />
+                <span>Physical Only</span>
+              </label>
               <div className="button-row">
                 <button className="danger-button" type="button" onClick={onDeleteEntity}>
                   Delete Annotation
