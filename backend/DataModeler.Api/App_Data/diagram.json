@@ -2,339 +2,978 @@
   "project": {
     "name": "Data Modeler",
     "viewMode": "Physical View",
-    "database": "PostgreSQL",
-    "databaseVersion": "16",
+    "database": "SQL Server",
+    "databaseVersion": "15.0",
     "subjectArea": "\u003Cmodel\u003E",
     "definition": "Drag entities, define attributes, and wire relationships.",
-    "diagramDefinition": "Sample bookstore and fulfillment domain.",
-    "displayLevel": "Column"
+    "diagramDefinition": "",
+    "displayLevel": "1"
   },
   "tabs": [
     {
-      "id": "physical",
-      "label": "Physical",
+      "id": "369",
+      "label": "Drawing Objects",
       "active": true
     },
     {
-      "id": "logical",
-      "label": "Logical",
+      "id": "371",
+      "label": "Physical with Views",
       "active": false
     },
     {
-      "id": "entity-definition",
-      "label": "EntityDefinition",
-      "active": false
-    },
-    {
-      "id": "entity",
-      "label": "Entity",
-      "active": false
-    },
-    {
-      "id": "physical-index",
-      "label": "PhysicalIndex",
+      "id": "373",
+      "label": "Attribute/Column Display",
       "active": false
     }
   ],
   "entities": [
     {
-      "id": "store",
-      "name": "Store Name",
-      "physicalName": "Store",
-      "comment": "The retail location where books are sold and orders originate.",
-      "x": 430,
-      "y": 120,
+      "id": "139",
+      "name": "EMPLOYEE",
+      "physicalName": "EMP",
+      "comment": "EMPLOYEE is a person that works for the VIDEO STORE",
+      "x": 705,
+      "y": 700,
       "fields": [
         {
-          "id": "store-id",
-          "kind": "PK",
-          "name": "StoreId",
-          "dataType": "uuid"
-        },
-        {
-          "id": "store-name",
+          "id": "145",
           "kind": "COL",
-          "name": "StoreName",
-          "dataType": "varchar(80)"
-        },
-        {
-          "id": "store-city",
-          "kind": "COL",
-          "name": "City",
-          "dataType": "varchar(40)"
-        },
-        {
-          "id": "store-state",
-          "kind": "COL",
-          "name": "State",
-          "dataType": "varchar(10)"
-        },
-        {
-          "id": "store-region-id",
-          "kind": "FK",
-          "name": "RegionId",
-          "dataType": "uuid"
-        }
-      ]
-    },
-    {
-      "id": "order",
-      "name": "Purchase Order",
-      "physicalName": "PurchaseOrder",
-      "comment": "Represents store-level customer purchases.",
-      "x": 790,
-      "y": 130,
-      "fields": [
-        {
-          "id": "order-number",
-          "kind": "PK",
-          "name": "OrderNumber",
-          "dataType": "integer"
-        },
-        {
-          "id": "payment-terms",
-          "kind": "COL",
-          "name": "PaymentTerms",
-          "dataType": "varchar(12)"
-        },
-        {
-          "id": "order-date",
-          "kind": "COL",
-          "name": "OrderDate",
-          "dataType": "date"
-        },
-        {
-          "id": "customer-id",
-          "kind": "FK",
-          "name": "CustomerId",
-          "dataType": "uuid"
-        },
-        {
-          "id": "store-id-fk",
-          "kind": "FK",
-          "name": "StoreId",
-          "dataType": "uuid"
-        }
-      ]
-    },
-    {
-      "id": "employee",
-      "name": "Employee",
-      "physicalName": "Employee",
-      "comment": "Staff assigned to operational jobs.",
-      "x": 430,
-      "y": 520,
-      "fields": [
-        {
-          "id": "employee-id",
-          "kind": "PK",
-          "name": "EmployeeId",
-          "dataType": "uuid"
-        },
-        {
-          "id": "first-name",
-          "kind": "COL",
-          "name": "FirstName",
-          "dataType": "varchar(40)"
-        },
-        {
-          "id": "last-name",
-          "kind": "COL",
-          "name": "LastName",
-          "dataType": "varchar(40)"
-        },
-        {
-          "id": "hire-date",
-          "kind": "COL",
-          "name": "HireDate",
-          "dataType": "date"
-        },
-        {
-          "id": "job-id",
-          "kind": "FK",
-          "name": "JobId",
-          "dataType": "uuid"
-        }
-      ]
-    },
-    {
-      "id": "job",
-      "name": "Job",
-      "physicalName": "Job",
-      "comment": "Defines staff responsibility and level ranges.",
-      "x": 790,
-      "y": 380,
-      "fields": [
-        {
-          "id": "job-id-pk",
-          "kind": "PK",
-          "name": "JobId",
-          "dataType": "uuid"
-        },
-        {
-          "id": "job-description",
-          "kind": "COL",
-          "name": "JobDescription",
-          "dataType": "varchar(80)"
-        },
-        {
-          "id": "min-level",
-          "kind": "COL",
-          "name": "MinLevel",
-          "dataType": "smallint"
-        },
-        {
-          "id": "max-level",
-          "kind": "COL",
-          "name": "MaxLevel",
-          "dataType": "smallint"
-        }
-      ]
-    },
-    {
-      "id": "book",
-      "name": "Book",
-      "physicalName": "Book",
-      "comment": "Catalog item sold in orders.",
-      "x": 420,
-      "y": 810,
-      "fields": [
-        {
-          "id": "book-id",
-          "kind": "PK",
-          "name": "BookId",
-          "dataType": "uuid"
-        },
-        {
-          "id": "book-name",
-          "kind": "COL",
-          "name": "BookName",
-          "dataType": "varchar(120)"
-        },
-        {
-          "id": "book-type",
-          "kind": "COL",
-          "name": "BookType",
-          "dataType": "varchar(24)"
-        },
-        {
-          "id": "price",
-          "kind": "COL",
-          "name": "Price",
-          "dataType": "decimal(19,4)"
-        }
-      ]
-    },
-    {
-      "id": "order-item",
-      "name": "Order Item",
-      "physicalName": "OrderItem",
-      "comment": "Line items attached to a purchase order.",
-      "x": 760,
-      "y": 820,
-      "fields": [
-        {
-          "id": "item-sequence",
-          "kind": "PK",
-          "name": "ItemSequence",
-          "dataType": "integer"
-        },
-        {
-          "id": "order-number-fk",
-          "kind": "FK",
-          "name": "OrderNumber",
-          "dataType": "integer"
-        },
-        {
-          "id": "book-id-fk",
-          "kind": "FK",
-          "name": "BookId",
-          "dataType": "uuid"
-        },
-        {
-          "id": "quantity",
-          "kind": "COL",
-          "name": "Quantity",
-          "dataType": "smallint"
-        },
-        {
-          "id": "order-price",
-          "kind": "COL",
-          "name": "OrderPrice",
-          "dataType": "decimal(7,2)"
-        }
-      ]
-    },
-    {
-      "id": "author",
-      "name": "Author",
-      "physicalName": "Author",
-      "comment": "Writer metadata for cataloged books.",
-      "x": 1070,
-      "y": 620,
-      "fields": [
-        {
-          "id": "author-id",
-          "kind": "PK",
-          "name": "AuthorId",
-          "dataType": "uuid"
-        },
-        {
-          "id": "author-last-name",
-          "kind": "COL",
-          "name": "LastName",
-          "dataType": "varchar(50)"
-        },
-        {
-          "id": "author-first-name",
-          "kind": "COL",
-          "name": "FirstName",
-          "dataType": "varchar(50)"
-        },
-        {
-          "id": "author-phone-number",
-          "kind": "COL",
-          "name": "PhoneNumber",
+          "name": "employee first name",
           "dataType": "varchar(20)"
+        },
+        {
+          "id": "146",
+          "kind": "COL",
+          "name": "employee address",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "147",
+          "kind": "COL",
+          "name": "employee phone",
+          "dataType": "integer"
+        },
+        {
+          "id": "154",
+          "kind": "COL",
+          "name": "employee address 2",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "173",
+          "kind": "COL",
+          "name": "soc sec number",
+          "dataType": "integer"
+        },
+        {
+          "id": "174",
+          "kind": "COL",
+          "name": "hire date",
+          "dataType": "datetime"
+        },
+        {
+          "id": "175",
+          "kind": "COL",
+          "name": "salary",
+          "dataType": "integer"
+        },
+        {
+          "id": "176",
+          "kind": "COL",
+          "name": "email",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "177",
+          "kind": "PK",
+          "name": "employee number",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "223",
+          "kind": "COL",
+          "name": "store number",
+          "dataType": "integer"
+        },
+        {
+          "id": "227",
+          "kind": "COL",
+          "name": "supervisor",
+          "dataType": "varchar(20)"
+        }
+      ]
+    },
+    {
+      "id": "141",
+      "name": "MOVIE",
+      "physicalName": "MOVIE",
+      "comment": "A MOVIE is any video that can be rented\uFFFD for the entity \uFFFDMOVIE",
+      "x": 48,
+      "y": 1357,
+      "fields": [
+        {
+          "id": "156",
+          "kind": "COL",
+          "name": "movie title",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "157",
+          "kind": "COL",
+          "name": "movie director",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "179",
+          "kind": "COL",
+          "name": "description",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "180",
+          "kind": "COL",
+          "name": "star 1 name",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "181",
+          "kind": "COL",
+          "name": "rating",
+          "dataType": "varchar"
+        },
+        {
+          "id": "182",
+          "kind": "COL",
+          "name": "star 2 name",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "183",
+          "kind": "PK",
+          "name": "movie number",
+          "dataType": "integer"
+        },
+        {
+          "id": "185",
+          "kind": "COL",
+          "name": "genre",
+          "dataType": "varchar(2)"
+        },
+        {
+          "id": "186",
+          "kind": "COL",
+          "name": "rental rate",
+          "dataType": "numeric"
+        },
+        {
+          "id": "187",
+          "kind": "COL",
+          "name": "movie url",
+          "dataType": "varchar"
+        },
+        {
+          "id": "188",
+          "kind": "COL",
+          "name": "movie clip",
+          "dataType": "varbinary"
+        }
+      ]
+    },
+    {
+      "id": "143",
+      "name": "STORE",
+      "physicalName": "STORE",
+      "comment": "A STORE is one of the MOVIE STORES where a customer can rent a movie",
+      "x": 48,
+      "y": 2248,
+      "fields": [
+        {
+          "id": "148",
+          "kind": "COL",
+          "name": "store manager",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "149",
+          "kind": "COL",
+          "name": "store address",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "150",
+          "kind": "COL",
+          "name": "store phone",
+          "dataType": "integer"
+        },
+        {
+          "id": "151",
+          "kind": "COL",
+          "name": "store city",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "152",
+          "kind": "COL",
+          "name": "store state",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "153",
+          "kind": "COL",
+          "name": "store zip code",
+          "dataType": "integer"
+        },
+        {
+          "id": "155",
+          "kind": "COL",
+          "name": "store address 2",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "189",
+          "kind": "PK",
+          "name": "store number",
+          "dataType": "integer"
+        }
+      ]
+    },
+    {
+      "id": "158",
+      "name": "MOVIE RENTAL RECORD",
+      "physicalName": "MO_RENT_REC",
+      "comment": "A MOVIE RENTAL RECORD is a record that  is kept on every MOVIE in the STORE  on who and when a MOVIE is rented",
+      "x": 48,
+      "y": 48,
+      "fields": [
+        {
+          "id": "162",
+          "kind": "COL",
+          "name": "rental date",
+          "dataType": "datetime"
+        },
+        {
+          "id": "163",
+          "kind": "COL",
+          "name": "due date",
+          "dataType": "datetime"
+        },
+        {
+          "id": "164",
+          "kind": "COL",
+          "name": "rental status",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "165",
+          "kind": "COL",
+          "name": "overdue charge",
+          "dataType": "integer"
+        },
+        {
+          "id": "166",
+          "kind": "COL",
+          "name": "rental rate",
+          "dataType": "integer"
+        },
+        {
+          "id": "167",
+          "kind": "PK",
+          "name": "rental record date",
+          "dataType": "datetime"
+        },
+        {
+          "id": "202",
+          "kind": "PK",
+          "name": "soc sec number",
+          "dataType": "integer"
+        },
+        {
+          "id": "204",
+          "kind": "PK",
+          "name": "employee phone",
+          "dataType": "integer"
+        },
+        {
+          "id": "210",
+          "kind": "PK",
+          "name": "movie copy number",
+          "dataType": "integer"
+        },
+        {
+          "id": "218",
+          "kind": "PK",
+          "name": "movie number",
+          "dataType": "integer"
+        },
+        {
+          "id": "259",
+          "kind": "PK",
+          "name": "customer number",
+          "dataType": "integer"
+        },
+        {
+          "id": "367",
+          "kind": "COL",
+          "name": "payment transaction number",
+          "dataType": "integer"
+        }
+      ]
+    },
+    {
+      "id": "160",
+      "name": "MOVIE COPY",
+      "physicalName": "MOVIE_COPY",
+      "comment": "A MOVIE COPY is a single copy of a MOVIE",
+      "x": 48,
+      "y": 1830,
+      "fields": [
+        {
+          "id": "169",
+          "kind": "COL",
+          "name": "general condition",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "170",
+          "kind": "COL",
+          "name": "movie format",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "171",
+          "kind": "PK",
+          "name": "movie copy number",
+          "dataType": "integer"
+        },
+        {
+          "id": "215",
+          "kind": "PK",
+          "name": "movie number",
+          "dataType": "integer"
+        }
+      ]
+    },
+    {
+      "id": "242",
+      "name": "CUSTOMER",
+      "physicalName": "CUST",
+      "comment": "A CUSTOMER is a person or organization who has rented a movie within the past year.",
+      "x": 518,
+      "y": 66,
+      "fields": [
+        {
+          "id": "244",
+          "kind": "PK",
+          "name": "customer number",
+          "dataType": "integer"
+        },
+        {
+          "id": "246",
+          "kind": "COL",
+          "name": "customer address",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "247",
+          "kind": "COL",
+          "name": "customer city",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "248",
+          "kind": "COL",
+          "name": "customer first name",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "249",
+          "kind": "COL",
+          "name": "customer last name",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "250",
+          "kind": "COL",
+          "name": "customer state",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "251",
+          "kind": "COL",
+          "name": "customer zip code",
+          "dataType": "integer"
+        },
+        {
+          "id": "252",
+          "kind": "COL",
+          "name": "email",
+          "dataType": "varchar"
+        }
+      ]
+    },
+    {
+      "id": "262",
+      "name": "CUSTOMER CREDIT",
+      "physicalName": "CUST_CREDIT",
+      "comment": "CUSTOMER CREDIT is the status of available credit for a CUSTOMER",
+      "x": 518,
+      "y": 440,
+      "fields": [
+        {
+          "id": "264",
+          "kind": "PK",
+          "name": "customer number",
+          "dataType": "integer"
+        },
+        {
+          "id": "266",
+          "kind": "COL",
+          "name": "credit card",
+          "dataType": "integer"
+        },
+        {
+          "id": "267",
+          "kind": "COL",
+          "name": "credit card exp",
+          "dataType": "integer"
+        },
+        {
+          "id": "268",
+          "kind": "COL",
+          "name": "status code",
+          "dataType": "varchar(20)"
+        }
+      ]
+    },
+    {
+      "id": "326",
+      "name": "MOVIE_STORE",
+      "physicalName": "MOVIE_STORE",
+      "comment": "",
+      "x": 48,
+      "y": 2072,
+      "fields": [
+        {
+          "id": "330",
+          "kind": "PK",
+          "name": "movie number",
+          "dataType": "integer"
+        },
+        {
+          "id": "335",
+          "kind": "PK",
+          "name": "store number",
+          "dataType": "integer"
+        }
+      ]
+    },
+    {
+      "id": "338",
+      "name": "PAYMENT",
+      "physicalName": "PAYMENT",
+      "comment": "",
+      "x": 518,
+      "y": 1155,
+      "fields": [
+        {
+          "id": "340",
+          "kind": "PK",
+          "name": "payment transaction number",
+          "dataType": "integer"
+        },
+        {
+          "id": "342",
+          "kind": "COL",
+          "name": "payment type",
+          "dataType": "char(18)"
+        },
+        {
+          "id": "343",
+          "kind": "COL",
+          "name": "payment amount",
+          "dataType": "numeric"
+        },
+        {
+          "id": "344",
+          "kind": "COL",
+          "name": "payment date",
+          "dataType": "datetime"
+        },
+        {
+          "id": "345",
+          "kind": "COL",
+          "name": "payment status",
+          "dataType": "varchar(1)"
+        },
+        {
+          "id": "346",
+          "kind": "COL",
+          "name": "check bank number",
+          "dataType": "integer"
+        },
+        {
+          "id": "347",
+          "kind": "COL",
+          "name": "check number",
+          "dataType": "integer"
+        },
+        {
+          "id": "348",
+          "kind": "COL",
+          "name": "epay vendor number",
+          "dataType": "integer"
+        },
+        {
+          "id": "349",
+          "kind": "COL",
+          "name": "epay account number",
+          "dataType": "integer"
+        },
+        {
+          "id": "350",
+          "kind": "COL",
+          "name": "credit card number",
+          "dataType": "char(18)"
+        },
+        {
+          "id": "351",
+          "kind": "COL",
+          "name": "credit card exp",
+          "dataType": "datetime"
+        },
+        {
+          "id": "352",
+          "kind": "COL",
+          "name": "credit card type",
+          "dataType": "char(18)"
+        },
+        {
+          "id": "355",
+          "kind": "COL",
+          "name": "employee number",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "359",
+          "kind": "COL",
+          "name": "Customer No",
+          "dataType": "integer"
+        },
+        {
+          "id": "363",
+          "kind": "COL",
+          "name": "customer number",
+          "dataType": "integer"
+        }
+      ]
+    },
+    {
+      "id": "276",
+      "name": "CUSTOMER_INVOICE",
+      "physicalName": "CUSTOMER_INVOICE",
+      "comment": "",
+      "x": 48,
+      "y": 554,
+      "fields": [
+        {
+          "id": "279",
+          "kind": "COL",
+          "name": "credit_card",
+          "dataType": "integer"
+        },
+        {
+          "id": "280",
+          "kind": "COL",
+          "name": "credit_card_exp",
+          "dataType": "integer"
+        },
+        {
+          "id": "281",
+          "kind": "COL",
+          "name": "status_code",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "283",
+          "kind": "COL",
+          "name": "CUST_number",
+          "dataType": "integer"
+        },
+        {
+          "id": "284",
+          "kind": "COL",
+          "name": "CUST_address",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "285",
+          "kind": "COL",
+          "name": "CUST_city",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "286",
+          "kind": "COL",
+          "name": "CUST_first_name",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "287",
+          "kind": "COL",
+          "name": "CUST_last_name",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "288",
+          "kind": "COL",
+          "name": "CUST_state",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "289",
+          "kind": "COL",
+          "name": "CUST_zip_code",
+          "dataType": "integer"
+        },
+        {
+          "id": "290",
+          "kind": "COL",
+          "name": "email",
+          "dataType": "varchar"
+        },
+        {
+          "id": "292",
+          "kind": "COL",
+          "name": "rental_record_date",
+          "dataType": "datetime"
+        },
+        {
+          "id": "293",
+          "kind": "COL",
+          "name": "mo_co_num",
+          "dataType": "integer"
+        },
+        {
+          "id": "294",
+          "kind": "COL",
+          "name": "movie_number",
+          "dataType": "integer"
+        },
+        {
+          "id": "295",
+          "kind": "COL",
+          "name": "rental_date",
+          "dataType": "datetime"
+        },
+        {
+          "id": "296",
+          "kind": "COL",
+          "name": "due_date",
+          "dataType": "datetime"
+        },
+        {
+          "id": "297",
+          "kind": "COL",
+          "name": "rental_status",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "298",
+          "kind": "COL",
+          "name": "overdue_charge",
+          "dataType": "integer"
+        },
+        {
+          "id": "299",
+          "kind": "COL",
+          "name": "rental_rate",
+          "dataType": "integer"
+        },
+        {
+          "id": "301",
+          "kind": "COL",
+          "name": "movie_title",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "325",
+          "kind": "COL",
+          "name": "Overdue_Charge_Rate",
+          "dataType": "char(18)"
+        }
+      ]
+    },
+    {
+      "id": "277",
+      "name": "OVERDUE_NOTICE",
+      "physicalName": "OVERDUE_NOTICE",
+      "comment": "",
+      "x": 518,
+      "y": 1760,
+      "fields": [
+        {
+          "id": "303",
+          "kind": "COL",
+          "name": "credit_card",
+          "dataType": "integer"
+        },
+        {
+          "id": "304",
+          "kind": "COL",
+          "name": "credit_card_exp",
+          "dataType": "integer"
+        },
+        {
+          "id": "305",
+          "kind": "COL",
+          "name": "status_code",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "306",
+          "kind": "COL",
+          "name": "Overdue_Charge_Rate",
+          "dataType": "char(18)"
+        },
+        {
+          "id": "308",
+          "kind": "COL",
+          "name": "CUST_number",
+          "dataType": "integer"
+        },
+        {
+          "id": "309",
+          "kind": "COL",
+          "name": "CUST_address",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "310",
+          "kind": "COL",
+          "name": "CUST_city",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "311",
+          "kind": "COL",
+          "name": "CUST_first_name",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "312",
+          "kind": "COL",
+          "name": "CUST_last_name",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "313",
+          "kind": "COL",
+          "name": "CUST_state",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "314",
+          "kind": "COL",
+          "name": "CUST_zip_code",
+          "dataType": "integer"
+        },
+        {
+          "id": "315",
+          "kind": "COL",
+          "name": "email",
+          "dataType": "varchar"
+        },
+        {
+          "id": "317",
+          "kind": "COL",
+          "name": "rental_record_date",
+          "dataType": "datetime"
+        },
+        {
+          "id": "318",
+          "kind": "COL",
+          "name": "mo_co_num",
+          "dataType": "integer"
+        },
+        {
+          "id": "319",
+          "kind": "COL",
+          "name": "movie_number",
+          "dataType": "integer"
+        },
+        {
+          "id": "320",
+          "kind": "COL",
+          "name": "rental_date",
+          "dataType": "datetime"
+        },
+        {
+          "id": "321",
+          "kind": "COL",
+          "name": "due_date",
+          "dataType": "datetime"
+        },
+        {
+          "id": "322",
+          "kind": "COL",
+          "name": "rental_status",
+          "dataType": "varchar(20)"
+        },
+        {
+          "id": "323",
+          "kind": "COL",
+          "name": "overdue_charge",
+          "dataType": "integer"
+        },
+        {
+          "id": "324",
+          "kind": "COL",
+          "name": "rental_rate",
+          "dataType": "integer"
         }
       ]
     }
   ],
   "relationships": [
     {
-      "id": "store-orders",
-      "sourceEntityId": "store",
-      "targetEntityId": "order",
+      "id": "200",
+      "sourceEntityId": "139",
+      "targetEntityId": "158",
       "cardinality": "1:N",
       "style": "solid"
     },
     {
-      "id": "job-employees",
-      "sourceEntityId": "job",
-      "targetEntityId": "employee",
+      "id": "208",
+      "sourceEntityId": "160",
+      "targetEntityId": "158",
       "cardinality": "1:N",
       "style": "solid"
     },
     {
-      "id": "orders-items",
-      "sourceEntityId": "order",
-      "targetEntityId": "order-item",
+      "id": "213",
+      "sourceEntityId": "141",
+      "targetEntityId": "160",
       "cardinality": "1:N",
       "style": "solid"
     },
     {
-      "id": "books-items",
-      "sourceEntityId": "book",
-      "targetEntityId": "order-item",
+      "id": "221",
+      "sourceEntityId": "143",
+      "targetEntityId": "139",
       "cardinality": "1:N",
-      "style": "dashed"
+      "style": "solid"
     },
     {
-      "id": "authors-books",
-      "sourceEntityId": "author",
-      "targetEntityId": "book",
+      "id": "225",
+      "sourceEntityId": "139",
+      "targetEntityId": "139",
       "cardinality": "1:N",
-      "style": "dashed"
+      "style": "solid"
+    },
+    {
+      "id": "257",
+      "sourceEntityId": "242",
+      "targetEntityId": "158",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "271",
+      "sourceEntityId": "262",
+      "targetEntityId": "158",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "278",
+      "sourceEntityId": "262",
+      "targetEntityId": "276",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "282",
+      "sourceEntityId": "242",
+      "targetEntityId": "276",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "291",
+      "sourceEntityId": "158",
+      "targetEntityId": "276",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "300",
+      "sourceEntityId": "141",
+      "targetEntityId": "276",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "302",
+      "sourceEntityId": "262",
+      "targetEntityId": "277",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "307",
+      "sourceEntityId": "242",
+      "targetEntityId": "277",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "316",
+      "sourceEntityId": "158",
+      "targetEntityId": "277",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "328",
+      "sourceEntityId": "141",
+      "targetEntityId": "326",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "333",
+      "sourceEntityId": "143",
+      "targetEntityId": "326",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "353",
+      "sourceEntityId": "139",
+      "targetEntityId": "338",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "357",
+      "sourceEntityId": "242",
+      "targetEntityId": "338",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "361",
+      "sourceEntityId": "262",
+      "targetEntityId": "338",
+      "cardinality": "1:N",
+      "style": "solid"
+    },
+    {
+      "id": "365",
+      "sourceEntityId": "338",
+      "targetEntityId": "158",
+      "cardinality": "1:N",
+      "style": "solid"
     }
   ]
 }
