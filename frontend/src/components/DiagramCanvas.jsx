@@ -292,6 +292,35 @@ function getOutlineCenterAnchor(entity, target, displayLevel, viewMode, expanded
   };
 }
 
+function trimOrthogonalEndpoint(point, adjacentPoint, distance = 6) {
+  if (!adjacentPoint) {
+    return point;
+  }
+
+  if (Math.abs(point.x - adjacentPoint.x) < 0.001) {
+    return {
+      x: point.x,
+      y: point.y + Math.sign(adjacentPoint.y - point.y) * distance
+    };
+  }
+
+  if (Math.abs(point.y - adjacentPoint.y) < 0.001) {
+    return {
+      x: point.x + Math.sign(adjacentPoint.x - point.x) * distance,
+      y: point.y
+    };
+  }
+
+  const deltaX = adjacentPoint.x - point.x;
+  const deltaY = adjacentPoint.y - point.y;
+  const length = Math.hypot(deltaX, deltaY) || 1;
+
+  return {
+    x: point.x + (deltaX / length) * distance,
+    y: point.y + (deltaY / length) * distance
+  };
+}
+
 function normalizeNotationStyle(notationStyle) {
   const normalized = String(notationStyle ?? "IDEF1x").trim().toLowerCase();
 
@@ -598,12 +627,27 @@ function DrawingLine({
   const drawingOffset = getDrawingLineDragOffset(entity);
   const middleX = (start.x + end.x) / 2 + drawingOffset.x;
   const middleY = (start.y + end.y) / 2 + drawingOffset.y;
-  const points = `${start.x},${start.y} ${middleX},${start.y} ${middleX},${middleY} ${end.x},${middleY} ${end.x},${end.y}`;
+  const rawPoints = [
+    { x: start.x, y: start.y },
+    { x: middleX, y: start.y },
+    { x: middleX, y: middleY },
+    { x: end.x, y: middleY },
+    { x: end.x, y: end.y }
+  ];
+  const visiblePoints = [...rawPoints];
+  visiblePoints[0] = trimOrthogonalEndpoint(rawPoints[0], rawPoints[1], 7);
+  visiblePoints[visiblePoints.length - 1] = trimOrthogonalEndpoint(
+    rawPoints[rawPoints.length - 1],
+    rawPoints[rawPoints.length - 2],
+    7
+  );
+  const hitAreaPoints = rawPoints.map((point) => `${point.x},${point.y}`).join(" ");
+  const visiblePolylinePoints = visiblePoints.map((point) => `${point.x},${point.y}`).join(" ");
 
   return (
     <>
       <polyline
-        points={points}
+        points={hitAreaPoints}
         className="drawing-line-hit-area"
         onPointerDown={(event) => onPointerDown(event, entity.id)}
         onClick={(event) => {
@@ -615,7 +659,7 @@ function DrawingLine({
         }}
       />
       <polyline
-        points={points}
+        points={visiblePolylinePoints}
         className={`drawing-line ${isSelected ? "selected" : ""}`}
         onPointerDown={(event) => onPointerDown(event, entity.id)}
         onClick={(event) => {
@@ -625,6 +669,18 @@ function DrawingLine({
             toggle: false
           });
         }}
+      />
+      <circle
+        cx={start.x}
+        cy={start.y}
+        r="4"
+        className={`drawing-line-endpoint ${isSelected ? "selected" : ""}`}
+      />
+      <circle
+        cx={end.x}
+        cy={end.y}
+        r="4"
+        className={`drawing-line-endpoint ${isSelected ? "selected" : ""}`}
       />
     </>
   );

@@ -876,9 +876,21 @@ body.panel-resizing {
   pointer-events: none;
 }
 
+.drawing-line-endpoint {
+  fill: #b9c8df;
+  stroke: rgba(16, 24, 36, 0.78);
+  stroke-width: 1.2px;
+  pointer-events: none;
+}
+
 .drawing-line.selected {
   stroke: #f1bf52;
   filter: drop-shadow(0 0 8px rgba(241, 191, 82, 0.22));
+}
+
+.drawing-line-endpoint.selected {
+  fill: #f1df77;
+  stroke: rgba(54, 36, 10, 0.92);
 }
 
 .diagram-link-label {
