@@ -1567,7 +1567,19 @@ function exportModelToWorkspaceJson(model) {
                     parent: String(entity.lineSourceId ?? ""),
                     child: String(entity.lineTargetId ?? ""),
                     lineOffsetX: Number(entity.lineOffsetX ?? 0),
-                    lineOffsetY: Number(entity.lineOffsetY ?? 0)
+                    lineOffsetY: Number(entity.lineOffsetY ?? 0),
+                    lineSourceAttachment: entity.lineSourceAttachment
+                      ? {
+                          side: String(entity.lineSourceAttachment.side ?? ""),
+                          t: Number(entity.lineSourceAttachment.t ?? 0.5)
+                        }
+                      : undefined,
+                    lineTargetAttachment: entity.lineTargetAttachment
+                      ? {
+                          side: String(entity.lineTargetAttachment.side ?? ""),
+                          t: Number(entity.lineTargetAttachment.t ?? 0.5)
+                        }
+                      : undefined
                   };
                 }
 
@@ -1737,7 +1749,23 @@ function importWorkspaceModel(payload) {
               lineSourceId: String(shape?.parent ?? ""),
               lineTargetId: String(shape?.child ?? ""),
               lineOffsetX: Number(shape?.lineOffsetX ?? 0),
-              lineOffsetY: Number(shape?.lineOffsetY ?? 0)
+              lineOffsetY: Number(shape?.lineOffsetY ?? 0),
+              ...(shape?.lineSourceAttachment
+                ? {
+                    lineSourceAttachment: {
+                      side: String(shape.lineSourceAttachment.side ?? ""),
+                      t: Number(shape.lineSourceAttachment.t ?? 0.5)
+                    }
+                  }
+                : {}),
+              ...(shape?.lineTargetAttachment
+                ? {
+                    lineTargetAttachment: {
+                      side: String(shape.lineTargetAttachment.side ?? ""),
+                      t: Number(shape.lineTargetAttachment.t ?? 0.5)
+                    }
+                  }
+                : {})
             }
           : {}),
         fields: []
@@ -2972,6 +3000,39 @@ export default function App() {
     }));
   }
 
+  function handleMoveRelationshipEndpoint(relationshipId, endpoint, attachment) {
+    if (!relationshipId || !endpoint || !attachment) {
+      return;
+    }
+
+    const attachmentKey = endpoint === "source" ? "sourceAttachment" : "targetAttachment";
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              relationships: diagram.relationships.map((relationship) =>
+                relationship.id === relationshipId
+                  ? {
+                      ...relationship,
+                      props: {
+                        ...(relationship.props ?? {}),
+                        [attachmentKey]: {
+                          side: attachment.side,
+                          t: Number(attachment.t)
+                        }
+                      }
+                    }
+                  : relationship
+              )
+            }
+          : diagram
+      )
+    }));
+  }
+
   function handleMoveDrawingLine(entityId, lineOffsetX, lineOffsetY) {
     if (!entityId) {
       return;
@@ -2989,6 +3050,36 @@ export default function App() {
                       ...entity,
                       lineOffsetX: Math.round(lineOffsetX),
                       lineOffsetY: Math.round(lineOffsetY)
+                    }
+                  : entity
+              )
+            }
+          : diagram
+      )
+    }));
+  }
+
+  function handleMoveDrawingLineEndpoint(entityId, endpoint, attachment) {
+    if (!entityId || !endpoint || !attachment) {
+      return;
+    }
+
+    const attachmentKey = endpoint === "source" ? "lineSourceAttachment" : "lineTargetAttachment";
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: diagram.entities.map((entity) =>
+                entity.id === entityId
+                  ? {
+                      ...entity,
+                      [attachmentKey]: {
+                        side: attachment.side,
+                        t: Number(attachment.t)
+                      }
                     }
                   : entity
               )
@@ -4484,7 +4575,9 @@ export default function App() {
           onMoveEntity={handleMoveEntity}
           onMoveEntities={handleMoveEntities}
           onMoveRelationship={handleMoveRelationship}
+          onMoveRelationshipEndpoint={handleMoveRelationshipEndpoint}
           onMoveDrawingLine={handleMoveDrawingLine}
+          onMoveDrawingLineEndpoint={handleMoveDrawingLineEndpoint}
           onResizeEntity={handleResizeEntity}
           onChangeAnnotationText={handleChangeAnnotationText}
           onChangeDrawingText={handleChangeDrawingText}

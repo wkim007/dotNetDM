@@ -877,10 +877,20 @@ body.panel-resizing {
 }
 
 .drawing-line-endpoint {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border-radius: 999px;
+  border: 0;
   fill: #b9c8df;
+  background: #b9c8df;
   stroke: rgba(16, 24, 36, 0.78);
+  box-shadow: inset 0 0 0 1.2px rgba(16, 24, 36, 0.78);
   stroke-width: 1.2px;
-  pointer-events: none;
+  pointer-events: all;
+  cursor: grab;
+  z-index: 14;
 }
 
 .drawing-line.selected {
@@ -890,7 +900,30 @@ body.panel-resizing {
 
 .drawing-line-endpoint.selected {
   fill: #f1df77;
+  background: #f1df77;
   stroke: rgba(54, 36, 10, 0.92);
+  box-shadow: inset 0 0 0 1.2px rgba(54, 36, 10, 0.92);
+}
+
+.diagram-endpoint-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  fill: #b9c8df;
+  background: #b9c8df;
+  stroke: rgba(16, 24, 36, 0.82);
+  box-shadow: inset 0 0 0 1.2px rgba(16, 24, 36, 0.82);
+  stroke-width: 1.2px;
+  cursor: grab;
+  z-index: 14;
+}
+
+.diagram-endpoint-handle.overlay,
+.drawing-line-endpoint.overlay {
+  pointer-events: all;
 }
 
 .diagram-link-label {

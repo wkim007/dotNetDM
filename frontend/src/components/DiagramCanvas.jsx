@@ -292,6 +292,71 @@ function getOutlineCenterAnchor(entity, target, displayLevel, viewMode, expanded
   };
 }
 
+function clampRatio(value) {
+  return Math.min(1, Math.max(0, value));
+}
+
+function getAttachmentAnchor(entity, attachment, displayLevel, viewMode, expandedFieldIds) {
+  const bounds = getCardBounds(entity, displayLevel, viewMode, expandedFieldIds);
+  const side = String(attachment?.side ?? "").trim().toLowerCase();
+  const t = clampRatio(Number(attachment?.t ?? 0.5));
+
+  if (side === "left") {
+    return { x: bounds.left, y: bounds.top + bounds.height * t };
+  }
+
+  if (side === "right") {
+    return { x: bounds.right, y: bounds.top + bounds.height * t };
+  }
+
+  if (side === "top") {
+    return { x: bounds.left + bounds.width * t, y: bounds.top };
+  }
+
+  if (side === "bottom") {
+    return { x: bounds.left + bounds.width * t, y: bounds.bottom };
+  }
+
+  return null;
+}
+
+function getClosestOutlineAttachment(entity, point, displayLevel, viewMode, expandedFieldIds) {
+  const bounds = getCardBounds(entity, displayLevel, viewMode, expandedFieldIds);
+  const distances = [
+    { side: "left", distance: Math.abs(point.x - bounds.left) },
+    { side: "right", distance: Math.abs(point.x - bounds.right) },
+    { side: "top", distance: Math.abs(point.y - bounds.top) },
+    { side: "bottom", distance: Math.abs(point.y - bounds.bottom) }
+  ];
+  const closest = distances.sort((left, right) => left.distance - right.distance)[0];
+
+  if (closest.side === "left" || closest.side === "right") {
+    return {
+      side: closest.side,
+      t: clampRatio((point.y - bounds.top) / Math.max(bounds.height, 1))
+    };
+  }
+
+  return {
+    side: closest.side,
+    t: clampRatio((point.x - bounds.left) / Math.max(bounds.width, 1))
+  };
+}
+
+function resolveRelationshipAnchor(entity, target, attachment, displayLevel, viewMode, expandedFieldIds) {
+  return (
+    getAttachmentAnchor(entity, attachment, displayLevel, viewMode, expandedFieldIds) ??
+    getAnchor(entity, target, displayLevel, viewMode, expandedFieldIds)
+  );
+}
+
+function resolveDrawingLineAnchor(entity, target, attachment, displayLevel, viewMode, expandedFieldIds) {
+  return (
+    getAttachmentAnchor(entity, attachment, displayLevel, viewMode, expandedFieldIds) ??
+    getOutlineCenterAnchor(entity, target, displayLevel, viewMode, expandedFieldIds)
+  );
+}
+
 function trimOrthogonalEndpoint(point, adjacentPoint, distance = 6) {
   if (!adjacentPoint) {
     return point;
@@ -375,11 +440,26 @@ function DiagramLink({
   lineVariant,
   isSelected,
   onRelationshipPointerDown,
+  onRelationshipEndpointPointerDown,
   onSelectRelationship,
   onDeleteRelationship
 }) {
-  const start = getAnchor(source, target, displayLevel, viewMode, expandedFieldIds);
-  const end = getAnchor(target, source, displayLevel, viewMode, expandedFieldIds);
+  const start = resolveRelationshipAnchor(
+    source,
+    target,
+    relationship?.props?.sourceAttachment,
+    displayLevel,
+    viewMode,
+    expandedFieldIds
+  );
+  const end = resolveRelationshipAnchor(
+    target,
+    source,
+    relationship?.props?.targetAttachment,
+    displayLevel,
+    viewMode,
+    expandedFieldIds
+  );
   const deltaX = end.x - start.x;
   const deltaY = end.y - start.y;
   const curveStrength = Math.max(36, Math.min(140, Math.abs(deltaX) * 0.35 + Math.abs(deltaY) * 0.1));
@@ -620,10 +700,25 @@ function DrawingLine({
   expandedFieldIds,
   isSelected,
   onSelect,
-  onPointerDown
+  onPointerDown,
+  onEndpointPointerDown
 }) {
-  const start = getOutlineCenterAnchor(source, target, displayLevel, viewMode, expandedFieldIds);
-  const end = getOutlineCenterAnchor(target, source, displayLevel, viewMode, expandedFieldIds);
+  const start = resolveDrawingLineAnchor(
+    source,
+    target,
+    entity?.lineSourceAttachment,
+    displayLevel,
+    viewMode,
+    expandedFieldIds
+  );
+  const end = resolveDrawingLineAnchor(
+    target,
+    source,
+    entity?.lineTargetAttachment,
+    displayLevel,
+    viewMode,
+    expandedFieldIds
+  );
   const drawingOffset = getDrawingLineDragOffset(entity);
   const middleX = (start.x + end.x) / 2 + drawingOffset.x;
   const middleY = (start.y + end.y) / 2 + drawingOffset.y;
@@ -669,18 +764,6 @@ function DrawingLine({
             toggle: false
           });
         }}
-      />
-      <circle
-        cx={start.x}
-        cy={start.y}
-        r="4"
-        className={`drawing-line-endpoint ${isSelected ? "selected" : ""}`}
-      />
-      <circle
-        cx={end.x}
-        cy={end.y}
-        r="4"
-        className={`drawing-line-endpoint ${isSelected ? "selected" : ""}`}
       />
     </>
   );
@@ -1173,7 +1256,9 @@ export default function DiagramCanvas({
   onMoveEntity,
   onMoveEntities,
   onMoveRelationship,
+  onMoveRelationshipEndpoint,
   onMoveDrawingLine,
+  onMoveDrawingLineEndpoint,
   onResizeEntity,
   onChangeAnnotationText,
   onChangeDrawingText,
@@ -1392,6 +1477,31 @@ export default function DiagramCanvas({
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
+  function handleRelationshipEndpointPointerDown(event, relationshipId, endpoint) {
+    if (isLinkingRelationship) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const relationship = relationships.find((item) => item.id === relationshipId);
+    if (!relationship) {
+      return;
+    }
+
+    interactionState.current = {
+      mode: "relationship-endpoint-drag",
+      relationshipId,
+      endpoint,
+      sourceId: relationship.sourceEntityId,
+      targetId: relationship.targetEntityId
+    };
+
+    setDraggingId(`relationship-endpoint-${relationshipId}-${endpoint}`);
+    onSelectRelationship(relationshipId);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
   function handleDrawingLinePointerDown(event, entityId) {
     if (isLinkingRelationship) {
       return;
@@ -1414,6 +1524,35 @@ export default function DiagramCanvas({
     };
 
     setDraggingId(`drawing-line-${entityId}`);
+    onSelectEntity(entityId, {
+      additive: false,
+      toggle: false
+    });
+    onSelectRelationship(null);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function handleDrawingLineEndpointPointerDown(event, entityId, endpoint) {
+    if (isLinkingRelationship) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const entity = entityMap[entityId];
+    if (!entity) {
+      return;
+    }
+
+    interactionState.current = {
+      mode: "drawing-line-endpoint-drag",
+      entityId,
+      endpoint,
+      sourceId: entity.lineSourceId,
+      targetId: entity.lineTargetId
+    };
+
+    setDraggingId(`drawing-line-endpoint-${entityId}-${endpoint}`);
     onSelectEntity(entityId, {
       additive: false,
       toggle: false
@@ -1491,6 +1630,23 @@ export default function DiagramCanvas({
       return;
     }
 
+    if (interactionState.current.mode === "relationship-endpoint-drag") {
+      const point = getCanvasPoint(event);
+      const { relationshipId, endpoint, sourceId, targetId } = interactionState.current;
+      const endpointEntity = endpoint === "source" ? entityMap[sourceId] : entityMap[targetId];
+
+      if (!endpointEntity) {
+        return;
+      }
+
+      onMoveRelationshipEndpoint(
+        relationshipId,
+        endpoint,
+        getClosestOutlineAttachment(endpointEntity, point, displayLevel, viewMode, expandedFieldIds)
+      );
+      return;
+    }
+
     if (interactionState.current.mode === "drawing-line-drag") {
       const point = getCanvasPoint(event);
       const deltaX = point.x - interactionState.current.pointerStart.x;
@@ -1499,6 +1655,23 @@ export default function DiagramCanvas({
         interactionState.current.entityId,
         interactionState.current.initialOffsetX + deltaX,
         interactionState.current.initialOffsetY + deltaY
+      );
+      return;
+    }
+
+    if (interactionState.current.mode === "drawing-line-endpoint-drag") {
+      const point = getCanvasPoint(event);
+      const { entityId, endpoint, sourceId, targetId } = interactionState.current;
+      const endpointEntity = endpoint === "source" ? entityMap[sourceId] : entityMap[targetId];
+
+      if (!endpointEntity) {
+        return;
+      }
+
+      onMoveDrawingLineEndpoint(
+        entityId,
+        endpoint,
+        getClosestOutlineAttachment(endpointEntity, point, displayLevel, viewMode, expandedFieldIds)
       );
       return;
     }
@@ -1535,6 +1708,8 @@ export default function DiagramCanvas({
         target.closest(".drawing-line-hit-area") ||
         target.closest(".drawing-card") ||
         target.closest(".annotation-card") ||
+        target.closest(".diagram-endpoint-handle") ||
+        target.closest(".drawing-line-endpoint") ||
         target.closest(".relationship-delete-badge") ||
         target.closest(".diagram-link") ||
         target.closest(".diagram-link-hit-area")
@@ -1558,6 +1733,8 @@ export default function DiagramCanvas({
         target.closest(".drawing-line-hit-area") ||
         target.closest(".drawing-card") ||
         target.closest(".annotation-card") ||
+        target.closest(".diagram-endpoint-handle") ||
+        target.closest(".drawing-line-endpoint") ||
         target.closest(".diagram-link") ||
         target.closest(".diagram-link-hit-area") ||
         target.closest(".relationship-delete-badge")
@@ -1634,6 +1811,7 @@ export default function DiagramCanvas({
                   isSelected={selectedEntityIds.includes(entity.id)}
                   onSelect={onSelectEntity}
                   onPointerDown={handleDrawingLinePointerDown}
+                  onEndpointPointerDown={handleDrawingLineEndpointPointerDown}
                 />
               );
             })}
@@ -1675,6 +1853,7 @@ export default function DiagramCanvas({
                   }
                   isSelected={relationship.id === selectedRelationshipId}
                   onRelationshipPointerDown={handleRelationshipPointerDown}
+                  onRelationshipEndpointPointerDown={handleRelationshipEndpointPointerDown}
                   onSelectRelationship={onSelectRelationship}
                   onDeleteRelationship={onDeleteRelationship}
                 />
@@ -1724,6 +1903,111 @@ export default function DiagramCanvas({
               />
             )
           )}
+
+          {relationships.map((relationship) => {
+            if (relationship.id !== selectedRelationshipId) {
+              return null;
+            }
+
+            const source = entityMap[relationship.sourceEntityId];
+            const target = entityMap[relationship.targetEntityId];
+
+            if (!source || !target) {
+              return null;
+            }
+
+            const start = resolveRelationshipAnchor(
+              source,
+              target,
+              relationship?.props?.sourceAttachment,
+              displayLevel,
+              viewMode,
+              expandedFieldIds
+            );
+            const end = resolveRelationshipAnchor(
+              target,
+              source,
+              relationship?.props?.targetAttachment,
+              displayLevel,
+              viewMode,
+              expandedFieldIds
+            );
+
+            return (
+              <div key={`relationship-endpoints-${relationship.id}`}>
+                <button
+                  type="button"
+                  className="diagram-endpoint-handle overlay"
+                  style={{ left: start.x - 6, top: start.y - 6 }}
+                  onPointerDown={(event) => handleRelationshipEndpointPointerDown(event, relationship.id, "source")}
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label="Move relationship source endpoint"
+                />
+                <button
+                  type="button"
+                  className="diagram-endpoint-handle overlay"
+                  style={{ left: end.x - 6, top: end.y - 6 }}
+                  onPointerDown={(event) => handleRelationshipEndpointPointerDown(event, relationship.id, "target")}
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label="Move relationship target endpoint"
+                />
+              </div>
+            );
+          })}
+
+          {entities
+            .filter(
+              (entity) =>
+                entity?.objectType === "drawing" &&
+                entity?.drawingShape === "line" &&
+                selectedEntityIds.includes(entity.id)
+            )
+            .map((entity) => {
+              const source = entityMap[entity.lineSourceId];
+              const target = entityMap[entity.lineTargetId];
+
+              if (!source || !target) {
+                return null;
+              }
+
+              const start = resolveDrawingLineAnchor(
+                source,
+                target,
+                entity?.lineSourceAttachment,
+                displayLevel,
+                viewMode,
+                expandedFieldIds
+              );
+              const end = resolveDrawingLineAnchor(
+                target,
+                source,
+                entity?.lineTargetAttachment,
+                displayLevel,
+                viewMode,
+                expandedFieldIds
+              );
+
+              return (
+                <div key={`drawing-line-endpoints-${entity.id}`}>
+                  <button
+                    type="button"
+                    className="drawing-line-endpoint selected overlay"
+                    style={{ left: start.x - 5, top: start.y - 5 }}
+                    onPointerDown={(event) => handleDrawingLineEndpointPointerDown(event, entity.id, "source")}
+                    onClick={(event) => event.stopPropagation()}
+                    aria-label="Move drawing connector source endpoint"
+                  />
+                  <button
+                    type="button"
+                    className="drawing-line-endpoint selected overlay"
+                    style={{ left: end.x - 5, top: end.y - 5 }}
+                    onPointerDown={(event) => handleDrawingLineEndpointPointerDown(event, entity.id, "target")}
+                    onClick={(event) => event.stopPropagation()}
+                    aria-label="Move drawing connector target endpoint"
+                  />
+                </div>
+              );
+            })}
 
           {marqueeRect ? (
             <div
