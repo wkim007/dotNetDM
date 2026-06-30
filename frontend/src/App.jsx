@@ -1543,7 +1543,15 @@ function exportModelToWorkspaceJson(model) {
               name: relationship.name ?? relationship.physicalName ?? relationship.id,
               physicalName: relationship.physicalName ?? relationship.id,
               lineOffsetX: Number(relationship?.props?.lineOffsetX ?? 0),
-              lineOffsetY: Number(relationship?.props?.lineOffsetY ?? 0)
+              lineOffsetY: Number(relationship?.props?.lineOffsetY ?? 0),
+              bendPoints: Array.isArray(relationship?.props?.bendPoints)
+                ? relationship.props.bendPoints
+                    .map((point) => ({
+                      x: Number(point?.x),
+                      y: Number(point?.y)
+                    }))
+                    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+                : []
             })),
             Shapes: diagram.entities
               .filter((entity) => getEntityObjectType(entity) === "drawing")
@@ -1568,6 +1576,14 @@ function exportModelToWorkspaceJson(model) {
                     child: String(entity.lineTargetId ?? ""),
                     lineOffsetX: Number(entity.lineOffsetX ?? 0),
                     lineOffsetY: Number(entity.lineOffsetY ?? 0),
+                    lineBendPoints: Array.isArray(entity.lineBendPoints)
+                      ? entity.lineBendPoints
+                          .map((point) => ({
+                            x: Number(point?.x),
+                            y: Number(point?.y)
+                          }))
+                          .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+                      : [],
                     lineSourceAttachment: entity.lineSourceAttachment
                       ? {
                           side: String(entity.lineSourceAttachment.side ?? ""),
@@ -1750,6 +1766,14 @@ function importWorkspaceModel(payload) {
               lineTargetId: String(shape?.child ?? ""),
               lineOffsetX: Number(shape?.lineOffsetX ?? 0),
               lineOffsetY: Number(shape?.lineOffsetY ?? 0),
+              lineBendPoints: Array.isArray(shape?.lineBendPoints)
+                ? shape.lineBendPoints
+                    .map((point) => ({
+                      x: Number(point?.x),
+                      y: Number(point?.y)
+                    }))
+                    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+                : [],
               ...(shape?.lineSourceAttachment
                 ? {
                     lineSourceAttachment: {
@@ -1825,7 +1849,17 @@ function importWorkspaceModel(payload) {
           physicalName: relationship.physicalName ?? relationship.name ?? relationship.id,
           description: relationship.description ?? relationship.comment ?? "relates_to",
           props: {
-            ...(relationship.props ?? {})
+            ...(relationship.props ?? {}),
+            ...(Array.isArray(relationship?.bendPoints)
+              ? {
+                  bendPoints: relationship.bendPoints
+                    .map((point) => ({
+                      x: Number(point?.x),
+                      y: Number(point?.y)
+                    }))
+                    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+                }
+              : {})
           },
           parentToChildVerbPhrase: relationship.parentToChildVerbPhrase ?? "",
           childToParentVerbPhrase: relationship.childToParentVerbPhrase ?? "",
@@ -1861,6 +1895,7 @@ function importWorkspaceModel(payload) {
       databaseVersion: `${dbMeta.major}${dbMeta.minor ? `.${dbMeta.minor}` : ""}`,
       logicalNotation: sampleModel.project.logicalNotation,
       physicalNotation: sampleModel.project.physicalNotation,
+      lineStyle: sampleModel.project.lineStyle,
       schemas: (workspace?.schemas ?? []).map((schema) => ({
         id: String(schema.id),
         name: schema.name ?? "",
@@ -1949,6 +1984,15 @@ function getPreferredEntitySize(entity) {
 }
 
 function normalizeRelationship(relationship) {
+  const normalizedBendPoints = Array.isArray(relationship?.props?.bendPoints)
+    ? relationship.props.bendPoints
+        .map((point) => ({
+          x: Number(point?.x),
+          y: Number(point?.y)
+        }))
+        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+    : [];
+
   return {
     ...relationship,
     name: relationship.name ?? relationship.id,
@@ -1957,7 +2001,8 @@ function normalizeRelationship(relationship) {
     parentToChildVerbPhrase: relationship.parentToChildVerbPhrase ?? "",
     childToParentVerbPhrase: relationship.childToParentVerbPhrase ?? "",
     props: {
-      ...(relationship.props ?? {})
+      ...(relationship.props ?? {}),
+      ...(normalizedBendPoints.length > 0 ? { bendPoints: normalizedBendPoints } : {})
     },
     parentAttribute: relationship.parentAttribute ?? "Entity header",
     childAttribute: relationship.childAttribute ?? "Entity header",
@@ -2665,6 +2710,11 @@ export default function App() {
 
     if (field === "physicalNotation") {
       setStatus(`Changed physical notation to ${value}.`);
+      return;
+    }
+
+    if (field === "lineStyle") {
+      setStatus(`Changed line style to ${value}.`);
     }
   }
 
@@ -3033,6 +3083,127 @@ export default function App() {
     }));
   }
 
+  function handleInsertRelationshipBendPoint(relationshipId, index, point) {
+    if (!relationshipId || !point) {
+      return;
+    }
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              relationships: diagram.relationships.map((relationship) => {
+                if (relationship.id !== relationshipId) {
+                  return relationship;
+                }
+
+                const bendPoints = Array.isArray(relationship?.props?.bendPoints)
+                  ? relationship.props.bendPoints.map((item) => ({
+                      x: Number(item?.x),
+                      y: Number(item?.y)
+                    }))
+                  : [];
+                const nextBendPoints = [...bendPoints];
+                nextBendPoints.splice(index, 0, {
+                  x: Math.round(point.x),
+                  y: Math.round(point.y)
+                });
+
+                return {
+                  ...relationship,
+                  props: {
+                    ...(relationship.props ?? {}),
+                    bendPoints: nextBendPoints
+                  }
+                };
+              })
+            }
+          : diagram
+      )
+    }));
+  }
+
+  function handleMoveRelationshipBendPoint(relationshipId, index, point) {
+    if (!relationshipId || !point) {
+      return;
+    }
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              relationships: diagram.relationships.map((relationship) => {
+                if (relationship.id !== relationshipId) {
+                  return relationship;
+                }
+
+                const bendPoints = Array.isArray(relationship?.props?.bendPoints)
+                  ? relationship.props.bendPoints.map((item) => ({
+                      x: Number(item?.x),
+                      y: Number(item?.y)
+                    }))
+                  : [];
+                if (!bendPoints[index]) {
+                  return relationship;
+                }
+
+                bendPoints[index] = {
+                  x: Math.round(point.x),
+                  y: Math.round(point.y)
+                };
+
+                return {
+                  ...relationship,
+                  props: {
+                    ...(relationship.props ?? {}),
+                    bendPoints
+                  }
+                };
+              })
+            }
+          : diagram
+      )
+    }));
+  }
+
+  function handleRemoveRelationshipBendPoint(relationshipId, index) {
+    if (!relationshipId) {
+      return;
+    }
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              relationships: diagram.relationships.map((relationship) => {
+                if (relationship.id !== relationshipId) {
+                  return relationship;
+                }
+
+                const bendPoints = Array.isArray(relationship?.props?.bendPoints)
+                  ? relationship.props.bendPoints.filter((_, bendIndex) => bendIndex !== index)
+                  : [];
+
+                return {
+                  ...relationship,
+                  props: {
+                    ...(relationship.props ?? {}),
+                    bendPoints
+                  }
+                };
+              })
+            }
+          : diagram
+      )
+    }));
+  }
+
   function handleMoveDrawingLine(entityId, lineOffsetX, lineOffsetY) {
     if (!entityId) {
       return;
@@ -3050,6 +3221,112 @@ export default function App() {
                       ...entity,
                       lineOffsetX: Math.round(lineOffsetX),
                       lineOffsetY: Math.round(lineOffsetY)
+                    }
+                  : entity
+              )
+            }
+          : diagram
+      )
+    }));
+  }
+
+  function handleInsertDrawingLineBendPoint(entityId, index, point) {
+    if (!entityId || !point) {
+      return;
+    }
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: diagram.entities.map((entity) => {
+                if (entity.id !== entityId) {
+                  return entity;
+                }
+
+                const bendPoints = Array.isArray(entity.lineBendPoints)
+                  ? entity.lineBendPoints.map((item) => ({
+                      x: Number(item?.x),
+                      y: Number(item?.y)
+                    }))
+                  : [];
+                const nextBendPoints = [...bendPoints];
+                nextBendPoints.splice(index, 0, {
+                  x: Math.round(point.x),
+                  y: Math.round(point.y)
+                });
+
+                return {
+                  ...entity,
+                  lineBendPoints: nextBendPoints
+                };
+              })
+            }
+          : diagram
+      )
+    }));
+  }
+
+  function handleMoveDrawingLineBendPoint(entityId, index, point) {
+    if (!entityId || !point) {
+      return;
+    }
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: diagram.entities.map((entity) => {
+                if (entity.id !== entityId) {
+                  return entity;
+                }
+
+                const bendPoints = Array.isArray(entity.lineBendPoints)
+                  ? entity.lineBendPoints.map((item) => ({
+                      x: Number(item?.x),
+                      y: Number(item?.y)
+                    }))
+                  : [];
+                if (!bendPoints[index]) {
+                  return entity;
+                }
+
+                bendPoints[index] = {
+                  x: Math.round(point.x),
+                  y: Math.round(point.y)
+                };
+
+                return {
+                  ...entity,
+                  lineBendPoints: bendPoints
+                };
+              })
+            }
+          : diagram
+      )
+    }));
+  }
+
+  function handleRemoveDrawingLineBendPoint(entityId, index) {
+    if (!entityId) {
+      return;
+    }
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: diagram.entities.map((entity) =>
+                entity.id === entityId
+                  ? {
+                      ...entity,
+                      lineBendPoints: (entity.lineBendPoints ?? []).filter((_, bendIndex) => bendIndex !== index)
                     }
                   : entity
               )
@@ -4563,6 +4840,7 @@ export default function App() {
               ? model.project.logicalNotation
               : model.project.physicalNotation
           }
+          lineStyle={model.project.lineStyle ?? sampleModel.project.lineStyle}
           isLinkingRelationship={Boolean(linkDraft)}
           zoom={zoom}
           expandedFieldIds={expandedFieldIds}
@@ -4576,8 +4854,14 @@ export default function App() {
           onMoveEntities={handleMoveEntities}
           onMoveRelationship={handleMoveRelationship}
           onMoveRelationshipEndpoint={handleMoveRelationshipEndpoint}
+          onInsertRelationshipBendPoint={handleInsertRelationshipBendPoint}
+          onMoveRelationshipBendPoint={handleMoveRelationshipBendPoint}
+          onRemoveRelationshipBendPoint={handleRemoveRelationshipBendPoint}
           onMoveDrawingLine={handleMoveDrawingLine}
           onMoveDrawingLineEndpoint={handleMoveDrawingLineEndpoint}
+          onInsertDrawingLineBendPoint={handleInsertDrawingLineBendPoint}
+          onMoveDrawingLineBendPoint={handleMoveDrawingLineBendPoint}
+          onRemoveDrawingLineBendPoint={handleRemoveDrawingLineBendPoint}
           onResizeEntity={handleResizeEntity}
           onChangeAnnotationText={handleChangeAnnotationText}
           onChangeDrawingText={handleChangeDrawingText}
@@ -4730,6 +5014,17 @@ export default function App() {
                         {option}
                       </option>
                     ))}
+                  </select>
+                </label>
+
+                <label className="field-group">
+                  <span>Line Style</span>
+                  <select
+                    value={model.project.lineStyle ?? sampleModel.project.lineStyle ?? "curve"}
+                    onChange={(event) => handleProjectChange("lineStyle", event.target.value)}
+                  >
+                    <option value="curve">curve</option>
+                    <option value="line">line</option>
                   </select>
                 </label>
               </section>

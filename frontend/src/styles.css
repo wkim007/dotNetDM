@@ -922,8 +922,45 @@ body.panel-resizing {
 }
 
 .diagram-endpoint-handle.overlay,
+.diagram-bend-handle.overlay,
+.diagram-bend-insert-handle.overlay,
 .drawing-line-endpoint.overlay {
   pointer-events: all;
+}
+
+.diagram-bend-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #f1bf52;
+  box-shadow:
+    inset 0 0 0 1.4px rgba(54, 36, 10, 0.92),
+    0 0 0 2px rgba(241, 191, 82, 0.22);
+  cursor: grab;
+  z-index: 14;
+}
+
+.diagram-bend-insert-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(126, 166, 255, 0.95);
+  color: #eef4ff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 12px;
+  text-align: center;
+  box-shadow:
+    inset 0 0 0 1px rgba(16, 24, 36, 0.8),
+    0 0 0 2px rgba(126, 166, 255, 0.14);
+  cursor: copy;
+  z-index: 13;
 }
 
 .diagram-link-label {

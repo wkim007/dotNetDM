@@ -429,6 +429,181 @@ function getDrawingLineDragOffset(entity) {
   };
 }
 
+function normalizeLineStyle(lineStyle) {
+  return String(lineStyle ?? "curve").trim().toLowerCase() === "line" ? "line" : "curve";
+}
+
+function dedupePolylinePoints(points) {
+  return points.filter((point, index) => {
+    if (index === 0) {
+      return true;
+    }
+
+    const previous = points[index - 1];
+    return point.x !== previous.x || point.y !== previous.y;
+  });
+}
+
+function buildOrthogonalRoute(start, end, offset = { x: 0, y: 0 }, preferHorizontal = false) {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const horizontalSign = Math.sign(deltaX || 1);
+  const verticalSign = Math.sign(deltaY || 1);
+  const horizontalStub = Math.min(30, Math.max(12, Math.abs(deltaX) * 0.22));
+  const verticalStub = Math.min(30, Math.max(12, Math.abs(deltaY) * 0.22));
+
+  if (preferHorizontal) {
+    const startStubX = start.x + horizontalSign * horizontalStub;
+    const endStubX = end.x - horizontalSign * horizontalStub;
+    const baseMidY = (start.y + end.y) / 2;
+    const bendY = baseMidY + offset.y;
+    const points = dedupePolylinePoints([
+      { x: start.x, y: start.y },
+      { x: startStubX, y: start.y },
+      { x: startStubX, y: bendY },
+      { x: endStubX, y: bendY },
+      { x: endStubX, y: end.y },
+      { x: end.x, y: end.y }
+    ]);
+
+    return {
+      points,
+      bendHandle: {
+        x: (startStubX + endStubX) / 2,
+        y: bendY
+      },
+      bendAxis: "horizontal",
+      baseOffsetX: 0,
+      baseOffsetY: baseMidY
+    };
+  }
+
+  const startStubY = start.y + verticalSign * verticalStub;
+  const endStubY = end.y - verticalSign * verticalStub;
+  const baseMidX = (start.x + end.x) / 2;
+  const bendX = baseMidX + offset.x;
+  const points = dedupePolylinePoints([
+    { x: start.x, y: start.y },
+    { x: start.x, y: startStubY },
+    { x: bendX, y: startStubY },
+    { x: bendX, y: endStubY },
+    { x: end.x, y: endStubY },
+    { x: end.x, y: end.y }
+  ]);
+
+  return {
+    points,
+    bendHandle: {
+      x: bendX,
+      y: (startStubY + endStubY) / 2
+    },
+    bendAxis: "vertical",
+    baseOffsetX: baseMidX,
+    baseOffsetY: 0
+  };
+}
+
+function getSegmentDirection(from, to) {
+  const deltaX = to.x - from.x;
+  const deltaY = to.y - from.y;
+  const length = Math.hypot(deltaX, deltaY) || 1;
+
+  return {
+    x: deltaX / length,
+    y: deltaY / length,
+    length
+  };
+}
+
+function getPolylineStartDirection(points) {
+  for (let index = 1; index < points.length; index += 1) {
+    const direction = getSegmentDirection(points[index - 1], points[index]);
+    if (direction.length > 0) {
+      return direction;
+    }
+  }
+
+  return { x: 1, y: 0, length: 1 };
+}
+
+function getPolylineEndDirection(points) {
+  for (let index = points.length - 1; index > 0; index -= 1) {
+    const direction = getSegmentDirection(points[index - 1], points[index]);
+    if (direction.length > 0) {
+      return direction;
+    }
+  }
+
+  return { x: 1, y: 0, length: 1 };
+}
+
+function getPolylineMidpoint(points) {
+  if (points.length < 2) {
+    return points[0] ?? { x: 0, y: 0 };
+  }
+
+  const middleIndex = Math.max(1, Math.floor((points.length - 1) / 2));
+  const from = points[middleIndex - 1];
+  const to = points[middleIndex];
+
+  return {
+    x: (from.x + to.x) / 2,
+    y: (from.y + to.y) / 2
+  };
+}
+
+function pointsToPolyline(points) {
+  return points.map((point) => `${point.x},${point.y}`).join(" ");
+}
+
+function normalizeBendPoints(points) {
+  return Array.isArray(points)
+    ? points
+        .map((point) => ({
+          x: Number(point?.x),
+          y: Number(point?.y)
+        }))
+        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+    : [];
+}
+
+function buildPolylineRoute(start, end, bendPoints, offset, preferHorizontal = false) {
+  const normalizedBendPoints = normalizeBendPoints(bendPoints);
+
+  if (normalizedBendPoints.length > 0) {
+    return {
+      points: dedupePolylinePoints([start, ...normalizedBendPoints, end]),
+      bendPoints: normalizedBendPoints
+    };
+  }
+
+  const orthogonal = buildOrthogonalRoute(start, end, offset, preferHorizontal);
+  return {
+    points: orthogonal.points,
+    bendPoints: orthogonal.points.slice(1, -1)
+  };
+}
+
+function getSegmentMidpoints(points) {
+  const midpoints = [];
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+    if (start.x === end.x && start.y === end.y) {
+      continue;
+    }
+
+    midpoints.push({
+      index,
+      x: (start.x + end.x) / 2,
+      y: (start.y + end.y) / 2
+    });
+  }
+
+  return midpoints;
+}
+
 function DiagramLink({
   relationship,
   source,
@@ -436,6 +611,7 @@ function DiagramLink({
   displayLevel,
   viewMode,
   notationStyle,
+  lineStyle,
   expandedFieldIds,
   lineVariant,
   isSelected,
@@ -462,43 +638,75 @@ function DiagramLink({
   );
   const deltaX = end.x - start.x;
   const deltaY = end.y - start.y;
+  const normalizedLineStyle = normalizeLineStyle(lineStyle);
+  const relationshipOffset = getRelationshipDragOffset(relationship);
   const curveStrength = Math.max(36, Math.min(140, Math.abs(deltaX) * 0.35 + Math.abs(deltaY) * 0.1));
   const horizontalFirst = Math.abs(deltaX) >= Math.abs(deltaY);
-  const relationshipOffset = getRelationshipDragOffset(relationship);
   const controlOneX = (horizontalFirst ? start.x + Math.sign(deltaX || 1) * curveStrength : start.x) + relationshipOffset.x;
   const controlOneY = (horizontalFirst ? start.y : start.y + Math.sign(deltaY || 1) * curveStrength) + relationshipOffset.y;
   const controlTwoX = (horizontalFirst ? end.x - Math.sign(deltaX || 1) * curveStrength : end.x) + relationshipOffset.x;
   const controlTwoY = (horizontalFirst ? end.y : end.y - Math.sign(deltaY || 1) * curveStrength) + relationshipOffset.y;
-  const path = `M ${start.x} ${start.y} C ${controlOneX} ${controlOneY}, ${controlTwoX} ${controlTwoY}, ${end.x} ${end.y}`;
-  const midX = (start.x + end.x) / 2;
-  const midY = (start.y + end.y) / 2 - 10;
-  const markerX = ((start.x + controlOneX) / 2 + (controlTwoX + end.x) / 2) / 2;
-  const markerY = ((start.y + controlOneY) / 2 + (controlTwoY + end.y) / 2) / 2;
   const normalizedNotationStyle = normalizeNotationStyle(notationStyle);
-  const endVectorX = start.x - end.x;
-  const endVectorY = start.y - end.y;
-  const endVectorLength = Math.hypot(endVectorX, endVectorY) || 1;
+  const curveEndVectorX = start.x - end.x;
+  const curveEndVectorY = start.y - end.y;
+  const curveEndVectorLength = Math.hypot(curveEndVectorX, curveEndVectorY) || 1;
   const childMarkerOffset = normalizedNotationStyle === "information-engineering" ? 22 : 10;
-  const childMarkerX = end.x + (endVectorX / endVectorLength) * childMarkerOffset;
-  const childMarkerY = end.y + (endVectorY / endVectorLength) * childMarkerOffset;
-  const adjustedEndX = childMarkerX;
-  const adjustedEndY = childMarkerY;
-  const adjustedControlTwoX = (horizontalFirst ? adjustedEndX - Math.sign(deltaX || 1) * curveStrength : adjustedEndX) + relationshipOffset.x;
-  const adjustedControlTwoY = (horizontalFirst ? adjustedEndY : adjustedEndY - Math.sign(deltaY || 1) * curveStrength) + relationshipOffset.y;
-  const adjustedPath = `M ${start.x} ${start.y} C ${controlOneX} ${controlOneY}, ${adjustedControlTwoX} ${adjustedControlTwoY}, ${adjustedEndX} ${adjustedEndY}`;
-  const adjustedMidX = (start.x + adjustedEndX) / 2 + relationshipOffset.x * 0.5;
-  const adjustedMidY = (start.y + adjustedEndY) / 2 + relationshipOffset.y * 0.5 - 10;
-  const adjustedMarkerX = ((start.x + controlOneX) / 2 + (adjustedControlTwoX + adjustedEndX) / 2) / 2;
-  const adjustedMarkerY = ((start.y + controlOneY) / 2 + (adjustedControlTwoY + adjustedEndY) / 2) / 2;
+  const curveChildMarkerX = end.x + (curveEndVectorX / curveEndVectorLength) * childMarkerOffset;
+  const curveChildMarkerY = end.y + (curveEndVectorY / curveEndVectorLength) * childMarkerOffset;
+  const adjustedControlTwoX =
+    (horizontalFirst ? curveChildMarkerX - Math.sign(deltaX || 1) * curveStrength : curveChildMarkerX) +
+    relationshipOffset.x;
+  const adjustedControlTwoY =
+    (horizontalFirst ? curveChildMarkerY : curveChildMarkerY - Math.sign(deltaY || 1) * curveStrength) +
+    relationshipOffset.y;
+  const adjustedPath = `M ${start.x} ${start.y} C ${controlOneX} ${controlOneY}, ${adjustedControlTwoX} ${adjustedControlTwoY}, ${curveChildMarkerX} ${curveChildMarkerY}`;
+  const lineRoute = buildPolylineRoute(
+    start,
+    end,
+    relationship?.props?.bendPoints,
+    relationshipOffset,
+    Math.abs(deltaX) >= Math.abs(deltaY)
+  );
+  const lineEndDirection = getPolylineEndDirection(lineRoute.points);
+  const lineChildMarker = {
+    x: end.x - lineEndDirection.x * childMarkerOffset,
+    y: end.y - lineEndDirection.y * childMarkerOffset
+  };
+  const visiblePolylinePoints = [...lineRoute.points];
+  visiblePolylinePoints[visiblePolylinePoints.length - 1] = lineChildMarker;
   const logicalRelationshipPhrase = buildLogicalRelationshipPhrase(relationship);
-  const dirX = (end.x - start.x) / endVectorLength;
-  const dirY = (end.y - start.y) / endVectorLength;
+  const routeStartDirection =
+    normalizedLineStyle === "line"
+      ? getPolylineStartDirection(visiblePolylinePoints)
+      : getSegmentDirection(start, { x: controlOneX, y: controlOneY });
+  const routeEndDirection =
+    normalizedLineStyle === "line"
+      ? lineEndDirection
+      : getSegmentDirection({ x: adjustedControlTwoX, y: adjustedControlTwoY }, end);
+  const markerCenterX = normalizedLineStyle === "line" ? lineChildMarker.x : curveChildMarkerX;
+  const markerCenterY = normalizedLineStyle === "line" ? lineChildMarker.y : curveChildMarkerY;
+  const routeMidpoint =
+    normalizedLineStyle === "line"
+      ? getPolylineMidpoint(visiblePolylinePoints)
+      : {
+          x: (start.x + curveChildMarkerX) / 2 + relationshipOffset.x * 0.5,
+          y: (start.y + curveChildMarkerY) / 2 + relationshipOffset.y * 0.5
+        };
+  const routeMarkerPoint =
+    normalizedLineStyle === "line"
+      ? getPolylineMidpoint(visiblePolylinePoints)
+      : {
+          x: ((start.x + controlOneX) / 2 + (adjustedControlTwoX + curveChildMarkerX) / 2) / 2,
+          y: ((start.y + controlOneY) / 2 + (adjustedControlTwoY + curveChildMarkerY) / 2) / 2
+        };
+  const dirX = routeEndDirection.x;
+  const dirY = routeEndDirection.y;
   const perpX = -dirY;
   const perpY = dirX;
   const isMostlyVertical = Math.abs(dirY) >= Math.abs(dirX);
   const parentMarkerInset = 12;
-  const parentMarkerCenterX = start.x + dirX * parentMarkerInset;
-  const parentMarkerCenterY = start.y + dirY * parentMarkerInset;
+  const parentMarkerCenterX = start.x + routeStartDirection.x * parentMarkerInset;
+  const parentMarkerCenterY = start.y + routeStartDirection.y * parentMarkerInset;
   const ieBarHalfLength = isMostlyVertical ? 8 : 7;
   const ieBarStartX = parentMarkerCenterX - perpX * ieBarHalfLength;
   const ieBarStartY = parentMarkerCenterY - perpY * ieBarHalfLength;
@@ -507,22 +715,22 @@ function DiagramLink({
   const ieProngSpread = isMostlyVertical ? 7 : 5.5;
   const ieCircleRadius = isMostlyVertical ? 5.5 : 5;
   const ieStemLength = isMostlyVertical ? 10 : 8;
-  const ieStemEndX = childMarkerX + dirX * ieStemLength;
-  const ieStemEndY = childMarkerY + dirY * ieStemLength;
+  const ieStemEndX = markerCenterX + dirX * ieStemLength;
+  const ieStemEndY = markerCenterY + dirY * ieStemLength;
   const ieCrowFootLeftX = ieStemEndX + perpX * ieProngSpread;
   const ieCrowFootLeftY = ieStemEndY + perpY * ieProngSpread;
   const ieCrowFootRightX = ieStemEndX - perpX * ieProngSpread;
   const ieCrowFootRightY = ieStemEndY - perpY * ieProngSpread;
   const arrowLength = 16;
   const arrowSpread = 7;
-  const arrowBaseX = childMarkerX - dirX * arrowLength;
-  const arrowBaseY = childMarkerY - dirY * arrowLength;
+  const arrowBaseX = markerCenterX - dirX * arrowLength;
+  const arrowBaseY = markerCenterY - dirY * arrowLength;
   const arrowLeftX = arrowBaseX + perpX * arrowSpread;
   const arrowLeftY = arrowBaseY + perpY * arrowSpread;
   const arrowRightX = arrowBaseX - perpX * arrowSpread;
   const arrowRightY = arrowBaseY - perpY * arrowSpread;
-  const phraseAnchorX = start.x + (adjustedEndX - start.x) * 0.56 + relationshipOffset.x * 0.6 + perpX * 18;
-  const phraseAnchorY = start.y + (adjustedEndY - start.y) * 0.56 + relationshipOffset.y * 0.6 + perpY * 18;
+  const phraseAnchorX = routeMarkerPoint.x + perpX * 18;
+  const phraseAnchorY = routeMarkerPoint.y + perpY * 18;
 
   function handleMarkerSelect(event) {
     event.stopPropagation();
@@ -542,7 +750,7 @@ function DiagramLink({
       return (
         <g className={`diagram-link-notation ${isSelected ? "selected" : ""}`} onClick={handleMarkerSelect}>
           <polygon
-            points={`${childMarkerX},${childMarkerY} ${arrowLeftX},${arrowLeftY} ${arrowRightX},${arrowRightY}`}
+            points={`${markerCenterX},${markerCenterY} ${arrowLeftX},${arrowLeftY} ${arrowRightX},${arrowRightY}`}
             className="diagram-link-graph-arrow"
           />
         </g>
@@ -560,28 +768,28 @@ function DiagramLink({
             className="diagram-link-parent-bar"
           />
           <circle
-            cx={childMarkerX}
-            cy={childMarkerY}
+            cx={markerCenterX}
+            cy={markerCenterY}
             r={ieCircleRadius}
             className="diagram-link-ie-circle"
           />
           <line
-            x1={childMarkerX}
-            y1={childMarkerY}
+            x1={markerCenterX}
+            y1={markerCenterY}
             x2={ieStemEndX}
             y2={ieStemEndY}
             className="diagram-link-ie-prong"
           />
           <line
-            x1={childMarkerX}
-            y1={childMarkerY}
+            x1={markerCenterX}
+            y1={markerCenterY}
             x2={ieCrowFootLeftX}
             y2={ieCrowFootLeftY}
             className="diagram-link-ie-prong"
           />
           <line
-            x1={childMarkerX}
-            y1={childMarkerY}
+            x1={markerCenterX}
+            y1={markerCenterY}
             x2={ieCrowFootRightX}
             y2={ieCrowFootRightY}
             className="diagram-link-ie-prong"
@@ -592,8 +800,8 @@ function DiagramLink({
 
     return (
       <circle
-        cx={childMarkerX}
-        cy={childMarkerY}
+        cx={markerCenterX}
+        cy={markerCenterY}
         r="5.5"
         className={`diagram-link-child-marker ${isSelected ? "selected" : ""}`}
         onClick={handleMarkerSelect}
@@ -603,26 +811,48 @@ function DiagramLink({
 
   return (
     <>
-      <path
-        d={adjustedPath}
-        className="diagram-link-hit-area"
-        onPointerDown={(event) => onRelationshipPointerDown(event, relationship.id)}
-        onClick={(event) => {
-          event.stopPropagation();
-          onSelectRelationship(relationship.id);
-        }}
-      />
-      <path
-        d={adjustedPath}
-        className={`diagram-link ${lineVariant} ${isSelected ? "selected" : ""}`}
-        onPointerDown={(event) => onRelationshipPointerDown(event, relationship.id)}
-        onClick={handleMarkerSelect}
-      />
+      {normalizedLineStyle === "line" ? (
+        <>
+          <polyline
+            points={pointsToPolyline(lineRoute.points)}
+            className="diagram-link-hit-area"
+            onPointerDown={(event) => onRelationshipPointerDown(event, relationship.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelectRelationship(relationship.id);
+            }}
+          />
+          <polyline
+            points={pointsToPolyline(visiblePolylinePoints)}
+            className={`diagram-link ${lineVariant} ${isSelected ? "selected" : ""}`}
+            onPointerDown={(event) => onRelationshipPointerDown(event, relationship.id)}
+            onClick={handleMarkerSelect}
+          />
+        </>
+      ) : (
+        <>
+          <path
+            d={adjustedPath}
+            className="diagram-link-hit-area"
+            onPointerDown={(event) => onRelationshipPointerDown(event, relationship.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelectRelationship(relationship.id);
+            }}
+          />
+          <path
+            d={adjustedPath}
+            className={`diagram-link ${lineVariant} ${isSelected ? "selected" : ""}`}
+            onPointerDown={(event) => onRelationshipPointerDown(event, relationship.id)}
+            onClick={handleMarkerSelect}
+          />
+        </>
+      )}
       {renderNotationMarkers()}
       {lineVariant === "sub-category" ? (
         <circle
-          cx={adjustedMarkerX}
-          cy={adjustedMarkerY}
+          cx={routeMarkerPoint.x}
+          cy={routeMarkerPoint.y}
           r="9"
           className={`diagram-link-subcategory-marker ${isSelected ? "selected" : ""}`}
           onClick={(event) => {
@@ -632,7 +862,7 @@ function DiagramLink({
         />
       ) : null}
       {relationship.cardinality ? (
-        <text x={adjustedMidX} y={adjustedMidY} className="diagram-link-label">
+        <text x={routeMidpoint.x} y={routeMidpoint.y - 10} className="diagram-link-label">
           {relationship.cardinality}
         </text>
       ) : null}
@@ -649,8 +879,8 @@ function DiagramLink({
             onDeleteRelationship(relationship.id);
           }}
         >
-          <rect x={adjustedMidX - 14} y={adjustedMidY - 28} rx="8" ry="8" width="28" height="28" />
-          <text x={adjustedMidX} y={adjustedMidY - 14}>
+          <rect x={routeMidpoint.x - 14} y={routeMidpoint.y - 38} rx="8" ry="8" width="28" height="28" />
+          <text x={routeMidpoint.x} y={routeMidpoint.y - 24}>
             ×
           </text>
         </g>
@@ -697,6 +927,7 @@ function DrawingLine({
   target,
   displayLevel,
   viewMode,
+  lineStyle,
   expandedFieldIds,
   isSelected,
   onSelect,
@@ -720,15 +951,15 @@ function DrawingLine({
     expandedFieldIds
   );
   const drawingOffset = getDrawingLineDragOffset(entity);
-  const middleX = (start.x + end.x) / 2 + drawingOffset.x;
-  const middleY = (start.y + end.y) / 2 + drawingOffset.y;
-  const rawPoints = [
-    { x: start.x, y: start.y },
-    { x: middleX, y: start.y },
-    { x: middleX, y: middleY },
-    { x: end.x, y: middleY },
-    { x: end.x, y: end.y }
-  ];
+  const normalizedLineStyle = normalizeLineStyle(lineStyle);
+  const rawRoute = buildPolylineRoute(
+    start,
+    end,
+    entity?.lineBendPoints,
+    drawingOffset,
+    Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
+  );
+  const rawPoints = rawRoute.points;
   const visiblePoints = [...rawPoints];
   visiblePoints[0] = trimOrthogonalEndpoint(rawPoints[0], rawPoints[1], 7);
   visiblePoints[visiblePoints.length - 1] = trimOrthogonalEndpoint(
@@ -736,35 +967,84 @@ function DrawingLine({
     rawPoints[rawPoints.length - 2],
     7
   );
-  const hitAreaPoints = rawPoints.map((point) => `${point.x},${point.y}`).join(" ");
-  const visiblePolylinePoints = visiblePoints.map((point) => `${point.x},${point.y}`).join(" ");
+  const hitAreaPoints = pointsToPolyline(rawPoints);
+  const visiblePolylinePoints = pointsToPolyline(visiblePoints);
+  const curveStrength = Math.max(
+    30,
+    Math.min(120, Math.abs(end.x - start.x) * 0.35 + Math.abs(end.y - start.y) * 0.12)
+  );
+  const curveHorizontalFirst = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y);
+  const controlOneX =
+    (curveHorizontalFirst ? start.x + Math.sign(end.x - start.x || 1) * curveStrength : start.x) +
+    drawingOffset.x;
+  const controlOneY =
+    (curveHorizontalFirst ? start.y : start.y + Math.sign(end.y - start.y || 1) * curveStrength) +
+    drawingOffset.y;
+  const controlTwoX =
+    (curveHorizontalFirst ? end.x - Math.sign(end.x - start.x || 1) * curveStrength : end.x) +
+    drawingOffset.x;
+  const controlTwoY =
+    (curveHorizontalFirst ? end.y : end.y - Math.sign(end.y - start.y || 1) * curveStrength) +
+    drawingOffset.y;
+  const curvePath = `M ${start.x} ${start.y} C ${controlOneX} ${controlOneY}, ${controlTwoX} ${controlTwoY}, ${end.x} ${end.y}`;
 
   return (
     <>
-      <polyline
-        points={hitAreaPoints}
-        className="drawing-line-hit-area"
-        onPointerDown={(event) => onPointerDown(event, entity.id)}
-        onClick={(event) => {
-          event.stopPropagation();
-          onSelect(entity.id, {
-            additive: false,
-            toggle: false
-          });
-        }}
-      />
-      <polyline
-        points={visiblePolylinePoints}
-        className={`drawing-line ${isSelected ? "selected" : ""}`}
-        onPointerDown={(event) => onPointerDown(event, entity.id)}
-        onClick={(event) => {
-          event.stopPropagation();
-          onSelect(entity.id, {
-            additive: false,
-            toggle: false
-          });
-        }}
-      />
+      {normalizedLineStyle === "line" ? (
+        <>
+          <polyline
+            points={hitAreaPoints}
+            className="drawing-line-hit-area"
+            onPointerDown={(event) => onPointerDown(event, entity.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect(entity.id, {
+                additive: false,
+                toggle: false
+              });
+            }}
+          />
+          <polyline
+            points={visiblePolylinePoints}
+            className={`drawing-line ${isSelected ? "selected" : ""}`}
+            onPointerDown={(event) => onPointerDown(event, entity.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect(entity.id, {
+                additive: false,
+                toggle: false
+              });
+            }}
+          />
+        </>
+      ) : (
+        <>
+          <path
+            d={curvePath}
+            className="drawing-line-hit-area"
+            onPointerDown={(event) => onPointerDown(event, entity.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect(entity.id, {
+                additive: false,
+                toggle: false
+              });
+            }}
+          />
+          <path
+            d={curvePath}
+            className={`drawing-line ${isSelected ? "selected" : ""}`}
+            onPointerDown={(event) => onPointerDown(event, entity.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect(entity.id, {
+                additive: false,
+                toggle: false
+              });
+            }}
+          />
+        </>
+      )}
     </>
   );
 }
@@ -1245,6 +1525,7 @@ export default function DiagramCanvas({
   displayLevel,
   viewMode,
   notationStyle,
+  lineStyle,
   isLinkingRelationship,
   zoom,
   expandedFieldIds,
@@ -1257,8 +1538,14 @@ export default function DiagramCanvas({
   onMoveEntities,
   onMoveRelationship,
   onMoveRelationshipEndpoint,
+  onInsertRelationshipBendPoint,
+  onMoveRelationshipBendPoint,
+  onRemoveRelationshipBendPoint,
   onMoveDrawingLine,
   onMoveDrawingLineEndpoint,
+  onInsertDrawingLineBendPoint,
+  onMoveDrawingLineBendPoint,
+  onRemoveDrawingLineBendPoint,
   onResizeEntity,
   onChangeAnnotationText,
   onChangeDrawingText,
@@ -1561,6 +1848,48 @@ export default function DiagramCanvas({
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
+  function handleRelationshipPointPointerDown(event, relationshipId, pointIndex) {
+    if (isLinkingRelationship) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    interactionState.current = {
+      mode: "relationship-point-drag",
+      relationshipId,
+      pointIndex
+    };
+
+    setDraggingId(`relationship-point-${relationshipId}-${pointIndex}`);
+    onSelectRelationship(relationshipId);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function handleDrawingLinePointPointerDown(event, entityId, pointIndex) {
+    if (isLinkingRelationship) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    interactionState.current = {
+      mode: "drawing-line-point-drag",
+      entityId,
+      pointIndex
+    };
+
+    setDraggingId(`drawing-line-point-${entityId}-${pointIndex}`);
+    onSelectEntity(entityId, {
+      additive: false,
+      toggle: false
+    });
+    onSelectRelationship(null);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
   function handlePointerMove(event) {
     if (!interactionState.current) {
       return;
@@ -1647,6 +1976,16 @@ export default function DiagramCanvas({
       return;
     }
 
+    if (interactionState.current.mode === "relationship-point-drag") {
+      const point = getCanvasPoint(event);
+      onMoveRelationshipBendPoint(
+        interactionState.current.relationshipId,
+        interactionState.current.pointIndex,
+        point
+      );
+      return;
+    }
+
     if (interactionState.current.mode === "drawing-line-drag") {
       const point = getCanvasPoint(event);
       const deltaX = point.x - interactionState.current.pointerStart.x;
@@ -1672,6 +2011,16 @@ export default function DiagramCanvas({
         entityId,
         endpoint,
         getClosestOutlineAttachment(endpointEntity, point, displayLevel, viewMode, expandedFieldIds)
+      );
+      return;
+    }
+
+    if (interactionState.current.mode === "drawing-line-point-drag") {
+      const point = getCanvasPoint(event);
+      onMoveDrawingLineBendPoint(
+        interactionState.current.entityId,
+        interactionState.current.pointIndex,
+        point
       );
       return;
     }
@@ -1709,6 +2058,8 @@ export default function DiagramCanvas({
         target.closest(".drawing-card") ||
         target.closest(".annotation-card") ||
         target.closest(".diagram-endpoint-handle") ||
+        target.closest(".diagram-bend-handle") ||
+        target.closest(".diagram-bend-insert-handle") ||
         target.closest(".drawing-line-endpoint") ||
         target.closest(".relationship-delete-badge") ||
         target.closest(".diagram-link") ||
@@ -1734,6 +2085,8 @@ export default function DiagramCanvas({
         target.closest(".drawing-card") ||
         target.closest(".annotation-card") ||
         target.closest(".diagram-endpoint-handle") ||
+        target.closest(".diagram-bend-handle") ||
+        target.closest(".diagram-bend-insert-handle") ||
         target.closest(".drawing-line-endpoint") ||
         target.closest(".diagram-link") ||
         target.closest(".diagram-link-hit-area") ||
@@ -1807,6 +2160,7 @@ export default function DiagramCanvas({
                     target={target}
                     displayLevel={displayLevel}
                     viewMode={viewMode}
+                  lineStyle={lineStyle}
                   expandedFieldIds={expandedFieldIds}
                   isSelected={selectedEntityIds.includes(entity.id)}
                   onSelect={onSelectEntity}
@@ -1833,6 +2187,7 @@ export default function DiagramCanvas({
                   displayLevel={displayLevel}
                   viewMode={viewMode}
                   notationStyle={notationStyle}
+                  lineStyle={lineStyle}
                   expandedFieldIds={expandedFieldIds}
                   lineVariant={
                     String(relationship.relationshipType ?? "").trim().toLowerCase() === "connector"
@@ -1932,6 +2287,14 @@ export default function DiagramCanvas({
               viewMode,
               expandedFieldIds
             );
+            const route = buildPolylineRoute(
+              start,
+              end,
+              relationship?.props?.bendPoints,
+              getRelationshipDragOffset(relationship),
+              Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
+            );
+            const segmentMidpoints = getSegmentMidpoints(route.points);
 
             return (
               <div key={`relationship-endpoints-${relationship.id}`}>
@@ -1951,6 +2314,42 @@ export default function DiagramCanvas({
                   onClick={(event) => event.stopPropagation()}
                   aria-label="Move relationship target endpoint"
                 />
+                {normalizeLineStyle(lineStyle) === "line" ? (
+                  <>
+                    {route.bendPoints.map((point, pointIndex) => (
+                      <button
+                        key={`relationship-bend-${relationship.id}-${pointIndex}`}
+                        type="button"
+                        className="diagram-bend-handle overlay"
+                        style={{ left: point.x - 7, top: point.y - 7 }}
+                        onPointerDown={(event) =>
+                          handleRelationshipPointPointerDown(event, relationship.id, pointIndex)
+                        }
+                        onDoubleClick={(event) => {
+                          event.stopPropagation();
+                          onRemoveRelationshipBendPoint(relationship.id, pointIndex);
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label="Move relationship bend point"
+                      />
+                    ))}
+                    {segmentMidpoints.map((point) => (
+                      <button
+                        key={`relationship-bend-insert-${relationship.id}-${point.index}`}
+                        type="button"
+                        className="diagram-bend-insert-handle overlay"
+                        style={{ left: point.x - 6, top: point.y - 6 }}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onInsertRelationshipBendPoint(relationship.id, point.index, point);
+                        }}
+                        aria-label="Add relationship bend point"
+                      >
+                        +
+                      </button>
+                    ))}
+                  </>
+                ) : null}
               </div>
             );
           })}
@@ -1986,6 +2385,14 @@ export default function DiagramCanvas({
                 viewMode,
                 expandedFieldIds
               );
+              const route = buildPolylineRoute(
+                start,
+                end,
+                entity?.lineBendPoints,
+                getDrawingLineDragOffset(entity),
+                Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
+              );
+              const segmentMidpoints = getSegmentMidpoints(route.points);
 
               return (
                 <div key={`drawing-line-endpoints-${entity.id}`}>
@@ -2005,6 +2412,42 @@ export default function DiagramCanvas({
                     onClick={(event) => event.stopPropagation()}
                     aria-label="Move drawing connector target endpoint"
                   />
+                  {normalizeLineStyle(lineStyle) === "line" ? (
+                    <>
+                      {route.bendPoints.map((point, pointIndex) => (
+                        <button
+                          key={`drawing-bend-${entity.id}-${pointIndex}`}
+                          type="button"
+                          className="diagram-bend-handle overlay"
+                          style={{ left: point.x - 7, top: point.y - 7 }}
+                          onPointerDown={(event) =>
+                            handleDrawingLinePointPointerDown(event, entity.id, pointIndex)
+                          }
+                          onDoubleClick={(event) => {
+                            event.stopPropagation();
+                            onRemoveDrawingLineBendPoint(entity.id, pointIndex);
+                          }}
+                          onClick={(event) => event.stopPropagation()}
+                          aria-label="Move drawing connector bend point"
+                        />
+                      ))}
+                      {segmentMidpoints.map((point) => (
+                        <button
+                          key={`drawing-bend-insert-${entity.id}-${point.index}`}
+                          type="button"
+                          className="diagram-bend-insert-handle overlay"
+                          style={{ left: point.x - 6, top: point.y - 6 }}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onInsertDrawingLineBendPoint(entity.id, point.index, point);
+                          }}
+                          aria-label="Add drawing connector bend point"
+                        >
+                          +
+                        </button>
+                      ))}
+                    </>
+                  ) : null}
                 </div>
               );
             })}

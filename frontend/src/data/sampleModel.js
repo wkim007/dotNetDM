@@ -9,7 +9,8 @@ export const sampleModel = {
     diagramDefinition: "Sample bookstore and fulfillment domain.",
     displayLevel: "Column",
     logicalNotation: "IDEF1x",
-    physicalNotation: "IDEF1x"
+    physicalNotation: "IDEF1x",
+    lineStyle: "curve"
   },
   activeDiagramId: "er-diagram-1",
   diagrams: [
