@@ -6,7 +6,8 @@ const CARD_MIN_HEIGHT = 120;
 const CARD_COMPACT_MIN_HEIGHT = 58;
 const CARD_COMMENT_MIN_HEIGHT = 92;
 const CARD_HEADER = 50;
-const ROW_HEIGHT = 33;
+const ROW_HEIGHT = 38;
+const PK_SEPARATOR_EXTRA_HEIGHT = 24;
 const CARD_MAX_WIDTH = 560;
 const CARD_COMMENT_MAX_WIDTH = 980;
 const WORLD_WIDTH = 1600;
@@ -122,6 +123,16 @@ function getVisibleFields(entity, displayLevel, expandedFieldIds) {
   return fields;
 }
 
+function getPrimaryKeySeparatorExtraHeight(fields) {
+  for (let index = 1; index < fields.length; index += 1) {
+    if (fields[index].kind !== "PK" && fields[index - 1]?.kind === "PK") {
+      return PK_SEPARATOR_EXTRA_HEIGHT;
+    }
+  }
+
+  return 0;
+}
+
 function getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds) {
   if (entity?.objectType === "drawing") {
     const drawingText = String(entity.drawingText ?? "").trim() || "Drawing";
@@ -173,10 +184,11 @@ function getPreferredEntitySize(entity, displayLevel, viewMode, expandedFieldIds
   );
   const rowCount = visibleFields.length;
   const minHeight = rowCount > 0 ? CARD_MIN_HEIGHT : CARD_COMPACT_MIN_HEIGHT;
+  const separatorExtraHeight = getPrimaryKeySeparatorExtraHeight(visibleFields);
 
   return {
     width: Math.min(CARD_MAX_WIDTH, Math.max(CARD_MIN_WIDTH, Math.ceil(Math.max(headerWidth, widestFieldWidth)))),
-    height: Math.max(minHeight, CARD_HEADER + rowCount * ROW_HEIGHT + 18)
+    height: Math.max(minHeight, CARD_HEADER + rowCount * ROW_HEIGHT + 18 + separatorExtraHeight)
   };
 }
 
@@ -1455,10 +1467,15 @@ function EntityCard({
         <div className={`entity-comment ${commentText ? "" : "empty"}`}>{commentText || " "}</div>
       ) : visibleFields.length > 0 ? (
         <div className="entity-fields">
-          {visibleFields.map((field) => (
+          {visibleFields.map((field, index) => {
+            const previousField = index > 0 ? visibleFields[index - 1] : null;
+            const showPrimaryKeySeparator =
+              field.kind !== "PK" && previousField?.kind === "PK";
+
+            return (
             <div
               key={field.id}
-              className={`entity-field-row ${selectedAttributeId === field.id ? "active" : ""}`}
+              className={`entity-field-row ${selectedAttributeId === field.id ? "active" : ""} ${showPrimaryKeySeparator ? "pk-separator" : ""}`}
               style={{ "--field-depth": field.depth }}
               onPointerDown={(event) => {
                 event.stopPropagation();
@@ -1501,7 +1518,8 @@ function EntityCard({
               <span className="entity-field-name">{field.name}</span>
               <span className="entity-field-type">{field.dataType}</span>
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : null}
 

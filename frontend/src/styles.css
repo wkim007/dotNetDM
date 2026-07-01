@@ -1355,6 +1355,24 @@ body.panel-resizing {
   background: rgba(66, 217, 212, 0.16);
 }
 
+.entity-field-row.pk-separator {
+  margin-top: 12px;
+  padding-top: 12px;
+  position: relative;
+}
+
+.entity-field-row.pk-separator::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: rgba(127, 151, 178, 0.32);
+  border-radius: 0;
+  pointer-events: none;
+}
+
 .entity-field-indent {
   width: calc(var(--field-depth, 0) * 18px);
 }

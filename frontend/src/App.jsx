@@ -22,7 +22,8 @@ const CARD_BASE_WIDTH = 280;
 const CARD_MIN_WIDTH = 220;
 const CARD_MIN_HEIGHT = 120;
 const CARD_HEADER = 50;
-const ROW_HEIGHT = 33;
+const ROW_HEIGHT = 38;
+const PK_SEPARATOR_EXTRA_HEIGHT = 24;
 const CARD_MAX_WIDTH = 560;
 const DB_META_MAP = {
   postgresql: { db: "1075859235", label: "PostgreSQL", schema: "public" },
@@ -1960,6 +1961,9 @@ function getPreferredEntitySize(entity) {
 
   const fields = flattenFieldsForLayout(entity.fields ?? []);
   const hasNestedFields = fields.some((field) => field.hasChildren || field.depth > 0);
+  const hasPrimaryKeySeparator = fields.some(
+    (field, index) => index > 0 && field.kind !== "PK" && fields[index - 1]?.kind === "PK"
+  );
   const headerWidth = estimateTextWidth(entity.physicalName ?? entity.name ?? "Entity", 12) + 92;
   const widestFieldWidth = Math.max(
     ...fields.map((field) => {
@@ -1978,7 +1982,11 @@ function getPreferredEntitySize(entity) {
     ),
     height: Math.max(
       CARD_MIN_HEIGHT,
-      CARD_HEADER + fields.length * ROW_HEIGHT + 18 + (hasNestedFields ? ROW_HEIGHT : 0)
+      CARD_HEADER +
+        fields.length * ROW_HEIGHT +
+        18 +
+        (hasNestedFields ? ROW_HEIGHT : 0) +
+        (hasPrimaryKeySeparator ? PK_SEPARATOR_EXTRA_HEIGHT : 0)
     )
   };
 }
@@ -4198,8 +4206,8 @@ export default function App() {
     }
 
     const attributeId = getNextNumericWorkspaceId(model);
-    updateSelectedEntity((entity) => ({
-      fields: [
+    updateSelectedEntity((entity) => {
+      const nextFields = [
         ...entity.fields,
         {
           id: attributeId,
@@ -4210,8 +4218,13 @@ export default function App() {
           dataType: "varchar(50)",
           isNullable: true
         }
-      ]
-    }));
+      ];
+      return {
+        fields: nextFields,
+        width: entity.width ?? 0,
+        height: 0
+      };
+    });
     setSelectedAttributeId(attributeId);
     setStatus("Added an attribute.");
   }
@@ -4238,7 +4251,11 @@ export default function App() {
         return {};
       }
 
-      return { fields: nextFields };
+      return {
+        fields: nextFields,
+        width: entity.width ?? 0,
+        height: 0
+      };
     });
 
     setExpandedFieldIds((current) => ({
