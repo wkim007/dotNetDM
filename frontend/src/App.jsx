@@ -4200,33 +4200,58 @@ export default function App() {
     setStatus("Deleted relationship.");
   }
 
-  function handleAddAttribute() {
-    if (!selectedEntity) {
+  function handleAddAttribute(nameOverride = "", entityIdOverride = selectedEntityId) {
+    if (!entityIdOverride) {
       return;
     }
 
-    const attributeId = getNextNumericWorkspaceId(model);
-    updateSelectedEntity((entity) => {
-      const nextFields = [
-        ...entity.fields,
-        {
-          id: attributeId,
-          kind: "COL",
-          name: `Column${entity.fields.length + 1}`,
-          physicalName: "",
-          comment: "",
-          dataType: "varchar(50)",
-          isNullable: true
-        }
-      ];
-      return {
-        fields: nextFields,
-        width: entity.width ?? 0,
-        height: 0
-      };
-    });
+    const requestedName = String(nameOverride ?? "").trim();
+    let attributeId = null;
+    let addedAttributeName = "";
+
+    setModel((current) => ({
+      ...current,
+      diagrams: current.diagrams.map((diagram) =>
+        diagram.id === current.activeDiagramId
+          ? {
+              ...diagram,
+              entities: diagram.entities.map((entity) => {
+                if (entity.id !== entityIdOverride) {
+                  return entity;
+                }
+
+                attributeId = getNextNumericWorkspaceId(current);
+                addedAttributeName = requestedName || `Column${entity.fields.length + 1}`;
+                return {
+                  ...entity,
+                  fields: [
+                    ...entity.fields,
+                    {
+                      id: attributeId,
+                      kind: "COL",
+                      name: addedAttributeName,
+                      physicalName: "",
+                      comment: "",
+                      dataType: "varchar(50)",
+                      isNullable: true
+                    }
+                  ],
+                  width: entity.width ?? 0,
+                  height: 0
+                };
+              })
+            }
+          : diagram
+      )
+    }));
+
+    if (!attributeId) {
+      return;
+    }
+
+    setSelectedEntityIds([entityIdOverride]);
     setSelectedAttributeId(attributeId);
-    setStatus("Added an attribute.");
+    setStatus(`Added attribute ${addedAttributeName}.`);
   }
 
   function handleAddChildAttribute(parentAttributeId) {
@@ -4885,6 +4910,7 @@ export default function App() {
           onDeleteEntity={handleDeleteEntityById}
           onDeleteRelationship={handleDeleteRelationship}
           onToggleFieldExpansion={handleToggleFieldExpansion}
+          onInlineAddAttribute={handleAddAttribute}
           onViewportChange={setDiagramViewport}
           viewResetToken={viewResetToken}
         />

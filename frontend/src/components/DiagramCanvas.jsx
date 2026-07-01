@@ -1410,8 +1410,16 @@ function EntityCard({
   onSelect,
   onSelectAttribute,
   onToggleFieldExpansion,
-  onDelete
+  onDelete,
+  isInlineAttributeEditing,
+  inlineAttributeValue,
+  onInlineAttributeDraftChange,
+  onInlineAttributeSubmit,
+  onInlineAttributeCancel,
+  onInlineAttributeHoldStart,
+  onInlineAttributeHoldEnd
 }) {
+  const inlineInputRef = useRef(null);
   const commentMode = isCommentDisplayLevel(displayLevel);
   const commentText = getCommentText(entity, viewMode);
   const visibleFields = getVisibleFields(entity, displayLevel, expandedFieldIds);
@@ -1419,11 +1427,21 @@ function EntityCard({
   const { width, height } = getRenderedEntitySize(entity, displayLevel, viewMode, expandedFieldIds);
   const variantClass = getEntityCardVariant(entity);
   const displayName = getEntityDisplayName(entity, viewMode);
+  const cardHeight = isInlineAttributeEditing ? height + 56 : height;
+
+  useEffect(() => {
+    if (!isInlineAttributeEditing || !inlineInputRef.current) {
+      return;
+    }
+
+    inlineInputRef.current.focus();
+    inlineInputRef.current.select();
+  }, [isInlineAttributeEditing]);
 
   return (
     <article
       className={`entity-card ${variantClass} ${isSelected ? "selected" : ""}`}
-      style={{ left: entity.x, top: entity.y, width, height }}
+      style={{ left: entity.x, top: entity.y, width, height: cardHeight }}
       onPointerDown={(event) => onPointerDown(event, entity.id)}
       onClick={(event) => {
         if (event.metaKey) {
@@ -1520,6 +1538,128 @@ function EntityCard({
             </div>
             );
           })}
+          {isInlineAttributeEditing ? (
+            <div
+              className="entity-inline-add-row"
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+              }}
+            >
+              <span className="entity-field-indent" aria-hidden="true" />
+              <span className="field-tree-placeholder" aria-hidden="true" />
+              <FieldBadge kind="COL" />
+              <input
+                ref={inlineInputRef}
+                className="entity-inline-add-input"
+                value={inlineAttributeValue}
+                placeholder="New attribute"
+                onChange={(event) => onInlineAttributeDraftChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onInlineAttributeSubmit(entity.id);
+                    return;
+                  }
+
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onInlineAttributeCancel();
+                  }
+                }}
+                onBlur={() => {
+                  if (String(inlineAttributeValue ?? "").trim()) {
+                    onInlineAttributeSubmit(entity.id);
+                    return;
+                  }
+
+                  onInlineAttributeCancel();
+                }}
+              />
+              <span className="entity-inline-add-type">varchar(50)</span>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="entity-fields">
+          {isInlineAttributeEditing ? (
+            <div
+              className="entity-inline-add-row"
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+              }}
+            >
+              <span className="entity-field-indent" aria-hidden="true" />
+              <span className="field-tree-placeholder" aria-hidden="true" />
+              <FieldBadge kind="COL" />
+              <input
+                ref={inlineInputRef}
+                className="entity-inline-add-input"
+                value={inlineAttributeValue}
+                placeholder="New attribute"
+                onChange={(event) => onInlineAttributeDraftChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onInlineAttributeSubmit(entity.id);
+                    return;
+                  }
+
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onInlineAttributeCancel();
+                  }
+                }}
+                onBlur={() => {
+                  if (String(inlineAttributeValue ?? "").trim()) {
+                    onInlineAttributeSubmit(entity.id);
+                    return;
+                  }
+
+                  onInlineAttributeCancel();
+                }}
+              />
+              <span className="entity-inline-add-type">varchar(50)</span>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {!commentMode ? (
+        <div
+          className={`entity-inline-add-zone ${isInlineAttributeEditing ? "editing" : ""}`}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            onSelect(entity.id, {
+              additive: false,
+              toggle: false
+            });
+            onInlineAttributeHoldStart(entity.id);
+          }}
+          onPointerUp={(event) => {
+            event.stopPropagation();
+            onInlineAttributeHoldEnd();
+          }}
+          onPointerLeave={() => {
+            onInlineAttributeHoldEnd();
+          }}
+          onPointerCancel={() => {
+            onInlineAttributeHoldEnd();
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+          }}
+        >
+          {isInlineAttributeEditing ? "Type attribute name and press Enter" : "Hold 2s to add attribute"}
         </div>
       ) : null}
 
@@ -1571,6 +1711,7 @@ export default function DiagramCanvas({
   onDeleteEntity,
   onDeleteRelationship,
   onToggleFieldExpansion,
+  onInlineAddAttribute,
   onViewportChange,
   viewResetToken
 }) {
@@ -1579,8 +1720,74 @@ export default function DiagramCanvas({
   const interactionState = useRef(null);
   const canvasRef = useRef(null);
   const suppressBackgroundClickRef = useRef(false);
+  const inlineAttributeHoldTimerRef = useRef(null);
   const [draggingId, setDraggingId] = useState(null);
   const [marqueeRect, setMarqueeRect] = useState(null);
+  const [inlineAttributeEditor, setInlineAttributeEditor] = useState(null);
+
+  function clearInlineAttributeHoldTimer() {
+    if (inlineAttributeHoldTimerRef.current) {
+      window.clearTimeout(inlineAttributeHoldTimerRef.current);
+      inlineAttributeHoldTimerRef.current = null;
+    }
+  }
+
+  function handleInlineAttributeHoldStart(entityId) {
+    clearInlineAttributeHoldTimer();
+    inlineAttributeHoldTimerRef.current = window.setTimeout(() => {
+      setInlineAttributeEditor({
+        entityId,
+        value: ""
+      });
+      setDraggingId(null);
+      interactionState.current = null;
+      clearInlineAttributeHoldTimer();
+    }, 2000);
+  }
+
+  function handleInlineAttributeHoldEnd() {
+    clearInlineAttributeHoldTimer();
+  }
+
+  function handleInlineAttributeDraftChange(value) {
+    setInlineAttributeEditor((current) => (current ? { ...current, value } : current));
+  }
+
+  function handleInlineAttributeCancel() {
+    clearInlineAttributeHoldTimer();
+    setInlineAttributeEditor(null);
+  }
+
+  function commitInlineAttributeIfNeeded() {
+    const entityId = inlineAttributeEditor?.entityId;
+    const value = String(inlineAttributeEditor?.value ?? "").trim();
+
+    if (!entityId) {
+      return false;
+    }
+
+    clearInlineAttributeHoldTimer();
+
+    if (!value) {
+      setInlineAttributeEditor(null);
+      return false;
+    }
+
+    onInlineAddAttribute(value, entityId);
+    setInlineAttributeEditor(null);
+    return true;
+  }
+
+  function handleInlineAttributeSubmit(entityId) {
+    const value = String(inlineAttributeEditor?.value ?? "").trim();
+    if (!value) {
+      setInlineAttributeEditor(null);
+      return;
+    }
+
+    onInlineAddAttribute(value, entityId);
+    setInlineAttributeEditor(null);
+  }
 
   useEffect(() => {
     const visibleFieldIds = new Set(
@@ -1591,6 +1798,8 @@ export default function DiagramCanvas({
       onSelectAttribute(null, selectedEntityIds.at(-1) ?? null);
     }
   }, [entities, expandedFieldIds, onSelectAttribute, selectedAttributeId, selectedEntityIds]);
+
+  useEffect(() => () => clearInlineAttributeHoldTimer(), []);
 
   function getCanvasPoint(event) {
     const element = canvasRef.current;
@@ -1692,6 +1901,8 @@ export default function DiagramCanvas({
   }, [displayLevel, entityMap, focusRelationshipRequest, relationships, zoom]);
 
   function handlePointerDown(event, entityId) {
+    commitInlineAttributeIfNeeded();
+
     if (isLinkingRelationship) {
       event.preventDefault();
       event.stopPropagation();
@@ -2060,6 +2271,8 @@ export default function DiagramCanvas({
   }
 
   function handleCanvasBackgroundClick(event) {
+    commitInlineAttributeIfNeeded();
+
     if (suppressBackgroundClickRef.current) {
       suppressBackgroundClickRef.current = false;
       return;
@@ -2092,6 +2305,8 @@ export default function DiagramCanvas({
   }
 
   function handleCanvasPointerDown(event) {
+    commitInlineAttributeIfNeeded();
+
     const target = event.target;
 
     if (
@@ -2273,6 +2488,15 @@ export default function DiagramCanvas({
                 onSelectAttribute={onSelectAttribute}
                 onToggleFieldExpansion={onToggleFieldExpansion}
                 onDelete={onDeleteEntity}
+                isInlineAttributeEditing={inlineAttributeEditor?.entityId === entity.id}
+                inlineAttributeValue={
+                  inlineAttributeEditor?.entityId === entity.id ? inlineAttributeEditor.value : ""
+                }
+                onInlineAttributeDraftChange={handleInlineAttributeDraftChange}
+                onInlineAttributeSubmit={handleInlineAttributeSubmit}
+                onInlineAttributeCancel={handleInlineAttributeCancel}
+                onInlineAttributeHoldStart={handleInlineAttributeHoldStart}
+                onInlineAttributeHoldEnd={handleInlineAttributeHoldEnd}
               />
             )
           )}
