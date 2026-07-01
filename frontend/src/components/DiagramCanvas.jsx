@@ -1411,6 +1411,7 @@ function EntityCard({
   onSelectAttribute,
   onToggleFieldExpansion,
   onDelete,
+  onAttributeContextMenu,
   isInlineAttributeEditing,
   inlineAttributeValue,
   onInlineAttributeDraftChange,
@@ -1501,6 +1502,12 @@ function EntityCard({
               onClick={(event) => {
                 event.stopPropagation();
                 onSelectAttribute(field.id, entity.id);
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onSelectAttribute(field.id, entity.id);
+                onAttributeContextMenu(event, field.id, entity.id);
               }}
               onDoubleClick={(event) => {
                 if (!field.hasChildren) {
@@ -1710,6 +1717,7 @@ export default function DiagramCanvas({
   onSelectAttribute,
   onDeleteEntity,
   onDeleteRelationship,
+  onDeleteAttribute,
   onToggleFieldExpansion,
   onInlineAddAttribute,
   onViewportChange,
@@ -1724,6 +1732,7 @@ export default function DiagramCanvas({
   const [draggingId, setDraggingId] = useState(null);
   const [marqueeRect, setMarqueeRect] = useState(null);
   const [inlineAttributeEditor, setInlineAttributeEditor] = useState(null);
+  const [attributeContextMenu, setAttributeContextMenu] = useState(null);
 
   function clearInlineAttributeHoldTimer() {
     if (inlineAttributeHoldTimerRef.current) {
@@ -1756,6 +1765,10 @@ export default function DiagramCanvas({
   function handleInlineAttributeCancel() {
     clearInlineAttributeHoldTimer();
     setInlineAttributeEditor(null);
+  }
+
+  function closeAttributeContextMenu() {
+    setAttributeContextMenu(null);
   }
 
   function commitInlineAttributeIfNeeded() {
@@ -1800,6 +1813,26 @@ export default function DiagramCanvas({
   }, [entities, expandedFieldIds, onSelectAttribute, selectedAttributeId, selectedEntityIds]);
 
   useEffect(() => () => clearInlineAttributeHoldTimer(), []);
+
+  useEffect(() => {
+    function handleWindowPointerDown() {
+      closeAttributeContextMenu();
+    }
+
+    function handleWindowKeyDown(event) {
+      if (event.key === "Escape") {
+        closeAttributeContextMenu();
+      }
+    }
+
+    window.addEventListener("pointerdown", handleWindowPointerDown);
+    window.addEventListener("keydown", handleWindowKeyDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", handleWindowPointerDown);
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, []);
 
   function getCanvasPoint(event) {
     const element = canvasRef.current;
@@ -1901,6 +1934,7 @@ export default function DiagramCanvas({
   }, [displayLevel, entityMap, focusRelationshipRequest, relationships, zoom]);
 
   function handlePointerDown(event, entityId) {
+    closeAttributeContextMenu();
     commitInlineAttributeIfNeeded();
 
     if (isLinkingRelationship) {
@@ -2271,6 +2305,7 @@ export default function DiagramCanvas({
   }
 
   function handleCanvasBackgroundClick(event) {
+    closeAttributeContextMenu();
     commitInlineAttributeIfNeeded();
 
     if (suppressBackgroundClickRef.current) {
@@ -2305,6 +2340,7 @@ export default function DiagramCanvas({
   }
 
   function handleCanvasPointerDown(event) {
+    closeAttributeContextMenu();
     commitInlineAttributeIfNeeded();
 
     const target = event.target;
@@ -2342,6 +2378,17 @@ export default function DiagramCanvas({
     }
   }
 
+  function handleAttributeContextMenu(event, attributeId, entityId) {
+    const element = canvasRef.current;
+    const bounds = element?.getBoundingClientRect();
+    setAttributeContextMenu({
+      attributeId,
+      entityId,
+      x: ((event.clientX - (bounds?.left ?? 0)) + (element?.scrollLeft ?? 0)) / zoom,
+      y: ((event.clientY - (bounds?.top ?? 0)) + (element?.scrollTop ?? 0)) / zoom
+    });
+  }
+
   return (
     <section
       ref={canvasRef}
@@ -2351,6 +2398,14 @@ export default function DiagramCanvas({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
+      onContextMenu={(event) => {
+        const target = event.target;
+        if (target instanceof Element && target.closest(".entity-field-row")) {
+          return;
+        }
+
+        closeAttributeContextMenu();
+      }}
     >
       <div
         className="diagram-stage-shell"
@@ -2488,6 +2543,7 @@ export default function DiagramCanvas({
                 onSelectAttribute={onSelectAttribute}
                 onToggleFieldExpansion={onToggleFieldExpansion}
                 onDelete={onDeleteEntity}
+                onAttributeContextMenu={handleAttributeContextMenu}
                 isInlineAttributeEditing={inlineAttributeEditor?.entityId === entity.id}
                 inlineAttributeValue={
                   inlineAttributeEditor?.entityId === entity.id ? inlineAttributeEditor.value : ""
@@ -2500,6 +2556,30 @@ export default function DiagramCanvas({
               />
             )
           )}
+
+          {attributeContextMenu ? (
+            <div
+              className="attribute-context-menu"
+              style={{ left: attributeContextMenu.x, top: attributeContextMenu.y }}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+              }}
+            >
+              <button
+                type="button"
+                className="attribute-context-menu-item"
+                onClick={() => {
+                  onDeleteAttribute(attributeContextMenu.attributeId);
+                  closeAttributeContextMenu();
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          ) : null}
 
           {relationships.map((relationship) => {
             if (relationship.id !== selectedRelationshipId) {

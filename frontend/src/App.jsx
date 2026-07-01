@@ -4911,6 +4911,7 @@ export default function App() {
           onDeleteRelationship={handleDeleteRelationship}
           onToggleFieldExpansion={handleToggleFieldExpansion}
           onInlineAddAttribute={handleAddAttribute}
+          onDeleteAttribute={handleDeleteAttribute}
           onViewportChange={setDiagramViewport}
           viewResetToken={viewResetToken}
         />
