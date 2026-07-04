@@ -124,6 +124,18 @@ function getVisibleFields(entity, displayLevel, expandedFieldIds) {
 }
 
 function getPrimaryKeySeparatorExtraHeight(fields) {
+  const topLevelFields = (fields ?? []).filter((field) => field.depth === 0);
+  if (topLevelFields.length === 0) {
+    return 0;
+  }
+
+  const hasPrimary = topLevelFields.some((field) => field.kind === "PK");
+  const hasNonPrimary = topLevelFields.some((field) => field.kind !== "PK");
+
+  if (!hasPrimary || !hasNonPrimary) {
+    return PK_SEPARATOR_EXTRA_HEIGHT;
+  }
+
   for (let index = 1; index < fields.length; index += 1) {
     if (fields[index].kind !== "PK" && fields[index - 1]?.kind === "PK") {
       return PK_SEPARATOR_EXTRA_HEIGHT;
@@ -1409,9 +1421,13 @@ function EntityCard({
   onResizeStart,
   onSelect,
   onSelectAttribute,
+  onAttributePointerDown,
   onToggleFieldExpansion,
   onDelete,
   onAttributeContextMenu,
+  attributeDragFieldId,
+  attributeDragSeparatorFieldId,
+  onDropAttributeOnGroupEdge,
   isInlineAttributeEditing,
   inlineAttributeValue,
   onInlineAttributeDraftChange,
@@ -1429,6 +1445,14 @@ function EntityCard({
   const variantClass = getEntityCardVariant(entity);
   const displayName = getEntityDisplayName(entity, viewMode);
   const cardHeight = isInlineAttributeEditing ? height + 56 : height;
+  const topLevelVisibleFields = visibleFields.filter((field) => field.depth === 0);
+  const hasPrimaryFields = topLevelVisibleFields.some((field) => field.kind === "PK");
+  const hasNonPrimaryFields = topLevelVisibleFields.some((field) => field.kind !== "PK");
+  const topGroupEdgeFieldId = !hasPrimaryFields && topLevelVisibleFields.length > 0 ? topLevelVisibleFields[0].id : null;
+  const bottomGroupEdgeFieldId =
+    hasPrimaryFields && !hasNonPrimaryFields && topLevelVisibleFields.length > 0
+      ? topLevelVisibleFields[topLevelVisibleFields.length - 1].id
+      : null;
 
   useEffect(() => {
     if (!isInlineAttributeEditing || !inlineInputRef.current) {
@@ -1486,65 +1510,110 @@ function EntityCard({
         <div className={`entity-comment ${commentText ? "" : "empty"}`}>{commentText || " "}</div>
       ) : visibleFields.length > 0 ? (
         <div className="entity-fields">
+          {topGroupEdgeFieldId ? (
+            <div
+              className={`entity-field-separator-dropzone ${attributeDragSeparatorFieldId === topGroupEdgeFieldId ? "drag-target" : ""}`}
+              data-attribute-separator-id={`edge-pk-${topGroupEdgeFieldId}`}
+              data-attribute-separator-field-id={topGroupEdgeFieldId}
+              data-attribute-separator-kind="PK"
+              data-attribute-entity-id={entity.id}
+              title="Drop here to move into PK"
+            >
+              <span className="entity-field-separator-line" />
+              <span className="entity-field-separator-label">Drop here to switch PK</span>
+            </div>
+          ) : null}
           {visibleFields.map((field, index) => {
             const previousField = index > 0 ? visibleFields[index - 1] : null;
             const showPrimaryKeySeparator =
               field.kind !== "PK" && previousField?.kind === "PK";
 
             return (
-            <div
-              key={field.id}
-              className={`entity-field-row ${selectedAttributeId === field.id ? "active" : ""} ${showPrimaryKeySeparator ? "pk-separator" : ""}`}
-              style={{ "--field-depth": field.depth }}
-              onPointerDown={(event) => {
-                event.stopPropagation();
-              }}
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelectAttribute(field.id, entity.id);
-              }}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onSelectAttribute(field.id, entity.id);
-                onAttributeContextMenu(event, field.id, entity.id);
-              }}
-              onDoubleClick={(event) => {
-                if (!field.hasChildren) {
-                  return;
-                }
-
-                event.stopPropagation();
-                onToggleFieldExpansion(entity.id, field.id);
-              }}
-            >
-              <span className="entity-field-indent" aria-hidden="true" />
-              {field.hasChildren ? (
-                <button
-                  type="button"
-                  className={`field-tree-toggle ${String(field.dataType ?? "").toLowerCase().startsWith("array") ? "array" : "object"}`}
-                  aria-label={`${field.isExpanded ? "Collapse" : "Expand"} ${field.name}`}
-                  title={`${field.isExpanded ? "Collapse" : "Expand"} ${field.name}`}
+              <div key={field.id}>
+                {showPrimaryKeySeparator ? (
+                  <div
+                    className={`entity-field-separator-dropzone ${attributeDragSeparatorFieldId === `between-${field.id}` ? "drag-target" : ""}`}
+                    data-attribute-separator-id={`between-${field.id}`}
+                    data-attribute-separator-field-id={field.id}
+                    data-attribute-entity-id={entity.id}
+                    title="Drop here to switch between PK and non-PK"
+                  >
+                    <span className="entity-field-separator-line" />
+                    <span className="entity-field-separator-label">Drop here to switch PK</span>
+                  </div>
+                ) : null}
+                <div
+                  className={`entity-field-row ${selectedAttributeId === field.id ? "active" : ""} ${showPrimaryKeySeparator ? "pk-separator" : ""} ${attributeDragFieldId === field.id ? "drag-target" : ""} ${field.depth === 0 ? "draggable" : ""}`}
+                  style={{ "--field-depth": field.depth }}
+                  data-attribute-drop-id={field.depth === 0 ? field.id : undefined}
+                  data-attribute-drop-kind={field.depth === 0 ? (field.kind === "PK" ? "PK" : "COL") : undefined}
+                  data-attribute-entity-id={field.depth === 0 ? entity.id : undefined}
                   onPointerDown={(event) => {
                     event.stopPropagation();
+                    if (field.depth === 0 && event.button === 0) {
+                      onAttributePointerDown(event, entity.id, field.id);
+                    }
                   }}
                   onClick={(event) => {
                     event.stopPropagation();
                     onSelectAttribute(field.id, entity.id);
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onSelectAttribute(field.id, entity.id);
+                    onAttributeContextMenu(event, field.id, entity.id);
+                  }}
+                  onDoubleClick={(event) => {
+                    if (!field.hasChildren) {
+                      return;
+                    }
+
+                    event.stopPropagation();
                     onToggleFieldExpansion(entity.id, field.id);
                   }}
                 >
-                  <FieldTreeMarker expanded={field.isExpanded} />
-                </button>
-              ) : (
-                <span className="field-tree-placeholder" aria-hidden="true" />
-              )}
-              <FieldBadge kind={field.kind} />
-              <span className="entity-field-name">{field.name}</span>
-              <span className="entity-field-type">{field.dataType}</span>
-            </div>
+                  <span className="entity-field-indent" aria-hidden="true" />
+                  {field.hasChildren ? (
+                    <button
+                      type="button"
+                      className={`field-tree-toggle ${String(field.dataType ?? "").toLowerCase().startsWith("array") ? "array" : "object"}`}
+                      aria-label={`${field.isExpanded ? "Collapse" : "Expand"} ${field.name}`}
+                      title={`${field.isExpanded ? "Collapse" : "Expand"} ${field.name}`}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelectAttribute(field.id, entity.id);
+                        onToggleFieldExpansion(entity.id, field.id);
+                      }}
+                    >
+                      <FieldTreeMarker expanded={field.isExpanded} />
+                    </button>
+                  ) : (
+                    <span className="field-tree-placeholder" aria-hidden="true" />
+                  )}
+                  <FieldBadge kind={field.kind} />
+                  <span className="entity-field-name">{field.name}</span>
+                  <span className="entity-field-type">{field.dataType}</span>
+                </div>
+              </div>
             );
           })}
+          {bottomGroupEdgeFieldId ? (
+            <div
+              className={`entity-field-separator-dropzone ${attributeDragSeparatorFieldId === bottomGroupEdgeFieldId ? "drag-target" : ""}`}
+              data-attribute-separator-id={`edge-col-${bottomGroupEdgeFieldId}`}
+              data-attribute-separator-field-id={bottomGroupEdgeFieldId}
+              data-attribute-separator-kind="COL"
+              data-attribute-entity-id={entity.id}
+              title="Drop here to move out of PK"
+            >
+              <span className="entity-field-separator-line" />
+              <span className="entity-field-separator-label">Drop here to switch PK</span>
+            </div>
+          ) : null}
           {isInlineAttributeEditing ? (
             <div
               className="entity-inline-add-row"
@@ -1720,6 +1789,9 @@ export default function DiagramCanvas({
   onDeleteAttribute,
   onToggleFieldExpansion,
   onInlineAddAttribute,
+  onDropAttribute,
+  onDropAttributeOnSeparator,
+  onDropAttributeOnGroupEdge,
   onViewportChange,
   viewResetToken
 }) {
@@ -1733,6 +1805,8 @@ export default function DiagramCanvas({
   const [marqueeRect, setMarqueeRect] = useState(null);
   const [inlineAttributeEditor, setInlineAttributeEditor] = useState(null);
   const [attributeContextMenu, setAttributeContextMenu] = useState(null);
+  const [attributeDragFieldId, setAttributeDragFieldId] = useState(null);
+  const [attributeDragSeparatorFieldId, setAttributeDragSeparatorFieldId] = useState(null);
 
   function clearInlineAttributeHoldTimer() {
     if (inlineAttributeHoldTimerRef.current) {
@@ -2001,6 +2075,37 @@ export default function DiagramCanvas({
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
+  function handleAttributePointerDown(event, entityId, fieldId) {
+    if (isLinkingRelationship || event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    closeAttributeContextMenu();
+    commitInlineAttributeIfNeeded();
+
+    interactionState.current = {
+      mode: "attribute-drag",
+      entityId,
+      fieldId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      dragging: false
+    };
+
+    setDraggingId(`attribute-${fieldId}`);
+    setAttributeDragFieldId(null);
+    setAttributeDragSeparatorFieldId(null);
+    onSelectEntity(entityId, {
+      additive: false,
+      toggle: false
+    });
+    onSelectRelationship(null);
+    onSelectAttribute(fieldId, entityId);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
   function handleRelationshipPointerDown(event, relationshipId) {
     if (isLinkingRelationship) {
       return;
@@ -2158,6 +2263,57 @@ export default function DiagramCanvas({
       return;
     }
 
+    if (interactionState.current.mode === "attribute-drag") {
+      const deltaX = event.clientX - interactionState.current.startClientX;
+      const deltaY = event.clientY - interactionState.current.startClientY;
+      const hasExceededThreshold = Math.hypot(deltaX, deltaY) >= 6;
+
+      if (!interactionState.current.dragging && !hasExceededThreshold) {
+        return;
+      }
+
+      interactionState.current.dragging = true;
+      const hovered = document.elementFromPoint(event.clientX, event.clientY);
+      const separatorTarget = hovered?.closest?.("[data-attribute-separator-id]");
+      const fieldTarget = hovered?.closest?.("[data-attribute-drop-id]");
+
+      if (
+        separatorTarget &&
+        String(separatorTarget.getAttribute("data-attribute-entity-id") ?? "") ===
+          String(interactionState.current.entityId)
+      ) {
+        const separatorId = separatorTarget.getAttribute("data-attribute-separator-id");
+        const separatorFieldId = separatorTarget.getAttribute("data-attribute-separator-field-id");
+        const separatorKind = separatorTarget.getAttribute("data-attribute-separator-kind");
+        const isBlockedSelfDrop =
+          (separatorKind === "PK" || separatorKind === "COL") &&
+          separatorFieldId === String(interactionState.current.fieldId);
+
+        if (separatorId && !isBlockedSelfDrop) {
+          setAttributeDragSeparatorFieldId(separatorId);
+          setAttributeDragFieldId(null);
+          return;
+        }
+      }
+
+      if (
+        fieldTarget &&
+        String(fieldTarget.getAttribute("data-attribute-entity-id") ?? "") ===
+          String(interactionState.current.entityId)
+      ) {
+        const targetFieldId = fieldTarget.getAttribute("data-attribute-drop-id");
+        if (targetFieldId && targetFieldId !== String(interactionState.current.fieldId)) {
+          setAttributeDragFieldId(targetFieldId);
+          setAttributeDragSeparatorFieldId(null);
+          return;
+        }
+      }
+
+      setAttributeDragFieldId(null);
+      setAttributeDragSeparatorFieldId(null);
+      return;
+    }
+
     if (interactionState.current.mode === "drag") {
       const { entityIds, anchorEntityId, pointerStart, initialPositions } = interactionState.current;
       const point = getCanvasPoint(event);
@@ -2295,6 +2451,39 @@ export default function DiagramCanvas({
   }
 
   function handlePointerUp() {
+    if (interactionState.current?.mode === "attribute-drag") {
+      if (interactionState.current.dragging) {
+        if (attributeDragSeparatorFieldId) {
+          const separatorElement = canvasRef.current?.querySelector?.(
+            `[data-attribute-separator-id="${CSS.escape(String(attributeDragSeparatorFieldId))}"]`
+          );
+          const separatorKind = separatorElement?.getAttribute?.("data-attribute-separator-kind");
+          const separatorFieldId =
+            separatorElement?.getAttribute?.("data-attribute-separator-field-id") ?? attributeDragSeparatorFieldId;
+
+          if (separatorKind === "PK" || separatorKind === "COL") {
+            onDropAttributeOnGroupEdge(interactionState.current.fieldId, separatorKind);
+          } else {
+            onDropAttributeOnSeparator(interactionState.current.fieldId, separatorFieldId);
+          }
+        } else if (attributeDragFieldId) {
+          const targetEntity = entities.find((entity) => entity.id === interactionState.current.entityId);
+          const flattened = flattenFieldTree(targetEntity?.fields ?? [], expandedFieldIds);
+          const targetField = flattened.find((field) => String(field.id) === String(attributeDragFieldId));
+          if (targetField && targetField.depth === 0) {
+            onDropAttribute(
+              interactionState.current.fieldId,
+              attributeDragFieldId,
+              targetField.kind === "PK" ? "PK" : "COL"
+            );
+          }
+        }
+      }
+
+      setAttributeDragFieldId(null);
+      setAttributeDragSeparatorFieldId(null);
+    }
+
     if (interactionState.current?.mode === "select") {
       suppressBackgroundClickRef.current = true;
     }
@@ -2541,9 +2730,15 @@ export default function DiagramCanvas({
                 onResizeStart={handleResizeStart}
                 onSelect={onSelectEntity}
                 onSelectAttribute={onSelectAttribute}
+                onAttributePointerDown={handleAttributePointerDown}
                 onToggleFieldExpansion={onToggleFieldExpansion}
                 onDelete={onDeleteEntity}
                 onAttributeContextMenu={handleAttributeContextMenu}
+                attributeDragFieldId={selectedEntityIds.includes(entity.id) ? attributeDragFieldId : null}
+                attributeDragSeparatorFieldId={
+                  selectedEntityIds.includes(entity.id) ? attributeDragSeparatorFieldId : null
+                }
+                onDropAttributeOnGroupEdge={onDropAttributeOnGroupEdge}
                 isInlineAttributeEditing={inlineAttributeEditor?.entityId === entity.id}
                 inlineAttributeValue={
                   inlineAttributeEditor?.entityId === entity.id ? inlineAttributeEditor.value : ""

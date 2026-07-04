@@ -1244,6 +1244,86 @@ function moveFieldInTree(fields, fieldId, direction) {
   }));
 }
 
+function moveTopLevelFieldToTarget(fields, draggedFieldId, targetFieldId, targetKind) {
+  const nextFields = [...(fields ?? [])];
+  const draggedIndex = nextFields.findIndex((field) => field.id === draggedFieldId);
+  const targetIndex = nextFields.findIndex((field) => field.id === targetFieldId);
+
+  if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) {
+    return fields;
+  }
+
+  const [draggedField] = nextFields.splice(draggedIndex, 1);
+  const normalizedTargetKind = targetKind === "PK" ? "PK" : "COL";
+  const nextDraggedField = {
+    ...draggedField,
+    kind: normalizedTargetKind,
+    isPrimary: normalizedTargetKind === "PK",
+    isFK: normalizedTargetKind === "PK" ? false : draggedField.isFK ?? draggedField.kind === "FK"
+  };
+
+  const adjustedTargetIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+  nextFields.splice(adjustedTargetIndex, 0, nextDraggedField);
+  return nextFields;
+}
+
+function moveTopLevelFieldToSeparator(fields, draggedFieldId, separatorFieldId) {
+  const nextFields = [...(fields ?? [])];
+  const draggedIndex = nextFields.findIndex((field) => field.id === draggedFieldId);
+  const separatorIndex = nextFields.findIndex((field) => field.id === separatorFieldId);
+
+  if (draggedIndex === -1 || separatorIndex === -1) {
+    return fields;
+  }
+
+  const draggedField = nextFields[draggedIndex];
+  const shouldPromoteToPrimary = draggedField?.kind !== "PK";
+  const [removedField] = nextFields.splice(draggedIndex, 1);
+  const adjustedSeparatorIndex = draggedIndex < separatorIndex ? separatorIndex - 1 : separatorIndex;
+  const nextField = {
+    ...removedField,
+    kind: shouldPromoteToPrimary ? "PK" : "COL",
+    isPrimary: shouldPromoteToPrimary,
+    isFK: shouldPromoteToPrimary ? false : removedField.isFK ?? removedField.kind === "FK"
+  };
+
+  nextFields.splice(adjustedSeparatorIndex, 0, nextField);
+  return nextFields;
+}
+
+function moveTopLevelFieldToGroupEdge(fields, draggedFieldId, targetKind) {
+  const nextFields = [...(fields ?? [])];
+  const draggedIndex = nextFields.findIndex((field) => field.id === draggedFieldId);
+
+  if (draggedIndex === -1) {
+    return fields;
+  }
+
+  const normalizedTargetKind = targetKind === "PK" ? "PK" : "COL";
+  const [removedField] = nextFields.splice(draggedIndex, 1);
+  const nextField = {
+    ...removedField,
+    kind: normalizedTargetKind,
+    isPrimary: normalizedTargetKind === "PK",
+    isFK: normalizedTargetKind === "PK" ? false : removedField.isFK ?? removedField.kind === "FK"
+  };
+
+  if (normalizedTargetKind === "PK") {
+    const firstNonPrimaryIndex = nextFields.findIndex((field) => field.kind !== "PK");
+    const insertIndex = firstNonPrimaryIndex === -1 ? nextFields.length : firstNonPrimaryIndex;
+    nextFields.splice(insertIndex, 0, nextField);
+    return nextFields;
+  }
+
+  const lastPrimaryIndex = nextFields.reduce(
+    (foundIndex, field, index) => (field.kind === "PK" ? index : foundIndex),
+    -1
+  );
+  const insertIndex = lastPrimaryIndex + 1;
+  nextFields.splice(insertIndex, 0, nextField);
+  return nextFields;
+}
+
 function addChildFieldToTree(fields, parentFieldId, childFieldFactory) {
   let inserted = false;
 
@@ -4314,6 +4394,73 @@ export default function App() {
     setStatus(direction === "up" ? "Moved attribute up." : "Moved attribute down.");
   }
 
+  function handleDropAttribute(draggedAttributeId, targetAttributeId, targetKind) {
+    if (!draggedAttributeId || !targetAttributeId) {
+      return;
+    }
+
+    updateSelectedEntity((entity) => {
+      const nextFields = moveTopLevelFieldToTarget(entity.fields, draggedAttributeId, targetAttributeId, targetKind);
+      if (nextFields === entity.fields) {
+        return {};
+      }
+
+      return {
+        fields: nextFields,
+        height: 0
+      };
+    });
+
+    setSelectedAttributeId(draggedAttributeId);
+    setStatus(targetKind === "PK" ? "Moved attribute to primary key area." : "Moved attribute to non-primary area.");
+  }
+
+  function handleDropAttributeOnSeparator(draggedAttributeId, separatorFieldId) {
+    if (!draggedAttributeId || !separatorFieldId) {
+      return;
+    }
+
+    let promotedToPrimary = false;
+
+    updateSelectedEntity((entity) => {
+      const draggedField = (entity.fields ?? []).find((field) => field.id === draggedAttributeId);
+      promotedToPrimary = draggedField?.kind !== "PK";
+      const nextFields = moveTopLevelFieldToSeparator(entity.fields, draggedAttributeId, separatorFieldId);
+      if (nextFields === entity.fields) {
+        return {};
+      }
+
+      return {
+        fields: nextFields,
+        height: 0
+      };
+    });
+
+    setSelectedAttributeId(draggedAttributeId);
+    setStatus(promotedToPrimary ? "Moved attribute into primary key area." : "Moved attribute into non-primary area.");
+  }
+
+  function handleDropAttributeOnGroupEdge(draggedAttributeId, targetKind) {
+    if (!draggedAttributeId || !targetKind) {
+      return;
+    }
+
+    updateSelectedEntity((entity) => {
+      const nextFields = moveTopLevelFieldToGroupEdge(entity.fields, draggedAttributeId, targetKind);
+      if (nextFields === entity.fields) {
+        return {};
+      }
+
+      return {
+        fields: nextFields,
+        height: 0
+      };
+    });
+
+    setSelectedAttributeId(draggedAttributeId);
+    setStatus(targetKind === "PK" ? "Moved attribute into primary key area." : "Moved attribute into non-primary area.");
+  }
+
   function handleImportFormChange(field, value) {
     setImportForm((current) => ({
       ...current,
@@ -4912,6 +5059,9 @@ export default function App() {
           onToggleFieldExpansion={handleToggleFieldExpansion}
           onInlineAddAttribute={handleAddAttribute}
           onDeleteAttribute={handleDeleteAttribute}
+          onDropAttribute={handleDropAttribute}
+          onDropAttributeOnSeparator={handleDropAttributeOnSeparator}
+          onDropAttributeOnGroupEdge={handleDropAttributeOnGroupEdge}
           onViewportChange={setDiagramViewport}
           viewResetToken={viewResetToken}
         />
