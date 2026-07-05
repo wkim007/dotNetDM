@@ -1603,7 +1603,7 @@ function EntityCard({
           })}
           {bottomGroupEdgeFieldId ? (
             <div
-              className={`entity-field-separator-dropzone ${attributeDragSeparatorFieldId === bottomGroupEdgeFieldId ? "drag-target" : ""}`}
+              className={`entity-field-separator-dropzone ${attributeDragSeparatorFieldId === `edge-col-${bottomGroupEdgeFieldId}` ? "drag-target" : ""}`}
               data-attribute-separator-id={`edge-col-${bottomGroupEdgeFieldId}`}
               data-attribute-separator-field-id={bottomGroupEdgeFieldId}
               data-attribute-separator-kind="COL"
@@ -1712,7 +1712,11 @@ function EntityCard({
 
       {!commentMode ? (
         <div
-          className={`entity-inline-add-zone ${isInlineAttributeEditing ? "editing" : ""}`}
+          className={`entity-inline-add-zone ${isInlineAttributeEditing ? "editing" : ""} ${bottomGroupEdgeFieldId && attributeDragSeparatorFieldId === `edge-col-${bottomGroupEdgeFieldId}` ? "attribute-drop-target" : ""}`}
+          data-attribute-separator-id={bottomGroupEdgeFieldId ? `edge-col-${bottomGroupEdgeFieldId}` : undefined}
+          data-attribute-separator-field-id={bottomGroupEdgeFieldId ?? undefined}
+          data-attribute-separator-kind={bottomGroupEdgeFieldId ? "COL" : undefined}
+          data-attribute-entity-id={bottomGroupEdgeFieldId ? entity.id : undefined}
           onPointerDown={(event) => {
             event.stopPropagation();
             onSelect(entity.id, {
@@ -2283,13 +2287,7 @@ export default function DiagramCanvas({
           String(interactionState.current.entityId)
       ) {
         const separatorId = separatorTarget.getAttribute("data-attribute-separator-id");
-        const separatorFieldId = separatorTarget.getAttribute("data-attribute-separator-field-id");
-        const separatorKind = separatorTarget.getAttribute("data-attribute-separator-kind");
-        const isBlockedSelfDrop =
-          (separatorKind === "PK" || separatorKind === "COL") &&
-          separatorFieldId === String(interactionState.current.fieldId);
-
-        if (separatorId && !isBlockedSelfDrop) {
+        if (separatorId) {
           setAttributeDragSeparatorFieldId(separatorId);
           setAttributeDragFieldId(null);
           return;

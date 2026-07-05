@@ -1333,6 +1333,13 @@ body.panel-resizing {
   background: rgba(241, 191, 82, 0.06);
 }
 
+.entity-inline-add-zone.attribute-drop-target {
+  border-color: rgba(241, 191, 82, 0.42);
+  color: #f5d36a;
+  background: rgba(241, 191, 82, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(241, 191, 82, 0.28);
+}
+
 .entity-comment {
   padding: 11px 14px 15px;
   color: #a9b7ca;
