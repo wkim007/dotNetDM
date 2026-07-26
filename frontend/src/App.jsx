@@ -127,7 +127,7 @@ const DISPLAY_LEVEL_OPTIONS_LOGICAL = [
 ];
 const LOGICAL_NOTATION_OPTIONS = ["IDEF1x", "Information Engineering"];
 const PHYSICAL_NOTATION_OPTIONS = ["IDEF1x", "Information Engineering", "Data Warehousing", "Graph"];
-const AI_ENGINE_OPTIONS = ["Azure OpenAI"];
+const AI_ENGINE_OPTIONS = ["Azure OpenAI", "OpenAI"];
 const GENERIC_TYPES = ["integer", "bigint", "numeric", "varchar", "text", "boolean", "date", "timestamp"];
 const ORACLE_TYPES = [
   "number",
@@ -765,15 +765,7 @@ function readAiModelerSettings() {
       return null;
     }
 
-    const parsed = JSON.parse(localValue);
-    return {
-      engine: parsed.engine,
-      schemaDescription: parsed.schemaDescription,
-      endpoint: parsed.endpoint,
-      apiKey: parsed.apiKey,
-      apiVersion: parsed.apiVersion,
-      deployment: parsed.deployment
-    };
+    return JSON.parse(localValue);
   } catch {
     return null;
   }
@@ -787,10 +779,107 @@ function createDefaultAiModelerSettings() {
     apiKey: "",
     apiVersion: "2024-08-01-preview",
     deployment: "gpt-4o",
+    azureOpenAi: {
+      endpoint: "https://dm-ai-api.openai.azure.com",
+      apiKey: "",
+      apiVersion: "2024-08-01-preview",
+      deployment: "gpt-4o",
+      validationMessage: "",
+      validationStatus: "idle"
+    },
+    openAi: {
+      apiKey: "",
+      deployment: "gpt-4o",
+      validationMessage: "",
+      validationStatus: "idle"
+    },
     isKeyVisible: false,
     isValidating: false,
     validationMessage: "",
     validationStatus: "idle"
+  };
+}
+
+function normalizeAiModelerSettings(settings) {
+  const normalized = {
+    ...createDefaultAiModelerSettings(),
+    ...(settings ?? {})
+  };
+
+  const azureOpenAi = {
+    ...createDefaultAiModelerSettings().azureOpenAi,
+    ...(normalized.azureOpenAi ?? {}),
+    endpoint:
+      normalized.azureOpenAi?.endpoint ||
+      (normalized.engine === "Azure OpenAI" ? normalized.endpoint : "") ||
+      "https://dm-ai-api.openai.azure.com",
+    apiKey:
+      normalized.azureOpenAi?.apiKey ||
+      (normalized.engine === "Azure OpenAI" ? normalized.apiKey : "") ||
+      "",
+    apiVersion:
+      normalized.azureOpenAi?.apiVersion ||
+      (normalized.engine === "Azure OpenAI" ? normalized.apiVersion : "") ||
+      "2024-08-01-preview",
+    deployment:
+      normalized.azureOpenAi?.deployment ||
+      (normalized.engine === "Azure OpenAI" ? normalized.deployment : "") ||
+      "gpt-4o",
+    validationMessage:
+      normalized.azureOpenAi?.validationMessage ||
+      (normalized.engine === "Azure OpenAI" ? normalized.validationMessage : "") ||
+      "",
+    validationStatus:
+      normalized.azureOpenAi?.validationStatus ||
+      (normalized.engine === "Azure OpenAI" ? normalized.validationStatus : "") ||
+      "idle"
+  };
+
+  const openAi = {
+    ...createDefaultAiModelerSettings().openAi,
+    ...(normalized.openAi ?? {}),
+    apiKey:
+      normalized.openAi?.apiKey ||
+      (normalized.engine === "OpenAI" ? normalized.apiKey : "") ||
+      "",
+    deployment:
+      normalized.openAi?.deployment ||
+      (normalized.engine === "OpenAI" ? normalized.deployment : "") ||
+      "gpt-4o",
+    validationMessage:
+      normalized.openAi?.validationMessage ||
+      (normalized.engine === "OpenAI" ? normalized.validationMessage : "") ||
+      "",
+    validationStatus:
+      normalized.openAi?.validationStatus ||
+      (normalized.engine === "OpenAI" ? normalized.validationStatus : "") ||
+      "idle"
+  };
+
+  if (normalized.engine === "OpenAI") {
+    return {
+      ...normalized,
+      azureOpenAi,
+      openAi,
+      endpoint: "https://api.openai.com/v1",
+      apiKey: openAi.apiKey,
+      apiVersion: "",
+      deployment: openAi.deployment || "gpt-4o",
+      validationMessage: openAi.validationMessage,
+      validationStatus: openAi.validationStatus
+    };
+  }
+
+  return {
+    ...normalized,
+    azureOpenAi,
+    openAi,
+    endpoint: azureOpenAi.endpoint || "https://dm-ai-api.openai.azure.com",
+    apiKey: azureOpenAi.apiKey,
+    apiVersion: azureOpenAi.apiVersion || "2024-08-01-preview",
+    deployment: azureOpenAi.deployment || "gpt-4o",
+    validationMessage: azureOpenAi.validationMessage,
+    validationStatus: azureOpenAi.validationStatus
   };
 }
 
@@ -2257,10 +2346,12 @@ export default function App() {
     highlightedAvailableCollectionNames: [],
     highlightedSelectedCollectionNames: []
   });
-  const [aiModeler, setAiModeler] = useState(() => ({
-    ...createDefaultAiModelerSettings(),
-    ...(savedAiModelerSettings ?? {})
-  }));
+  const [aiModeler, setAiModeler] = useState(() =>
+    normalizeAiModelerSettings({
+      ...createDefaultAiModelerSettings(),
+      ...(savedAiModelerSettings ?? {})
+    })
+  );
   const [aiLoading, setAiLoading] = useState(false);
   const [aiActiveTask, setAiActiveTask] = useState("");
   const [aiStartedAt, setAiStartedAt] = useState(0);
@@ -2330,10 +2421,8 @@ export default function App() {
       JSON.stringify({
         engine: aiModeler.engine,
         schemaDescription: aiModeler.schemaDescription,
-        endpoint: aiModeler.endpoint,
-        apiKey: aiModeler.apiKey,
-        apiVersion: aiModeler.apiVersion,
-        deployment: aiModeler.deployment
+        azureOpenAi: aiModeler.azureOpenAi,
+        openAi: aiModeler.openAi
       })
     );
   }, [aiModeler]);
@@ -2940,17 +3029,46 @@ export default function App() {
       "deployment"
     ].includes(field);
 
-    setAiModeler((current) => ({
-      ...current,
-      [field]: value,
-      ...(shouldResetValidation
-        ? {
-            isValidating: false,
-            validationMessage: "",
-            validationStatus: "idle"
-          }
-        : {})
-    }));
+    setAiModeler((current) => {
+      const currentProfileKey = current.engine === "OpenAI" ? "openAi" : "azureOpenAi";
+      const nextProfileKey = field === "engine" && value === "OpenAI" ? "openAi" : field === "engine" ? "azureOpenAi" : currentProfileKey;
+      const nextState = {
+        ...current,
+        [field]: value
+      };
+
+      if (field !== "schemaDescription" && field !== "engine" && ["endpoint", "apiKey", "apiVersion", "deployment"].includes(field)) {
+        nextState[currentProfileKey] = {
+          ...(current[currentProfileKey] ?? {}),
+          [field]: value
+        };
+      }
+
+      if (field === "engine") {
+        nextState[currentProfileKey] = {
+          ...(current[currentProfileKey] ?? {}),
+          endpoint: current.engine === "Azure OpenAI" ? current.endpoint : current[currentProfileKey]?.endpoint,
+          apiKey: current.apiKey,
+          apiVersion: current.engine === "Azure OpenAI" ? current.apiVersion : current[currentProfileKey]?.apiVersion,
+          deployment: current.deployment,
+          validationMessage: current.validationMessage,
+          validationStatus: current.validationStatus
+        };
+      }
+
+      if (shouldResetValidation) {
+        nextState.isValidating = false;
+        nextState.validationMessage = "";
+        nextState.validationStatus = "idle";
+        nextState[nextProfileKey] = {
+          ...(nextState[nextProfileKey] ?? {}),
+          validationMessage: "",
+          validationStatus: "idle"
+        };
+      }
+
+      return normalizeAiModelerSettings(nextState);
+    });
   }
 
   function handleToggleAiKeyVisibility() {
@@ -2961,6 +3079,7 @@ export default function App() {
   }
 
   async function handleValidateAiSettings() {
+    const engineLabel = aiModeler.engine === "OpenAI" ? "OpenAI" : "Azure OpenAI";
     const payload = {
       engine: aiModeler.engine,
       endpoint: aiModeler.endpoint,
@@ -2990,12 +3109,21 @@ export default function App() {
         throw new Error(result?.detail || result?.message || `Validation failed with ${response.status}`);
       }
 
-      const successMessage = result?.message || "Azure OpenAI settings validated successfully.";
+      const successMessage = result?.message || `${engineLabel} settings validated successfully.`;
       setAiModeler((current) => ({
         ...current,
         isValidating: false,
         validationMessage: successMessage,
-        validationStatus: "success"
+        validationStatus: "success",
+        [current.engine === "OpenAI" ? "openAi" : "azureOpenAi"]: {
+          ...(current[current.engine === "OpenAI" ? "openAi" : "azureOpenAi"] ?? {}),
+          endpoint: current.engine === "Azure OpenAI" ? current.endpoint : current[current.engine === "OpenAI" ? "openAi" : "azureOpenAi"]?.endpoint,
+          apiKey: current.apiKey,
+          apiVersion: current.engine === "Azure OpenAI" ? current.apiVersion : current[current.engine === "OpenAI" ? "openAi" : "azureOpenAi"]?.apiVersion,
+          deployment: current.deployment,
+          validationMessage: successMessage,
+          validationStatus: "success"
+        }
       }));
       setStatus(successMessage);
     } catch (error) {
@@ -3004,7 +3132,12 @@ export default function App() {
         ...current,
         isValidating: false,
         validationMessage: failureMessage,
-        validationStatus: "error"
+        validationStatus: "error",
+        [current.engine === "OpenAI" ? "openAi" : "azureOpenAi"]: {
+          ...(current[current.engine === "OpenAI" ? "openAi" : "azureOpenAi"] ?? {}),
+          validationMessage: failureMessage,
+          validationStatus: "error"
+        }
       }));
       setStatus(failureMessage);
     }
@@ -5460,7 +5593,6 @@ export default function App() {
       {isAiSettingsOpen ? (
         <div
           className="json-modal-backdrop"
-          onClick={() => setIsAiSettingsOpen(false)}
           role="presentation"
         >
           <section
@@ -5484,6 +5616,10 @@ export default function App() {
 
             <div className="json-modal-body model-properties-body ai-settings-body">
               <section className="panel">
+                {(() => {
+                  const isOpenAi = aiModeler.engine === "OpenAI";
+                  return (
+                    <>
                 <label className="field-group">
                   <span>AI Engine</span>
                   <select
@@ -5498,14 +5634,16 @@ export default function App() {
                   </select>
                 </label>
 
-                <label className="field-group">
-                  <span>Endpoint</span>
-                  <input
-                    value={aiModeler.endpoint}
-                    onChange={(event) => handleAiModelerChange("endpoint", event.target.value)}
-                    placeholder="https://dm-ai-api.openai.azure.com"
-                  />
-                </label>
+                {!isOpenAi ? (
+                  <label className="field-group">
+                    <span>Endpoint</span>
+                    <input
+                      value={aiModeler.endpoint}
+                      onChange={(event) => handleAiModelerChange("endpoint", event.target.value)}
+                      placeholder="https://dm-ai-api.openai.azure.com"
+                    />
+                  </label>
+                ) : null}
 
                 <label className="field-group">
                   <span>API Key</span>
@@ -5514,7 +5652,7 @@ export default function App() {
                       type={aiModeler.isKeyVisible ? "text" : "password"}
                       value={aiModeler.apiKey}
                       onChange={(event) => handleAiModelerChange("apiKey", event.target.value)}
-                      placeholder="Enter Azure OpenAI API key"
+                      placeholder={isOpenAi ? "Enter OpenAI API key" : "Enter Azure OpenAI API key"}
                     />
                     <button
                       type="button"
@@ -5526,23 +5664,27 @@ export default function App() {
                   </div>
                 </label>
 
-                <label className="field-group">
-                  <span>API Version</span>
-                  <input
-                    value={aiModeler.apiVersion}
-                    onChange={(event) => handleAiModelerChange("apiVersion", event.target.value)}
-                    placeholder="2024-08-01-preview"
-                  />
-                </label>
+                {!isOpenAi ? (
+                  <>
+                    <label className="field-group">
+                      <span>API Version</span>
+                      <input
+                        value={aiModeler.apiVersion}
+                        onChange={(event) => handleAiModelerChange("apiVersion", event.target.value)}
+                        placeholder="2024-08-01-preview"
+                      />
+                    </label>
 
-                <label className="field-group">
-                  <span>API Deployment</span>
-                  <input
-                    value={aiModeler.deployment}
-                    onChange={(event) => handleAiModelerChange("deployment", event.target.value)}
-                    placeholder="gpt-4o"
-                  />
-                </label>
+                    <label className="field-group">
+                      <span>API Deployment</span>
+                      <input
+                        value={aiModeler.deployment}
+                        onChange={(event) => handleAiModelerChange("deployment", event.target.value)}
+                        placeholder="gpt-4o"
+                      />
+                    </label>
+                  </>
+                ) : null}
 
                 {aiModeler.validationMessage ? (
                   <div className={`ai-validation-message ${aiModeler.validationStatus}`}>
@@ -5567,6 +5709,9 @@ export default function App() {
                     Close
                   </button>
                 </div>
+                    </>
+                  );
+                })()}
               </section>
             </div>
           </section>

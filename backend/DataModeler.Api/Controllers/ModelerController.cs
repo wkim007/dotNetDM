@@ -115,71 +115,92 @@ public class ModelerController : ControllerBase
     {
         try
         {
-            if (!string.Equals(request.Engine, "Azure OpenAI", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Only Azure OpenAI validation is currently supported.");
-            }
-
-            if (string.IsNullOrWhiteSpace(request.Endpoint))
-            {
-                throw new InvalidOperationException("Endpoint is required.");
-            }
-
             if (string.IsNullOrWhiteSpace(request.ApiKey))
             {
                 throw new InvalidOperationException("API key is required.");
             }
 
-            if (string.IsNullOrWhiteSpace(request.ApiVersion))
-            {
-                throw new InvalidOperationException("API version is required.");
-            }
-
-            if (string.IsNullOrWhiteSpace(request.Deployment))
-            {
-                throw new InvalidOperationException("API deployment is required.");
-            }
-
-            var endpoint = request.Endpoint.Trim().TrimEnd('/');
-            var requestUri =
-                $"{endpoint}/openai/deployments/{Uri.EscapeDataString(request.Deployment.Trim())}/chat/completions?api-version={Uri.EscapeDataString(request.ApiVersion.Trim())}";
-
             var httpClient = _httpClientFactory.CreateClient();
             httpClient.Timeout = TimeSpan.FromSeconds(20);
-
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUri);
-            httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            httpRequest.Headers.Add("api-key", request.ApiKey.Trim());
-            httpRequest.Content = new StringContent(
-                JsonSerializer.Serialize(new
-                {
-                    messages = new[]
-                    {
-                        new
-                        {
-                            role = "user",
-                            content = "ping"
-                        }
-                    },
-                    max_completion_tokens = 1
-                }),
-                Encoding.UTF8,
-                "application/json");
-
-            using var response = await httpClient.SendAsync(httpRequest, cancellationToken);
-            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
+            if (string.Equals(request.Engine, "Azure OpenAI", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException(
-                    $"Azure OpenAI validation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {ExtractAzureOpenAiErrorMessage(responseBody)}");
+                if (string.IsNullOrWhiteSpace(request.Endpoint))
+                {
+                    throw new InvalidOperationException("Endpoint is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.ApiVersion))
+                {
+                    throw new InvalidOperationException("API version is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.Deployment))
+                {
+                    throw new InvalidOperationException("API deployment is required.");
+                }
+
+                var endpoint = request.Endpoint.Trim().TrimEnd('/');
+                var requestUri =
+                    $"{endpoint}/openai/deployments/{Uri.EscapeDataString(request.Deployment.Trim())}/chat/completions?api-version={Uri.EscapeDataString(request.ApiVersion.Trim())}";
+
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUri);
+                httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                httpRequest.Headers.Add("api-key", request.ApiKey.Trim());
+                httpRequest.Content = new StringContent(
+                    JsonSerializer.Serialize(new
+                    {
+                        messages = new[]
+                        {
+                            new
+                            {
+                                role = "user",
+                                content = "ping"
+                            }
+                        },
+                        max_completion_tokens = 1
+                    }),
+                    Encoding.UTF8,
+                    "application/json");
+
+                using var response = await httpClient.SendAsync(httpRequest, cancellationToken);
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException(
+                        $"Azure OpenAI validation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {ExtractAiErrorMessage(responseBody)}");
+                }
+
+                return Ok(new AiValidationResponse
+                {
+                    IsValid = true,
+                    Message = "Azure OpenAI settings validated successfully."
+                });
             }
 
-            return Ok(new AiValidationResponse
+            if (string.Equals(request.Engine, "OpenAI", StringComparison.OrdinalIgnoreCase))
             {
-                IsValid = true,
-                Message = "Azure OpenAI settings validated successfully."
-            });
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Get, "https://api.openai.com/v1/models");
+                httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", request.ApiKey.Trim());
+
+                using var response = await httpClient.SendAsync(httpRequest, cancellationToken);
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException(
+                        $"OpenAI validation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {ExtractAiErrorMessage(responseBody)}");
+                }
+
+                return Ok(new AiValidationResponse
+                {
+                    IsValid = true,
+                    Message = "OpenAI settings validated successfully."
+                });
+            }
+
+            throw new InvalidOperationException("Unsupported AI engine.");
         }
         catch (Exception exception)
         {
@@ -197,19 +218,9 @@ public class ModelerController : ControllerBase
     {
         try
         {
-            if (!string.Equals(request.Engine, "Azure OpenAI", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Only Azure OpenAI generation is currently supported.");
-            }
-
             if (string.IsNullOrWhiteSpace(request.Prompt))
             {
                 throw new InvalidOperationException("Schema description is required.");
-            }
-
-            if (string.IsNullOrWhiteSpace(request.Endpoint))
-            {
-                throw new InvalidOperationException("Endpoint is required.");
             }
 
             if (string.IsNullOrWhiteSpace(request.ApiKey))
@@ -217,17 +228,35 @@ public class ModelerController : ControllerBase
                 throw new InvalidOperationException("API key is required.");
             }
 
-            if (string.IsNullOrWhiteSpace(request.ApiVersion))
+            JsonObject aiPayload;
+            if (string.Equals(request.Engine, "Azure OpenAI", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("API version is required.");
+                if (string.IsNullOrWhiteSpace(request.Endpoint))
+                {
+                    throw new InvalidOperationException("Endpoint is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.ApiVersion))
+                {
+                    throw new InvalidOperationException("API version is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.Deployment))
+                {
+                    throw new InvalidOperationException("API deployment is required.");
+                }
+
+                aiPayload = await RequestAzureOpenAiSchemaAsync(request, cancellationToken);
+            }
+            else if (string.Equals(request.Engine, "OpenAI", StringComparison.OrdinalIgnoreCase))
+            {
+                aiPayload = await RequestOpenAiSchemaAsync(request, cancellationToken);
+            }
+            else
+            {
+                throw new InvalidOperationException("Unsupported AI engine.");
             }
 
-            if (string.IsNullOrWhiteSpace(request.Deployment))
-            {
-                throw new InvalidOperationException("API deployment is required.");
-            }
-
-            var aiPayload = await RequestAzureOpenAiSchemaAsync(request, cancellationToken);
             var modelJson = BuildWorkspaceJsonFromAiPayload(aiPayload, request.Database, request.DatabaseVersion);
 
             return Ok(new AiGenerateResponse
@@ -245,7 +274,7 @@ public class ModelerController : ControllerBase
         }
     }
 
-    private static string ExtractAzureOpenAiErrorMessage(string? responseBody)
+    private static string ExtractAiErrorMessage(string? responseBody)
     {
         if (string.IsNullOrWhiteSpace(responseBody))
         {
@@ -331,7 +360,7 @@ public class ModelerController : ControllerBase
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
-                $"Azure OpenAI generation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {ExtractAzureOpenAiErrorMessage(responseBody)}");
+                $"Azure OpenAI generation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {ExtractAiErrorMessage(responseBody)}");
         }
 
         JsonNode? rootNode;
@@ -359,6 +388,92 @@ public class ModelerController : ControllerBase
         catch (Exception exception)
         {
             throw new InvalidOperationException($"Azure OpenAI returned invalid schema JSON. {exception.Message}");
+        }
+    }
+
+    private async Task<JsonObject> RequestOpenAiSchemaAsync(
+        AiGenerateRequest request,
+        CancellationToken cancellationToken)
+    {
+        var schema = BuildAiSchemaDefinition(request.Database);
+        var databaseLabel = string.IsNullOrWhiteSpace(request.Database) ? "PostgreSQL" : request.Database.Trim();
+        var modelName = string.IsNullOrWhiteSpace(request.Deployment) ? "gpt-4o" : request.Deployment.Trim();
+
+        var httpClient = _httpClientFactory.CreateClient();
+        httpClient.Timeout = TimeSpan.FromSeconds(60);
+
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
+        httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", request.ApiKey.Trim());
+        httpRequest.Content = new StringContent(
+            JsonSerializer.Serialize(new
+            {
+                model = modelName,
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "system",
+                        content =
+                            "You are a data model generator. Return only JSON that matches the provided schema. Generate realistic entity comments and attribute comments. Ensure primary keys appear first in each entity. Prefer concise, conventional database naming."
+                    },
+                    new
+                    {
+                        role = "user",
+                        content =
+                            $"Generate a {databaseLabel} schema model from this description: {request.Prompt.Trim()}. Include entities, attributes, and relationships."
+                    }
+                },
+                temperature = 0.3,
+                max_tokens = 4000,
+                response_format = new
+                {
+                    type = "json_schema",
+                    json_schema = new
+                    {
+                        name = "schema_model",
+                        strict = true,
+                        schema
+                    }
+                }
+            }),
+            Encoding.UTF8,
+            "application/json");
+
+        using var response = await httpClient.SendAsync(httpRequest, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"OpenAI generation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {ExtractAiErrorMessage(responseBody)}");
+        }
+
+        JsonNode? rootNode;
+
+        try
+        {
+            rootNode = JsonNode.Parse(responseBody);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException($"OpenAI returned an unreadable response. {exception.Message}");
+        }
+
+        var contentValue = rootNode?["choices"]?[0]?["message"]?["content"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(contentValue))
+        {
+            throw new InvalidOperationException("OpenAI returned no schema content.");
+        }
+
+        try
+        {
+            var parsed = JsonNode.Parse(contentValue) as JsonObject;
+            return parsed ?? throw new InvalidOperationException("OpenAI returned JSON in an unexpected shape.");
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException($"OpenAI returned invalid schema JSON. {exception.Message}");
         }
     }
 
