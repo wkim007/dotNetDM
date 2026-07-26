@@ -239,10 +239,62 @@ body.panel-resizing {
   width: min(620px, 100%);
 }
 
+.ai-settings-modal {
+  width: min(740px, 100%);
+}
+
 .model-properties-body {
   padding: 0;
   background: transparent;
   border: 0;
+}
+
+.ai-settings-body {
+  padding: 0;
+  overflow: visible;
+}
+
+.ai-modal-close {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.ai-secret-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.ai-secret-toggle {
+  min-width: 74px;
+  white-space: nowrap;
+}
+
+.ai-settings-actions {
+  margin-bottom: 0;
+}
+
+.ai-validation-message {
+  margin: 4px 0 16px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  font-size: 0.94rem;
+  line-height: 1.45;
+  border: 1px solid rgba(124, 155, 188, 0.18);
+}
+
+.ai-validation-message.idle,
+.ai-validation-message.success {
+  background: rgba(54, 140, 118, 0.18);
+  border-color: rgba(95, 226, 174, 0.28);
+  color: #c5ffea;
+}
+
+.ai-validation-message.error {
+  background: rgba(158, 58, 74, 0.18);
+  border-color: rgba(235, 108, 125, 0.28);
+  color: #ffd4da;
 }
 
 .reverse-engineering-dialog-copy {
@@ -354,6 +406,96 @@ body.panel-resizing {
 
 .reverse-engineering-panel {
   margin-bottom: 16px;
+}
+
+.ai-modeler-panel {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: rgba(30, 38, 48, 0.92);
+  border-radius: 18px;
+}
+
+.ai-modeler-heading {
+  margin-bottom: 10px;
+}
+
+.ai-modeler-label {
+  margin-bottom: 0;
+  color: #8cffb8;
+  font-size: 0.98rem;
+  letter-spacing: 0.18em;
+}
+
+.ai-settings-button {
+  width: 32px;
+  height: 32px;
+  color: #eff8f1;
+  background: rgba(36, 51, 70, 0.94);
+  border: 1px solid rgba(113, 145, 185, 0.18);
+}
+
+.ai-settings-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ai-modeler-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-action-button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 0;
+  padding: 11px 14px;
+  background: rgba(31, 42, 56, 0.94);
+  border: 1px solid rgba(76, 98, 124, 0.8);
+  box-shadow: none;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.ai-action-button span {
+  font-weight: 700;
+}
+
+.ai-action-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: #eff5ff;
+  transition: color 140ms ease, filter 140ms ease, transform 140ms ease;
+}
+
+.ai-action-button:hover,
+.ai-action-button:focus-visible {
+  background: #3a4f6d;
+  border-color: rgba(140, 255, 184, 0.52);
+  box-shadow: inset 0 0 0 1px rgba(150, 255, 183, 0.38), 0 0 18px rgba(81, 236, 146, 0.2);
+  transform: translateY(-1px);
+}
+
+.ai-action-button:hover .ai-action-icon,
+.ai-action-button:focus-visible .ai-action-icon {
+  color: #95ffb7;
+  filter: drop-shadow(0 0 4px rgba(141, 255, 182, 0.55));
+  transform: scale(1.06);
+}
+
+.ai-modeler-panel .field-group {
+  margin-bottom: 12px;
+}
+
+.ai-modeler-panel .field-group textarea {
+  min-height: 136px;
+}
+
+.ai-modeler-panel .field-group input[readonly] {
+  background: #0f1723;
+  color: #ffffff;
 }
 
 .reverse-engineering-checkbox {

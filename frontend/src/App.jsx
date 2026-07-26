@@ -9,6 +9,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "https://localhost:724
 const LOCAL_STORAGE_KEY = "dotnetdm-model";
 const PANEL_STORAGE_KEY = "dotnetdm-panel-widths";
 const JSON_DRAFT_STORAGE_KEY = "dotnetdm-json-draft";
+const AI_MODELER_STORAGE_KEY = "dotnetdm-ai-modeler";
 const DEFAULT_LEFT_PANEL_WIDTH = 290;
 const DEFAULT_RIGHT_PANEL_WIDTH = 330;
 const MIN_PANEL_WIDTH = 220;
@@ -126,6 +127,7 @@ const DISPLAY_LEVEL_OPTIONS_LOGICAL = [
 ];
 const LOGICAL_NOTATION_OPTIONS = ["IDEF1x", "Information Engineering"];
 const PHYSICAL_NOTATION_OPTIONS = ["IDEF1x", "Information Engineering", "Data Warehousing", "Graph"];
+const AI_ENGINE_OPTIONS = ["Azure OpenAI"];
 const GENERIC_TYPES = ["integer", "bigint", "numeric", "varchar", "text", "boolean", "date", "timestamp"];
 const ORACLE_TYPES = [
   "number",
@@ -754,6 +756,30 @@ function readJsonDraft() {
   } catch {
     return "";
   }
+}
+
+function readAiModelerSettings() {
+  try {
+    const localValue = window.localStorage.getItem(AI_MODELER_STORAGE_KEY);
+    return localValue ? JSON.parse(localValue) : null;
+  } catch {
+    return null;
+  }
+}
+
+function createDefaultAiModelerSettings() {
+  return {
+    engine: "Azure OpenAI",
+    schemaDescription: "",
+    endpoint: "https://dm-ai-api.openai.azure.com",
+    apiKey: "",
+    apiVersion: "2024-08-01-preview",
+    deployment: "gpt-4o",
+    isKeyVisible: false,
+    isValidating: false,
+    validationMessage: "",
+    validationStatus: "idle"
+  };
 }
 
 function clone(value) {
@@ -2162,10 +2188,12 @@ function normalizeModel(rawModel) {
 export default function App() {
   const savedPanelWidths = readPanelWidths();
   const initialModel = normalizeModel(readLocalModel() ?? sampleModel);
+  const savedAiModelerSettings = readAiModelerSettings();
   const [model, setModel] = useState(initialModel);
   const [jsonDraft, setJsonDraft] = useState(() => readJsonDraft());
   const [isJsonViewerOpen, setIsJsonViewerOpen] = useState(false);
   const [isModelPropertiesOpen, setIsModelPropertiesOpen] = useState(false);
+  const [isAiSettingsOpen, setIsAiSettingsOpen] = useState(false);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [selectedEntityIds, setSelectedEntityIds] = useState(() =>
     initialModel.diagrams[0]?.entities[0]?.id ? [initialModel.diagrams[0].entities[0].id] : []
@@ -2217,6 +2245,10 @@ export default function App() {
     highlightedAvailableCollectionNames: [],
     highlightedSelectedCollectionNames: []
   });
+  const [aiModeler, setAiModeler] = useState(() => ({
+    ...createDefaultAiModelerSettings(),
+    ...(savedAiModelerSettings ?? {})
+  }));
   const resizeState = useRef(null);
   const jsonFileInputRef = useRef(null);
   const activeDiagram = useMemo(
@@ -2275,6 +2307,20 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(JSON_DRAFT_STORAGE_KEY, jsonDraft);
   }, [jsonDraft]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      AI_MODELER_STORAGE_KEY,
+      JSON.stringify({
+        engine: aiModeler.engine,
+        schemaDescription: aiModeler.schemaDescription,
+        endpoint: aiModeler.endpoint,
+        apiKey: aiModeler.apiKey,
+        apiVersion: aiModeler.apiVersion,
+        deployment: aiModeler.deployment
+      })
+    );
+  }, [aiModeler]);
 
   useEffect(() => {
     if (!selectedEntityId) {
@@ -2852,6 +2898,92 @@ export default function App() {
       }
     }));
     setStatus("Deleted schema.");
+  }
+
+  function handleAiModelerChange(field, value) {
+    setAiModeler((current) => ({
+      ...current,
+      [field]: value,
+      ...(field === "engine"
+        ? {
+            validationMessage: "",
+            validationStatus: "idle"
+          }
+        : {})
+    }));
+  }
+
+  function handleToggleAiKeyVisibility() {
+    setAiModeler((current) => ({
+      ...current,
+      isKeyVisible: !current.isKeyVisible
+    }));
+  }
+
+  async function handleValidateAiSettings() {
+    const payload = {
+      engine: aiModeler.engine,
+      endpoint: aiModeler.endpoint,
+      apiKey: aiModeler.apiKey,
+      apiVersion: aiModeler.apiVersion,
+      deployment: aiModeler.deployment
+    };
+
+    setAiModeler((current) => ({
+      ...current,
+      isValidating: true,
+      validationMessage: "",
+      validationStatus: "idle"
+    }));
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/modeler/ai/validate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.detail || result?.message || `Validation failed with ${response.status}`);
+      }
+
+      const successMessage = result?.message || "Azure OpenAI settings validated successfully.";
+      setAiModeler((current) => ({
+        ...current,
+        isValidating: false,
+        validationMessage: successMessage,
+        validationStatus: "success"
+      }));
+      setStatus(successMessage);
+    } catch (error) {
+      const failureMessage = error instanceof Error ? error.message : "AI settings validation failed.";
+      setAiModeler((current) => ({
+        ...current,
+        isValidating: false,
+        validationMessage: failureMessage,
+        validationStatus: "error"
+      }));
+      setStatus(failureMessage);
+    }
+  }
+
+  function handleAiGenerate() {
+    setStatus("AI Generate is ready for the next implementation step.");
+  }
+
+  function handleAiGenerateComments() {
+    setStatus("AI Generate Comments is ready for the next implementation step.");
+  }
+
+  function handleAiSummary() {
+    setStatus("AI Summary is ready for the next implementation step.");
+  }
+
+  function handleAiTuning() {
+    setStatus("AI Tuning is ready for the next implementation step.");
   }
 
   function handleExportJson() {
@@ -4956,6 +5088,7 @@ export default function App() {
 
       <LeftSidebar
         project={model.project}
+        aiModeler={aiModeler}
         entityCount={activeDiagram?.entities.filter((entity) => getEntityObjectType(entity) === "entity").length ?? 0}
         viewCount={activeDiagram?.entities.filter((entity) => getEntityObjectType(entity) === "view").length ?? 0}
         materializedViewCount={
@@ -4974,6 +5107,7 @@ export default function App() {
         reverseEngineering={reverseEngineering}
         onJsonDraftChange={setJsonDraft}
         onOpenModelProperties={() => setIsModelPropertiesOpen(true)}
+        onOpenAiSettings={() => setIsAiSettingsOpen(true)}
         onAutoLayout={handleAutoLayout}
         onAddEntity={handleAddEntity}
         onAddAnnotation={handleAddAnnotation}
@@ -4994,6 +5128,11 @@ export default function App() {
         onReverseEngineeringChange={handleReverseEngineeringChange}
         onConnectReverseEngineering={handleConnectReverseEngineering}
         onLoadReverseEngineeringCollections={handleLoadReverseEngineeringCollections}
+        onAiSchemaDescriptionChange={(value) => handleAiModelerChange("schemaDescription", value)}
+        onAiGenerate={handleAiGenerate}
+        onAiGenerateComments={handleAiGenerateComments}
+        onAiSummary={handleAiSummary}
+        onAiTuning={handleAiTuning}
       />
 
       {isDesktopLayout ? (
@@ -5221,6 +5360,122 @@ export default function App() {
                     <option value="line">line</option>
                   </select>
                 </label>
+              </section>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isAiSettingsOpen ? (
+        <div
+          className="json-modal-backdrop"
+          onClick={() => setIsAiSettingsOpen(false)}
+          role="presentation"
+        >
+          <section
+            className="json-modal ai-settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ai-settings-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="json-modal-header">
+              <h2 id="ai-settings-title">AI Settings</h2>
+              <button
+                type="button"
+                className="icon-button ai-modal-close"
+                onClick={() => setIsAiSettingsOpen(false)}
+                aria-label="Close AI Settings"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="json-modal-body model-properties-body ai-settings-body">
+              <section className="panel">
+                <label className="field-group">
+                  <span>AI Engine</span>
+                  <select
+                    value={aiModeler.engine}
+                    onChange={(event) => handleAiModelerChange("engine", event.target.value)}
+                  >
+                    {AI_ENGINE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field-group">
+                  <span>Endpoint</span>
+                  <input
+                    value={aiModeler.endpoint}
+                    onChange={(event) => handleAiModelerChange("endpoint", event.target.value)}
+                    placeholder="https://dm-ai-api.openai.azure.com"
+                  />
+                </label>
+
+                <label className="field-group">
+                  <span>API Key</span>
+                  <div className="ai-secret-field">
+                    <input
+                      type={aiModeler.isKeyVisible ? "text" : "password"}
+                      value={aiModeler.apiKey}
+                      onChange={(event) => handleAiModelerChange("apiKey", event.target.value)}
+                      placeholder="Enter Azure OpenAI API key"
+                    />
+                    <button
+                      type="button"
+                      className="subtle-button ai-secret-toggle"
+                      onClick={handleToggleAiKeyVisibility}
+                    >
+                      {aiModeler.isKeyVisible ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                </label>
+
+                <label className="field-group">
+                  <span>API Version</span>
+                  <input
+                    value={aiModeler.apiVersion}
+                    onChange={(event) => handleAiModelerChange("apiVersion", event.target.value)}
+                    placeholder="2024-08-01-preview"
+                  />
+                </label>
+
+                <label className="field-group">
+                  <span>API Deployment</span>
+                  <input
+                    value={aiModeler.deployment}
+                    onChange={(event) => handleAiModelerChange("deployment", event.target.value)}
+                    placeholder="gpt-4o"
+                  />
+                </label>
+
+                {aiModeler.validationMessage ? (
+                  <div className={`ai-validation-message ${aiModeler.validationStatus}`}>
+                    {aiModeler.validationMessage}
+                  </div>
+                ) : null}
+
+                <div className="button-row ai-settings-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleValidateAiSettings}
+                    disabled={aiModeler.isValidating}
+                  >
+                    {aiModeler.isValidating ? "Validating..." : "Validate"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setIsAiSettingsOpen(false)}
+                  >
+                    Close
+                  </button>
+                </div>
               </section>
             </div>
           </section>

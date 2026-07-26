@@ -6,6 +6,7 @@ builder.WebHost.UseUrls("https://localhost:7248", "http://localhost:5248");
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHttpClient();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("frontend", policy =>

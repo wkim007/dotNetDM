@@ -23,6 +23,7 @@ function SelectField({ label, value, options, onChange, disabled = false }) {
 
 export default function LeftSidebar({
   project,
+  aiModeler,
   entityCount,
   viewCount,
   materializedViewCount,
@@ -39,6 +40,7 @@ export default function LeftSidebar({
   reverseEngineering,
   onJsonDraftChange,
   onOpenModelProperties,
+  onOpenAiSettings,
   onAutoLayout,
   onAddEntity,
   onAddAnnotation,
@@ -57,7 +59,12 @@ export default function LeftSidebar({
   onViewJson,
   onToggleReverseEngineering,
   onReverseEngineeringChange,
-  onConnectReverseEngineering
+  onConnectReverseEngineering,
+  onAiSchemaDescriptionChange,
+  onAiGenerate,
+  onAiGenerateComments,
+  onAiSummary,
+  onAiTuning
 }) {
   const showReverseEngineering = Boolean(reverseEngineering?.isOpen);
   const [isDrawingPaletteOpen, setIsDrawingPaletteOpen] = useState(false);
@@ -112,6 +119,73 @@ export default function LeftSidebar({
     { value: "triangle-right", label: "Triangle Right", icon: "▶" },
     { value: "connector", label: "Connector", icon: "╱" }
   ];
+
+  function SettingsIcon() {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M12 8.75a3.25 3.25 0 100 6.5 3.25 3.25 0 000-6.5zm8 3.25l-1.84-.64a6.5 6.5 0 00-.53-1.27l.84-1.76-1.8-1.8-1.76.84c-.4-.22-.82-.4-1.27-.53L12 3.99l-2.64 1.05c-.45.13-.87.31-1.27.53l-1.76-.84-1.8 1.8.84 1.76c-.22.4-.4.82-.53 1.27L4 12l1.05 2.64c.13.45.31.87.53 1.27l-.84 1.76 1.8 1.8 1.76-.84c.4.22.82.4 1.27.53L12 20l2.64-1.05c.45-.13.87-.31 1.27-.53l1.76.84 1.8-1.8-.84-1.76c.22-.4.4-.82.53-1.27L20 12z"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  function GenerateIcon() {
+    return (
+      <svg className="ai-action-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M12 3l1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7L12 3z"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  function CommentsIcon() {
+    return (
+      <svg className="ai-action-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M6 5h12M6 9h12M6 13h8M6 19l3-3h9a2 2 0 002-2V5a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h0v2z"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  function SummaryIcon() {
+    return (
+      <svg className="ai-action-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M4 18V6m5 12v-8m5 8V4m6 14v-6"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  function TuningIcon() {
+    return (
+      <svg className="ai-action-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M14 3l.6 2.1a2 2 0 001.3 1.3L18 7l-2.1.6a2 2 0 00-1.3 1.3L14 11l-.6-2.1A2 2 0 0012.1 7L10 6.4l2.1-.6a2 2 0 001.3-1.3L14 3zM6 14l.5 1.6a1.6 1.6 0 001 1L9 17l-1.5.4a1.6 1.6 0 00-1 1L6 20l-.5-1.6a1.6 1.6 0 00-1-1L3 17l1.5-.4a1.6 1.6 0 001-1L6 14z"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+        <circle cx="17.5" cy="16.5" r="3.5" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    );
+  }
 
   return (
     <aside className="left-sidebar">
@@ -172,6 +246,58 @@ export default function LeftSidebar({
         <button type="button" className="secondary-button full-width-button" onClick={onOpenModelProperties}>
           Model Properties
         </button>
+
+        <section className="panel ai-modeler-panel">
+          <div className="panel-heading ai-modeler-heading">
+            <div className="panel-label ai-modeler-label">AI Modeler</div>
+            <button
+              type="button"
+              className="icon-button ai-settings-button"
+              onClick={onOpenAiSettings}
+              title="Open AI Settings"
+              aria-label="Open AI Settings"
+            >
+              <SettingsIcon />
+            </button>
+          </div>
+
+          <label className="field-group">
+            <span>Current AI Engine</span>
+            <input value={aiModeler?.engine ?? "Azure OpenAI"} readOnly />
+          </label>
+
+          <label className="field-group">
+            <span>Schema Description</span>
+            <textarea
+              value={aiModeler?.schemaDescription ?? ""}
+              onChange={(event) => onAiSchemaDescriptionChange(event.target.value)}
+              placeholder="e.g. HR Schema with 5 tables"
+            />
+          </label>
+
+          <div className="ai-modeler-actions">
+            <button type="button" className="secondary-button full-width-button ai-action-button" onClick={onAiGenerate}>
+              <GenerateIcon />
+              <span>Generate</span>
+            </button>
+            <button
+              type="button"
+              className="secondary-button full-width-button ai-action-button"
+              onClick={onAiGenerateComments}
+            >
+              <CommentsIcon />
+              <span>Generate Comments</span>
+            </button>
+            <button type="button" className="secondary-button full-width-button ai-action-button" onClick={onAiSummary}>
+              <SummaryIcon />
+              <span>Summary</span>
+            </button>
+            <button type="button" className="secondary-button full-width-button ai-action-button" onClick={onAiTuning}>
+              <TuningIcon />
+              <span>AI Tuning</span>
+            </button>
+          </div>
+        </section>
 
         <button type="button" className="secondary-button full-width-button" onClick={onAutoLayout}>
           Auto-layout

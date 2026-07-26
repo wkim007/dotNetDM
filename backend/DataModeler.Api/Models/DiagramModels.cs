@@ -139,3 +139,18 @@ public sealed class ReverseEngineeringRunResponse
     public required string Summary { get; init; }
     public required string ModelJson { get; init; }
 }
+
+public sealed class AiValidationRequest
+{
+    public required string Engine { get; init; }
+    public required string Endpoint { get; init; }
+    public required string ApiKey { get; init; }
+    public required string ApiVersion { get; init; }
+    public required string Deployment { get; init; }
+}
+
+public sealed class AiValidationResponse
+{
+    public required bool IsValid { get; init; }
+    public required string Message { get; init; }
+}
