@@ -761,7 +761,19 @@ function readJsonDraft() {
 function readAiModelerSettings() {
   try {
     const localValue = window.localStorage.getItem(AI_MODELER_STORAGE_KEY);
-    return localValue ? JSON.parse(localValue) : null;
+    if (!localValue) {
+      return null;
+    }
+
+    const parsed = JSON.parse(localValue);
+    return {
+      engine: parsed.engine,
+      schemaDescription: parsed.schemaDescription,
+      endpoint: parsed.endpoint,
+      apiKey: parsed.apiKey,
+      apiVersion: parsed.apiVersion,
+      deployment: parsed.deployment
+    };
   } catch {
     return null;
   }
@@ -2249,6 +2261,10 @@ export default function App() {
     ...createDefaultAiModelerSettings(),
     ...(savedAiModelerSettings ?? {})
   }));
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiActiveTask, setAiActiveTask] = useState("");
+  const [aiStartedAt, setAiStartedAt] = useState(0);
+  const [aiElapsedSec, setAiElapsedSec] = useState(0);
   const resizeState = useRef(null);
   const jsonFileInputRef = useRef(null);
   const activeDiagram = useMemo(
@@ -2321,6 +2337,21 @@ export default function App() {
       })
     );
   }, [aiModeler]);
+
+  useEffect(() => {
+    if (!aiLoading || !aiStartedAt) {
+      setAiElapsedSec(0);
+      return undefined;
+    }
+
+    const updateElapsed = () => {
+      setAiElapsedSec(Math.max(0, Math.floor((Date.now() - aiStartedAt) / 1000)));
+    };
+
+    updateElapsed();
+    const timer = window.setInterval(updateElapsed, 1000);
+    return () => window.clearInterval(timer);
+  }, [aiLoading, aiStartedAt]);
 
   useEffect(() => {
     if (!selectedEntityId) {
@@ -2901,11 +2932,20 @@ export default function App() {
   }
 
   function handleAiModelerChange(field, value) {
+    const shouldResetValidation = [
+      "engine",
+      "endpoint",
+      "apiKey",
+      "apiVersion",
+      "deployment"
+    ].includes(field);
+
     setAiModeler((current) => ({
       ...current,
       [field]: value,
-      ...(field === "engine"
+      ...(shouldResetValidation
         ? {
+            isValidating: false,
             validationMessage: "",
             validationStatus: "idle"
           }
@@ -2970,8 +3010,56 @@ export default function App() {
     }
   }
 
-  function handleAiGenerate() {
-    setStatus("AI Generate is ready for the next implementation step.");
+  async function handleAiGenerate() {
+    const prompt = aiModeler.schemaDescription.trim();
+    if (!prompt) {
+      setStatus("Enter a schema description before generating.");
+      return;
+    }
+
+    setAiLoading(true);
+    setAiActiveTask("generate");
+    setAiStartedAt(Date.now());
+    setStatus("Generating AI model...");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/modeler/ai/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          engine: aiModeler.engine,
+          endpoint: aiModeler.endpoint,
+          apiKey: aiModeler.apiKey,
+          apiVersion: aiModeler.apiVersion,
+          deployment: aiModeler.deployment,
+          prompt,
+          database: model.project.database,
+          databaseVersion: model.project.databaseVersion
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, "AI generation failed."));
+      }
+
+      const result = await response.json().catch(() => null);
+      const modelJson = String(result?.modelJson ?? "").trim();
+
+      if (!modelJson) {
+        throw new Error("AI returned no model JSON.");
+      }
+
+      importJsonText(modelJson, "AI generation");
+      setStatus(result?.message || "AI model generated.");
+    } catch (error) {
+      setStatus(`AI generation failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    } finally {
+      setAiLoading(false);
+      setAiActiveTask("");
+      setAiStartedAt(0);
+    }
   }
 
   function handleAiGenerateComments() {
@@ -5089,6 +5177,9 @@ export default function App() {
       <LeftSidebar
         project={model.project}
         aiModeler={aiModeler}
+        aiLoading={aiLoading}
+        aiActiveTask={aiActiveTask}
+        aiElapsedSec={aiElapsedSec}
         entityCount={activeDiagram?.entities.filter((entity) => getEntityObjectType(entity) === "entity").length ?? 0}
         viewCount={activeDiagram?.entities.filter((entity) => getEntityObjectType(entity) === "view").length ?? 0}
         materializedViewCount={

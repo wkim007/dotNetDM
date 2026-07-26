@@ -24,6 +24,9 @@ function SelectField({ label, value, options, onChange, disabled = false }) {
 export default function LeftSidebar({
   project,
   aiModeler,
+  aiLoading,
+  aiActiveTask,
+  aiElapsedSec,
   entityCount,
   viewCount,
   materializedViewCount,
@@ -119,6 +122,7 @@ export default function LeftSidebar({
     { value: "triangle-right", label: "Triangle Right", icon: "▶" },
     { value: "connector", label: "Connector", icon: "╱" }
   ];
+  const aiConfigValidated = aiModeler?.validationStatus === "success";
 
   function SettingsIcon() {
     return (
@@ -187,6 +191,10 @@ export default function LeftSidebar({
     );
   }
 
+  function Spinner() {
+    return <span className="spinner" aria-hidden="true"></span>;
+  }
+
   return (
     <aside className="left-sidebar">
       <h1>{project.name}</h1>
@@ -249,7 +257,9 @@ export default function LeftSidebar({
 
         <section className="panel ai-modeler-panel">
           <div className="panel-heading ai-modeler-heading">
-            <div className="panel-label ai-modeler-label">AI Modeler</div>
+            <div className={`panel-label ai-modeler-label ${aiConfigValidated ? "validated" : ""}`}>
+              AI Modeler
+            </div>
             <button
               type="button"
               className="icon-button ai-settings-button"
@@ -276,27 +286,70 @@ export default function LeftSidebar({
           </label>
 
           <div className="ai-modeler-actions">
-            <button type="button" className="secondary-button full-width-button ai-action-button" onClick={onAiGenerate}>
-              <GenerateIcon />
-              <span>Generate</span>
+            <button
+              type="button"
+              className="secondary-button full-width-button ai-action-button"
+              onClick={onAiGenerate}
+              disabled={aiLoading || !aiConfigValidated}
+            >
+              {aiLoading && aiActiveTask === "generate" ? (
+                <>
+                  <Spinner />
+                  <span>Generating...</span>
+                </>
+              ) : (
+                <>
+                  <GenerateIcon />
+                  <span>Generate</span>
+                </>
+              )}
             </button>
             <button
               type="button"
               className="secondary-button full-width-button ai-action-button"
               onClick={onAiGenerateComments}
+              disabled={aiLoading || !aiConfigValidated}
             >
-              <CommentsIcon />
-              <span>Generate Comments</span>
+              {aiLoading && aiActiveTask === "comments" ? (
+                <>
+                  <Spinner />
+                  <span>Commenting...</span>
+                </>
+              ) : (
+                <>
+                  <CommentsIcon />
+                  <span>Generate Comments</span>
+                </>
+              )}
             </button>
-            <button type="button" className="secondary-button full-width-button ai-action-button" onClick={onAiSummary}>
+            <button
+              type="button"
+              className="secondary-button full-width-button ai-action-button"
+              onClick={onAiSummary}
+              disabled={aiLoading || !aiConfigValidated}
+            >
               <SummaryIcon />
               <span>Summary</span>
             </button>
-            <button type="button" className="secondary-button full-width-button ai-action-button" onClick={onAiTuning}>
+            <button
+              type="button"
+              className="secondary-button full-width-button ai-action-button"
+              onClick={onAiTuning}
+              disabled={aiLoading || !aiConfigValidated}
+            >
               <TuningIcon />
               <span>AI Tuning</span>
             </button>
           </div>
+
+          {aiLoading ? (
+            <div className="ai-progress-wrap" aria-live="polite">
+              <div className="ai-progress-label">{`AI is processing... (${aiElapsedSec}s)`}</div>
+              <div className="ai-progress-track">
+                <div className="ai-progress-bar"></div>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <button type="button" className="secondary-button full-width-button" onClick={onAutoLayout}>

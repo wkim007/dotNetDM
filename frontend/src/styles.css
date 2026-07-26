@@ -421,9 +421,13 @@ body.panel-resizing {
 
 .ai-modeler-label {
   margin-bottom: 0;
-  color: #8cffb8;
+  color: #b5c5d9;
   font-size: 0.98rem;
   letter-spacing: 0.18em;
+}
+
+.ai-modeler-label.validated {
+  color: #8cffb8;
 }
 
 .ai-settings-button {
@@ -496,6 +500,64 @@ body.panel-resizing {
 .ai-modeler-panel .field-group input[readonly] {
   background: #0f1723;
   color: #ffffff;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--warning);
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ai-progress-wrap {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.ai-progress-label {
+  font-size: 12px;
+  color: #9fb0c3;
+}
+
+.ai-progress-track {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #0f141b;
+  border: 1px solid #2d3b4d;
+}
+
+.ai-progress-bar {
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #4ecdc4 0%, #f7b733 45%, #60a5fa 100%);
+  box-shadow:
+    0 0 8px rgba(78, 205, 196, 0.35),
+    0 0 14px rgba(247, 183, 51, 0.25);
+  animation: ai-progress-slide 1.15s ease-in-out infinite;
+}
+
+@keyframes ai-progress-slide {
+  0% {
+    left: -45%;
+  }
+  100% {
+    left: 100%;
+  }
 }
 
 .reverse-engineering-checkbox {
@@ -792,6 +854,24 @@ body.panel-resizing {
 .icon-button:hover,
 .tab-pill:hover {
   transform: translateY(-1px);
+}
+
+.secondary-button:disabled,
+.subtle-button:disabled,
+.danger-button:disabled,
+.icon-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  filter: saturate(0.72);
+}
+
+.secondary-button:disabled:hover,
+.subtle-button:disabled:hover,
+.danger-button:disabled:hover,
+.icon-button:disabled:hover {
+  transform: none;
 }
 
 .top-tabs {

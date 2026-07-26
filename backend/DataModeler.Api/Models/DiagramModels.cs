@@ -154,3 +154,21 @@ public sealed class AiValidationResponse
     public required bool IsValid { get; init; }
     public required string Message { get; init; }
 }
+
+public sealed class AiGenerateRequest
+{
+    public required string Engine { get; init; }
+    public required string Endpoint { get; init; }
+    public required string ApiKey { get; init; }
+    public required string ApiVersion { get; init; }
+    public required string Deployment { get; init; }
+    public required string Prompt { get; init; }
+    public required string Database { get; init; }
+    public string? DatabaseVersion { get; init; }
+}
+
+public sealed class AiGenerateResponse
+{
+    public required string Message { get; init; }
+    public required string ModelJson { get; init; }
+}
