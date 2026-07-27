@@ -2483,6 +2483,108 @@ function buildSummaryChartSegments(stats) {
   };
 }
 
+function buildAiTuningObjects(model, summaryScope) {
+  const flattenEntityFields = (entity) =>
+    flattenAllFields(entity.fields ?? []).map((field) => ({
+      objectType: "attribute",
+      objectId: String(field.id ?? ""),
+      ownerId: String(entity.id ?? ""),
+      ownerName: String(entity.name ?? entity.physicalName ?? ""),
+      label: `${entity.name ?? entity.physicalName ?? entity.id}.${field.name ?? field.physicalName ?? field.id}`,
+      name: String(field.name ?? ""),
+      physicalName: String(field.physicalName ?? ""),
+      definition: String(field.definition ?? ""),
+      comment: String(field.comment ?? ""),
+      datatype: String(field.dataType ?? ""),
+      description: ""
+    }));
+
+  const entityObjects = summaryScope.entities.flatMap((entity) => {
+    const objectType = getEntityObjectType(entity);
+    return [
+      {
+        objectType,
+        objectId: String(entity.id ?? ""),
+        label: `${objectType === "materializedView" ? "Materialized View" : objectType === "view" ? "View" : "Entity"}: ${entity.name ?? entity.physicalName ?? entity.id}`,
+        name: String(entity.name ?? ""),
+        physicalName: String(entity.physicalName ?? ""),
+        definition: String(entity.definition ?? ""),
+        comment: String(entity.comment ?? ""),
+        datatype: "",
+        description: ""
+      },
+      ...flattenEntityFields(entity),
+      ...(entity.indexes ?? []).map((index) => ({
+        objectType: "index",
+        objectId: String(index.id ?? ""),
+        ownerId: String(entity.id ?? ""),
+        ownerName: String(entity.name ?? entity.physicalName ?? ""),
+        label: `Index: ${entity.name ?? entity.physicalName ?? entity.id}.${index.name ?? index.physicalName ?? index.id}`,
+        name: String(index.name ?? ""),
+        physicalName: String(index.physicalName ?? ""),
+        definition: String(index.definition ?? ""),
+        comment: String(index.comment ?? ""),
+        datatype: "",
+        description: ""
+      }))
+    ];
+  });
+
+  const relationshipObjects = summaryScope.relationships.map((relationship) => ({
+    objectType: "relationship",
+    objectId: String(relationship.id ?? ""),
+    label: `Relationship: ${relationship.name ?? relationship.physicalName ?? relationship.id}`,
+    name: String(relationship.name ?? ""),
+    physicalName: String(relationship.physicalName ?? ""),
+    definition: String(relationship.definition ?? ""),
+    comment: String(relationship.comment ?? ""),
+    datatype: "",
+    description: String(relationship.description ?? "")
+  }));
+
+  const schemaObjects = summaryScope.schemas.map((schema) => ({
+    objectType: "schema",
+    objectId: String(schema.id ?? ""),
+    label: `Schema: ${schema.name ?? schema.id}`,
+    name: String(schema.name ?? ""),
+    physicalName: String(schema.name ?? ""),
+    definition: "",
+    comment: String(schema.comment ?? ""),
+    datatype: "",
+    description: ""
+  }));
+
+  const diagramObjects = summaryScope.diagrams.map((diagram) => ({
+    objectType: "diagram",
+    objectId: String(diagram.id ?? ""),
+    label: `Diagram: ${diagram.name ?? diagram.id}`,
+    name: String(diagram.name ?? ""),
+    physicalName: String(diagram.name ?? ""),
+    definition: String(diagram.definition ?? ""),
+    comment: "",
+    datatype: "",
+    description: ""
+  }));
+
+  return [
+    {
+      objectType: "subjectArea",
+      objectId: "model",
+      label: `Subject Area: ${model.project?.subjectArea ?? "<model>"}`,
+      name: String(model.project?.subjectArea ?? "<model>"),
+      physicalName: String(model.project?.subjectArea ?? "<model>"),
+      definition: String(model.project?.definition ?? ""),
+      comment: "",
+      datatype: "",
+      description: ""
+    },
+    ...diagramObjects,
+    ...entityObjects,
+    ...relationshipObjects,
+    ...schemaObjects
+  ];
+}
+
 function normalizeModel(rawModel) {
   const baseModel = clone(rawModel ?? sampleModel);
   const normalizedProject = mergeProjectDefaults(baseModel.project);
@@ -2537,10 +2639,13 @@ export default function App() {
   const [isModelPropertiesOpen, setIsModelPropertiesOpen] = useState(false);
   const [isAiSettingsOpen, setIsAiSettingsOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [isAiTuningOpen, setIsAiTuningOpen] = useState(false);
   const [summarySubjectAreaId, setSummarySubjectAreaId] = useState("model");
   const [summaryInsightsLoading, setSummaryInsightsLoading] = useState(false);
   const [summaryInsightsCache, setSummaryInsightsCache] = useState({});
   const [summaryDetExpanded, setSummaryDetExpanded] = useState({});
+  const [aiTuningFindings, setAiTuningFindings] = useState([]);
+  const [selectedAiTuningKeys, setSelectedAiTuningKeys] = useState([]);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [selectedEntityIds, setSelectedEntityIds] = useState(() =>
     initialModel.diagrams[0]?.entities[0]?.id ? [initialModel.diagrams[0].entities[0].id] : []
@@ -3677,8 +3782,194 @@ export default function App() {
     }
   }
 
-  function handleAiTuning() {
-    setStatus("AI Tuning is ready for the next implementation step.");
+  async function handleAiTuning() {
+    setAiLoading(true);
+    setAiActiveTask("tuning");
+    setAiStartedAt(Date.now());
+    setStatus("AI tuning scan started...");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/modeler/ai/tuning`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          engine: aiModeler.engine,
+          endpoint: aiModeler.endpoint,
+          apiKey: aiModeler.apiKey,
+          apiVersion: aiModeler.apiVersion,
+          deployment: aiModeler.deployment,
+          database: model.project.database,
+          databaseVersion: model.project.databaseVersion,
+          objects: buildAiTuningObjects(model, summaryScope)
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, "AI tuning scan failed."));
+      }
+
+      const result = await response.json().catch(() => null);
+      const findings = Array.isArray(result?.findings)
+        ? result.findings.map((item, index) => ({
+            rowKey: `${String(item.key ?? `${item.objectType}:${item.objectId}`)}::${index}`,
+            key: String(item.key ?? `${item.objectType}:${item.objectId}`),
+            objectType: String(item.objectType ?? ""),
+            objectId: String(item.objectId ?? ""),
+            label: String(item.label ?? ""),
+            errorCount: Number(item.errorCount ?? 0),
+            issues: Array.isArray(item.issues) ? item.issues.map((issue) => String(issue)) : [],
+            patch: {
+              name: String(item.patch?.name ?? ""),
+              physicalName: String(item.patch?.physicalName ?? ""),
+              definition: String(item.patch?.definition ?? ""),
+              comment: String(item.patch?.comment ?? ""),
+              datatype: String(item.patch?.datatype ?? ""),
+              description: String(item.patch?.description ?? "")
+            }
+          }))
+        : [];
+
+      if (findings.length === 0) {
+        setAiTuningFindings([]);
+        setSelectedAiTuningKeys([]);
+        setStatus("AI tuning found no issues.");
+        return;
+      }
+
+      setAiTuningFindings(findings);
+      setSelectedAiTuningKeys(findings.map((item) => item.rowKey));
+      setIsAiTuningOpen(true);
+      setStatus(`AI tuning found ${findings.length} objects with issues.`);
+    } catch (error) {
+      setStatus(`AI tuning scan failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    } finally {
+      setAiLoading(false);
+      setAiActiveTask("");
+      setAiStartedAt(0);
+    }
+  }
+
+  function applyAiTuningSelected() {
+    const selectedSet = new Set(selectedAiTuningKeys);
+    const selectedFindings = aiTuningFindings.filter((item) => selectedSet.has(item.rowKey));
+
+    if (selectedFindings.length === 0) {
+      setIsAiTuningOpen(false);
+      return;
+    }
+
+    const projectPatch = new Map();
+    const diagramPatch = new Map();
+    const entityPatch = new Map();
+    const attributePatch = new Map();
+    const indexPatch = new Map();
+    const relationshipPatch = new Map();
+    const schemaPatch = new Map();
+
+    selectedFindings.forEach((item) => {
+      if (item.objectType === "subjectArea") {
+        projectPatch.set(item.objectId, item.patch);
+      } else if (item.objectType === "diagram") {
+        diagramPatch.set(item.objectId, item.patch);
+      } else if (["entity", "view", "materializedView"].includes(item.objectType)) {
+        entityPatch.set(item.objectId, item.patch);
+      } else if (item.objectType === "attribute") {
+        attributePatch.set(item.objectId, item.patch);
+      } else if (item.objectType === "index") {
+        indexPatch.set(item.objectId, item.patch);
+      } else if (item.objectType === "relationship") {
+        relationshipPatch.set(item.objectId, item.patch);
+      } else if (item.objectType === "schema") {
+        schemaPatch.set(item.objectId, item.patch);
+      }
+    });
+
+    const patchFieldTree = (fields) =>
+      mapFieldTree(fields, (field) => {
+        const patch = attributePatch.get(String(field.id));
+        return patch
+          ? {
+              ...field,
+              ...(patch.name ? { name: patch.name } : {}),
+              ...(patch.physicalName ? { physicalName: patch.physicalName } : {}),
+              ...(patch.definition ? { definition: patch.definition } : {}),
+              ...(patch.comment ? { comment: patch.comment } : {}),
+              ...(patch.datatype ? { dataType: normalizeDatatypeCase(patch.datatype) } : {})
+            }
+          : field;
+      });
+
+    setModel((current) => ({
+      ...current,
+      project: {
+        ...current.project,
+        ...(projectPatch.get("model")?.name && current.project.subjectArea !== "<model>"
+          ? { subjectArea: projectPatch.get("model").name }
+          : {}),
+        ...(projectPatch.get("model")?.definition ? { definition: projectPatch.get("model").definition } : {}),
+        schemas: (current.project?.schemas ?? []).map((schema) => {
+          const patch = schemaPatch.get(String(schema.id));
+          return patch
+            ? {
+                ...schema,
+                ...(patch.name ? { name: patch.name } : {}),
+                ...(patch.comment ? { comment: patch.comment } : {})
+              }
+            : schema;
+        })
+      },
+      diagrams: current.diagrams.map((diagram) => {
+        const dPatch = diagramPatch.get(String(diagram.id));
+        return {
+          ...diagram,
+          ...(dPatch?.name ? { name: dPatch.name } : {}),
+          ...(dPatch?.definition ? { definition: dPatch.definition } : {}),
+          entities: (diagram.entities ?? []).map((entity) => {
+            const ePatch = entityPatch.get(String(entity.id));
+            return {
+              ...entity,
+              ...(ePatch?.name ? { name: ePatch.name } : {}),
+              ...(ePatch?.physicalName ? { physicalName: ePatch.physicalName } : {}),
+              ...(ePatch?.definition ? { definition: ePatch.definition } : {}),
+              ...(ePatch?.comment ? { comment: ePatch.comment } : {}),
+              fields: patchFieldTree(entity.fields ?? []),
+              indexes: (entity.indexes ?? []).map((index) => {
+                const idxPatch = indexPatch.get(String(index.id));
+                return idxPatch
+                  ? {
+                      ...index,
+                      ...(idxPatch.name ? { name: idxPatch.name } : {}),
+                      ...(idxPatch.physicalName ? { physicalName: idxPatch.physicalName } : {}),
+                      ...(idxPatch.definition ? { definition: idxPatch.definition } : {}),
+                      ...(idxPatch.comment ? { comment: idxPatch.comment } : {})
+                    }
+                  : index;
+              })
+            };
+          }),
+          relationships: (diagram.relationships ?? []).map((relationship) => {
+            const patch = relationshipPatch.get(String(relationship.id));
+            return patch
+              ? {
+                  ...relationship,
+                  ...(patch.name ? { name: patch.name } : {}),
+                  ...(patch.physicalName ? { physicalName: patch.physicalName } : {}),
+                  ...(patch.definition ? { definition: patch.definition } : {}),
+                  ...(patch.comment ? { comment: patch.comment } : {}),
+                  ...(patch.description ? { description: patch.description } : {})
+                }
+              : relationship;
+          })
+        };
+      })
+    }));
+
+    setIsAiTuningOpen(false);
+    setAiTuningFindings([]);
+    setSelectedAiTuningKeys([]);
+    setStatus(`AI tuning applied to ${selectedFindings.length} objects.`);
   }
 
   function handleExportJson() {
@@ -6222,6 +6513,114 @@ export default function App() {
                   </button>
                 </div>
               </section>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isAiTuningOpen ? (
+        <div className="json-modal-backdrop" role="presentation">
+          <section
+            className="json-modal ai-tuning-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ai-tuning-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="json-modal-header">
+              <h2 id="ai-tuning-title">AI Tuning</h2>
+              <button
+                type="button"
+                className="icon-button ai-modal-close"
+                onClick={() => {
+                  setIsAiTuningOpen(false);
+                  setSelectedAiTuningKeys([]);
+                }}
+                aria-label="Close AI Tuning"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="json-modal-body ai-tuning-body">
+              {aiTuningFindings.length > 0 ? (
+                <div className="ai-tuning-list">
+                  <div className="ai-tuning-header-row">
+                    <button
+                      type="button"
+                      className="icon-button ai-tuning-check-all"
+                      title={
+                        selectedAiTuningKeys.length === aiTuningFindings.length
+                          ? "Uncheck all"
+                          : "Check all"
+                      }
+                      onClick={() => {
+                        if (selectedAiTuningKeys.length === aiTuningFindings.length) {
+                          setSelectedAiTuningKeys([]);
+                        } else {
+                          setSelectedAiTuningKeys(aiTuningFindings.map((item) => item.rowKey));
+                        }
+                      }}
+                    >
+                      {selectedAiTuningKeys.length === aiTuningFindings.length ? "☑" : "☐"}
+                    </button>
+                    <span>Description</span>
+                  </div>
+
+                  <div className="ai-tuning-rows">
+                    {aiTuningFindings.map((item) => (
+                      <label key={item.rowKey} className="ai-tuning-row">
+                        <input
+                          type="checkbox"
+                          checked={selectedAiTuningKeys.includes(item.rowKey)}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setSelectedAiTuningKeys((current) =>
+                              checked
+                                ? current.includes(item.rowKey)
+                                  ? current
+                                  : [...current, item.rowKey]
+                                : current.filter((value) => value !== item.rowKey)
+                            );
+                          }}
+                        />
+                        <span>
+                          <strong>{item.label}</strong> ({item.errorCount} issues)
+                          {item.issues?.length ? ` - ${item.issues.join(", ")}` : ""}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="summary-insights-empty">No tuning issues found.</p>
+              )}
+            </div>
+
+            <div className="ai-tuning-footer">
+              <span className="ai-tuning-total">
+                {`Total (${aiTuningFindings.length}): ${aiTuningFindings.length === 1 ? "Item" : "Items"}`}
+              </span>
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setIsAiTuningOpen(false);
+                    setSelectedAiTuningKeys([]);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={applyAiTuningSelected}
+                  disabled={selectedAiTuningKeys.length === 0}
+                >
+                  OK
+                </button>
+              </div>
             </div>
           </section>
         </div>

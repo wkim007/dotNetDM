@@ -435,6 +435,81 @@ body.panel-resizing {
   margin-top: 6px;
 }
 
+.ai-tuning-modal {
+  width: min(980px, 100%);
+}
+
+.ai-tuning-body {
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+}
+
+.ai-tuning-list {
+  border: 1px solid rgba(124, 155, 188, 0.18);
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(11, 18, 28, 0.82);
+}
+
+.ai-tuning-header-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(124, 155, 188, 0.16);
+  font-weight: 700;
+  color: #e7eef9;
+}
+
+.ai-tuning-check-all {
+  width: 24px;
+  height: 24px;
+  font-size: 0.95rem;
+}
+
+.ai-tuning-rows {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.ai-tuning-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(124, 155, 188, 0.12);
+  color: #e2ebf8;
+  line-height: 1.45;
+}
+
+.ai-tuning-row:last-child {
+  border-bottom: 0;
+}
+
+.ai-tuning-row input {
+  margin-top: 2px;
+}
+
+.ai-tuning-row strong {
+  color: #ffffff;
+}
+
+.ai-tuning-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ai-tuning-total {
+  color: #d7e3f3;
+  font-weight: 600;
+}
+
 .ai-settings-body {
   padding: 0;
   overflow: visible;

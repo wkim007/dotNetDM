@@ -421,6 +421,95 @@ public class ModelerController : ControllerBase
         }
     }
 
+    [HttpPost("ai/tuning")]
+    public async Task<IActionResult> GenerateAiTuningFindings(
+        [FromBody] AiTuningRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.ApiKey))
+            {
+                throw new InvalidOperationException("API key is required.");
+            }
+
+            if (request.Objects == null || request.Objects.Count == 0)
+            {
+                throw new InvalidOperationException("At least one object is required.");
+            }
+
+            JsonObject aiPayload;
+            if (string.Equals(request.Engine, "Azure OpenAI", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(request.Endpoint))
+                {
+                    throw new InvalidOperationException("Endpoint is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.ApiVersion))
+                {
+                    throw new InvalidOperationException("API version is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.Deployment))
+                {
+                    throw new InvalidOperationException("API deployment is required.");
+                }
+
+                aiPayload = await RequestAzureOpenAiTuningAsync(request, cancellationToken);
+            }
+            else if (string.Equals(request.Engine, "OpenAI", StringComparison.OrdinalIgnoreCase))
+            {
+                aiPayload = await RequestOpenAiTuningAsync(request, cancellationToken);
+            }
+            else
+            {
+                throw new InvalidOperationException("Unsupported AI engine.");
+            }
+
+            var findings = (aiPayload["findings"] as JsonArray ?? [])
+                .OfType<JsonObject>()
+                .Select(item => new AiTuningFinding
+                {
+                    Key = item["key"]?.GetValue<string>() ?? string.Empty,
+                    ObjectType = item["objectType"]?.GetValue<string>() ?? string.Empty,
+                    ObjectId = item["objectId"]?.GetValue<string>() ?? string.Empty,
+                    Label = item["label"]?.GetValue<string>() ?? string.Empty,
+                    ErrorCount = item["errorCount"]?.GetValue<int>() ?? 0,
+                    Issues = (item["issues"] as JsonArray ?? [])
+                        .Select(issue => issue?.GetValue<string>() ?? string.Empty)
+                        .Where(issue => !string.IsNullOrWhiteSpace(issue))
+                        .ToList(),
+                    Patch = new AiTuningPatch
+                    {
+                        Name = item["patch"]?["name"]?.GetValue<string>() ?? string.Empty,
+                        PhysicalName = item["patch"]?["physicalName"]?.GetValue<string>() ?? string.Empty,
+                        Definition = item["patch"]?["definition"]?.GetValue<string>() ?? string.Empty,
+                        Comment = item["patch"]?["comment"]?.GetValue<string>() ?? string.Empty,
+                        Datatype = item["patch"]?["datatype"]?.GetValue<string>() ?? string.Empty,
+                        Description = item["patch"]?["description"]?.GetValue<string>() ?? string.Empty
+                    }
+                })
+                .Where(item =>
+                    !string.IsNullOrWhiteSpace(item.ObjectType) &&
+                    !string.IsNullOrWhiteSpace(item.ObjectId) &&
+                    item.ErrorCount > 0)
+                .ToList();
+
+            return Ok(new AiTuningResponse
+            {
+                Findings = findings
+            });
+        }
+        catch (Exception exception)
+        {
+            return Problem(
+                detail: exception.Message,
+                title: "AI tuning failed",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
     private static string ExtractAiErrorMessage(string? responseBody)
     {
         if (string.IsNullOrWhiteSpace(responseBody))
@@ -510,6 +599,218 @@ public class ModelerController : ControllerBase
             },
             required = new[] { "aiSummary", "aiRecommendations" }
         };
+
+    private static object BuildAiTuningSchemaDefinition() =>
+        new
+        {
+            type = "object",
+            additionalProperties = false,
+            properties = new
+            {
+                findings = new
+                {
+                    type = "array",
+                    items = new
+                    {
+                        type = "object",
+                        additionalProperties = false,
+                        properties = new
+                        {
+                            key = new { type = "string" },
+                            objectType = new { type = "string" },
+                            objectId = new { type = "string" },
+                            label = new { type = "string" },
+                            errorCount = new { type = "integer", minimum = 1 },
+                            issues = new
+                            {
+                                type = "array",
+                                items = new { type = "string" }
+                            },
+                            patch = new
+                            {
+                                type = "object",
+                                additionalProperties = false,
+                                properties = new
+                                {
+                                    name = new { type = "string" },
+                                    physicalName = new { type = "string" },
+                                    definition = new { type = "string" },
+                                    comment = new { type = "string" },
+                                    datatype = new { type = "string" },
+                                    description = new { type = "string" }
+                                },
+                                required = new[] { "name", "physicalName", "definition", "comment", "datatype", "description" }
+                            }
+                        },
+                        required = new[] { "key", "objectType", "objectId", "label", "errorCount", "issues", "patch" }
+                    }
+                }
+            },
+            required = new[] { "findings" }
+        };
+
+    private async Task<JsonObject> RequestAzureOpenAiTuningAsync(
+        AiTuningRequest request,
+        CancellationToken cancellationToken)
+    {
+        var endpoint = request.Endpoint.Trim().TrimEnd('/');
+        var requestUri =
+            $"{endpoint}/openai/deployments/{Uri.EscapeDataString(request.Deployment.Trim())}/chat/completions?api-version={Uri.EscapeDataString(request.ApiVersion.Trim())}";
+        return await RequestAiTuningViaChatCompletionsAsync(
+            request,
+            requestUri,
+            "azure",
+            cancellationToken);
+    }
+
+    private async Task<JsonObject> RequestOpenAiTuningAsync(
+        AiTuningRequest request,
+        CancellationToken cancellationToken)
+    {
+        return await RequestAiTuningViaChatCompletionsAsync(
+            request,
+            "https://api.openai.com/v1/chat/completions",
+            "openai",
+            cancellationToken);
+    }
+
+    private async Task<JsonObject> RequestAiTuningViaChatCompletionsAsync(
+        AiTuningRequest request,
+        string requestUri,
+        string provider,
+        CancellationToken cancellationToken)
+    {
+        var schema = BuildAiTuningSchemaDefinition();
+        var databaseLabel = string.IsNullOrWhiteSpace(request.Database) ? "PostgreSQL" : request.Database.Trim();
+        var safeObjects = request.Objects.Select(item => new
+        {
+            objectType = item.ObjectType,
+            objectId = item.ObjectId,
+            label = item.Label,
+            name = item.Name,
+            physicalName = item.PhysicalName,
+            definition = item.Definition,
+            comment = item.Comment,
+            datatype = item.Datatype ?? string.Empty,
+            description = item.Description ?? string.Empty
+        }).ToArray();
+
+        var httpClient = _httpClientFactory.CreateClient();
+        httpClient.Timeout = TimeSpan.FromSeconds(60);
+
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUri);
+        httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        object payload;
+        if (provider == "azure")
+        {
+            httpRequest.Headers.Add("api-key", request.ApiKey.Trim());
+            payload = new
+            {
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "system",
+                        content =
+                            "You are a strict data-model metadata quality reviewer. Detect typos and incorrect wording in name, physicalName, definition, comment, description, and datatype. Return only objects that need correction. Keep fixes minimal and preserve meaning."
+                    },
+                    new
+                    {
+                        role = "user",
+                        content =
+                            $"Scan these {databaseLabel} data-model objects and return typo findings with corrected suggestions for name, physicalName, definition, comment, description, and datatype. If a field is already correct, keep the patch field equal to the original input value. Do not include objects without issues. Payload: {JsonSerializer.Serialize(new { objects = safeObjects })}"
+                    }
+                },
+                temperature = 0.1,
+                max_completion_tokens = 3000,
+                response_format = new
+                {
+                    type = "json_schema",
+                    json_schema = new
+                    {
+                        name = "ai_tuning_finding",
+                        strict = true,
+                        schema
+                    }
+                }
+            };
+        }
+        else
+        {
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", request.ApiKey.Trim());
+            payload = new
+            {
+                model = string.IsNullOrWhiteSpace(request.Deployment) ? "gpt-4o" : request.Deployment.Trim(),
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "system",
+                        content =
+                            "You are a strict data-model metadata quality reviewer. Detect typos and incorrect wording in name, physicalName, definition, comment, description, and datatype. Return only objects that need correction. Keep fixes minimal and preserve meaning."
+                    },
+                    new
+                    {
+                        role = "user",
+                        content =
+                            $"Scan these {databaseLabel} data-model objects and return typo findings with corrected suggestions for name, physicalName, definition, comment, description, and datatype. If a field is already correct, keep the patch field equal to the original input value. Do not include objects without issues. Payload: {JsonSerializer.Serialize(new { objects = safeObjects })}"
+                    }
+                },
+                temperature = 0.1,
+                max_tokens = 3000,
+                response_format = new
+                {
+                    type = "json_schema",
+                    json_schema = new
+                    {
+                        name = "ai_tuning_finding",
+                        strict = true,
+                        schema
+                    }
+                }
+            };
+        }
+
+        httpRequest.Content = new StringContent(
+            JsonSerializer.Serialize(payload),
+            Encoding.UTF8,
+            "application/json");
+
+        using var response = await httpClient.SendAsync(httpRequest, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"{(provider == "azure" ? "Azure OpenAI" : "OpenAI")} tuning failed ({(int)response.StatusCode} {response.ReasonPhrase}). {ExtractAiErrorMessage(responseBody)}");
+        }
+
+        JsonNode? rootNode;
+        try
+        {
+            rootNode = JsonNode.Parse(responseBody);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException($"{(provider == "azure" ? "Azure OpenAI" : "OpenAI")} returned an unreadable response. {exception.Message}");
+        }
+
+        var contentValue = rootNode?["choices"]?[0]?["message"]?["content"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(contentValue))
+        {
+            throw new InvalidOperationException($"{(provider == "azure" ? "Azure OpenAI" : "OpenAI")} returned no tuning content.");
+        }
+
+        try
+        {
+            var parsed = JsonNode.Parse(contentValue) as JsonObject;
+            return parsed ?? throw new InvalidOperationException("AI returned JSON in an unexpected shape.");
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException($"AI returned invalid tuning JSON. {exception.Message}");
+        }
+    }
 
     private async Task<JsonObject> RequestAzureOpenAiSummaryInsightsAsync(
         AiSummaryInsightsRequest request,

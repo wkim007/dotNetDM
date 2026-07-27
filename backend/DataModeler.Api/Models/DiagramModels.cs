@@ -257,6 +257,57 @@ public sealed class AiSummaryInsightsResponse
     public required IReadOnlyList<string> AiRecommendations { get; init; }
 }
 
+public sealed class AiTuningRequest
+{
+    public required string Engine { get; init; }
+    public required string Endpoint { get; init; }
+    public required string ApiKey { get; init; }
+    public required string ApiVersion { get; init; }
+    public required string Deployment { get; init; }
+    public required string Database { get; init; }
+    public string? DatabaseVersion { get; init; }
+    public required IReadOnlyList<AiTuningObjectInput> Objects { get; init; }
+}
+
+public sealed class AiTuningObjectInput
+{
+    public required string ObjectType { get; init; }
+    public required string ObjectId { get; init; }
+    public required string Label { get; init; }
+    public required string Name { get; init; }
+    public required string PhysicalName { get; init; }
+    public required string Definition { get; init; }
+    public required string Comment { get; init; }
+    public string? Datatype { get; init; }
+    public string? Description { get; init; }
+}
+
+public sealed class AiTuningResponse
+{
+    public required IReadOnlyList<AiTuningFinding> Findings { get; init; }
+}
+
+public sealed class AiTuningFinding
+{
+    public required string Key { get; init; }
+    public required string ObjectType { get; init; }
+    public required string ObjectId { get; init; }
+    public required string Label { get; init; }
+    public required int ErrorCount { get; init; }
+    public required IReadOnlyList<string> Issues { get; init; }
+    public required AiTuningPatch Patch { get; init; }
+}
+
+public sealed class AiTuningPatch
+{
+    public required string Name { get; init; }
+    public required string PhysicalName { get; init; }
+    public required string Definition { get; init; }
+    public required string Comment { get; init; }
+    public required string Datatype { get; init; }
+    public required string Description { get; init; }
+}
+
 public sealed class AiEntityCommentResult
 {
     public required string Id { get; init; }

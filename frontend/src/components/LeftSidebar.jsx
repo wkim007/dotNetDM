@@ -337,8 +337,17 @@ export default function LeftSidebar({
               onClick={onAiTuning}
               disabled={aiLoading || !aiConfigValidated}
             >
-              <TuningIcon />
-              <span>AI Tuning</span>
+              {aiLoading && aiActiveTask === "tuning" ? (
+                <>
+                  <Spinner />
+                  <span>Tuning...</span>
+                </>
+              ) : (
+                <>
+                  <TuningIcon />
+                  <span>AI Tuning</span>
+                </>
+              )}
             </button>
           </div>
 
