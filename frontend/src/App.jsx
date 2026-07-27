@@ -2242,6 +2242,247 @@ async function readErrorMessage(response, fallbackMessage) {
   }
 }
 
+function flattenAllFields(fields, depth = 0, parentId = "") {
+  return (fields ?? []).flatMap((field) => {
+    const current = {
+      ...field,
+      depth,
+      parentId
+    };
+
+    return [current, ...flattenAllFields(field.children ?? [], depth + 1, String(field.id ?? ""))];
+  });
+}
+
+function summarizeModelForAi(model) {
+  const diagrams = model.diagrams ?? [];
+  const entityMap = new Map();
+  const relationshipMap = new Map();
+
+  diagrams.forEach((diagram) => {
+    (diagram.entities ?? []).forEach((entity) => {
+      const objectType = getEntityObjectType(entity);
+      if (objectType === "drawing" || objectType === "annotation") {
+        return;
+      }
+
+      if (!entityMap.has(entity.id)) {
+        entityMap.set(entity.id, entity);
+      }
+    });
+
+    (diagram.relationships ?? []).forEach((relationship) => {
+      if (!relationshipMap.has(relationship.id)) {
+        relationshipMap.set(relationship.id, relationship);
+      }
+    });
+  });
+
+  const entities = Array.from(entityMap.values());
+  const relationships = Array.from(relationshipMap.values());
+  const tables = entities.filter((entity) => getEntityObjectType(entity) === "entity");
+  const views = entities.filter((entity) => getEntityObjectType(entity) === "view");
+  const materializedViews = entities.filter((entity) => getEntityObjectType(entity) === "materializedView");
+  const allFields = entities.flatMap((entity) => flattenAllFields(entity.fields ?? []));
+  const indexes = entities.reduce((sum, entity) => sum + (entity.indexes?.length ?? 0), 0);
+
+  return {
+    subjectAreas: [{ id: "model", name: model.project?.subjectArea ?? "<model>" }],
+    diagrams,
+    entities,
+    tables,
+    views,
+    materializedViews,
+    relationships,
+    allFields,
+    indexes,
+    schemas: model.project?.schemas ?? [],
+    stats: {
+      subjectAreas: 1,
+      diagrams: diagrams.length,
+      tables: tables.length,
+      views: views.length,
+      materializedViews: materializedViews.length,
+      relationships: relationships.length,
+      columns: allFields.length,
+      indexes,
+      schemas: model.project?.schemas?.length ?? 0
+    }
+  };
+}
+
+function buildSummaryDeterministicInsights(model, summaryScope) {
+  const findings = [];
+  const dbIsDocument = isDocumentDatabase(model.project?.database);
+  const commentField = model.project?.viewMode === "Logical View" ? "definition" : "comment";
+  const objects = [...summaryScope.tables, ...summaryScope.views, ...summaryScope.materializedViews];
+
+  if (!dbIsDocument) {
+    const missingPkObjects = objects.filter((entity) => !(entity.fields ?? []).some((field) => Boolean(field.isPrimary)));
+    if (missingPkObjects.length > 0) {
+      findings.push({
+        id: "missing-primary-keys",
+        severity: "high",
+        text: `[High] ${missingPkObjects.length} object${missingPkObjects.length === 1 ? "" : "s"} ${missingPkObjects.length === 1 ? "is" : "are"} missing a primary key.`,
+        details: missingPkObjects.map((entity) => entity.name ?? entity.physicalName ?? String(entity.id))
+      });
+    }
+  }
+
+  const connectedIds = new Set(
+    summaryScope.relationships.flatMap((relationship) => [String(relationship.sourceEntityId ?? ""), String(relationship.targetEntityId ?? "")])
+  );
+  const isolatedObjects = objects.filter((entity) => !connectedIds.has(String(entity.id)));
+  if (isolatedObjects.length > 0) {
+    findings.push({
+      id: "isolated-objects",
+      severity: "medium",
+      text: `[Medium] ${isolatedObjects.length} object${isolatedObjects.length === 1 ? "" : "s"} ${isolatedObjects.length === 1 ? "is" : "are"} isolated with no relationships.`,
+      details: isolatedObjects.map((entity) => entity.name ?? entity.physicalName ?? String(entity.id))
+    });
+  }
+
+  const undocumentedObjects = objects.filter((entity) => !String(entity?.[commentField] ?? "").trim());
+  if (undocumentedObjects.length > 0) {
+    findings.push({
+      id: "undocumented-objects",
+      severity: "medium",
+      text: `[Medium] ${undocumentedObjects.length} object${undocumentedObjects.length === 1 ? "" : "s"} ${undocumentedObjects.length === 1 ? "is" : "are"} missing ${commentField === "definition" ? "definitions" : "comments"}.`,
+      details: undocumentedObjects.map((entity) => entity.name ?? entity.physicalName ?? String(entity.id))
+    });
+  }
+
+  const undocumentedFields = summaryScope.entities.flatMap((entity) =>
+    flattenAllFields(entity.fields ?? [])
+      .filter((field) => !String(field?.[commentField] ?? "").trim())
+      .map((field) => `${entity.name ?? entity.physicalName ?? entity.id}.${field.name ?? field.physicalName ?? field.id}`)
+  );
+  if (undocumentedFields.length > 0) {
+    findings.push({
+      id: "undocumented-fields",
+      severity: "low",
+      text: `[Low] ${undocumentedFields.length} column${undocumentedFields.length === 1 ? "" : "s"} ${undocumentedFields.length === 1 ? "is" : "are"} missing ${commentField === "definition" ? "definitions" : "comments"}.`,
+      details: undocumentedFields.slice(0, 25)
+    });
+  }
+
+  const undocumentedIndexes = summaryScope.entities.flatMap((entity) =>
+    (entity.indexes ?? [])
+      .filter((index) => !String(index?.comment ?? "").trim() && !String(index?.definition ?? "").trim())
+      .map((index) => `${entity.name ?? entity.physicalName ?? entity.id}.${index.name ?? index.physicalName ?? index.id}`)
+  );
+  if (undocumentedIndexes.length > 0) {
+    findings.push({
+      id: "undocumented-indexes",
+      severity: "low",
+      text: `[Low] ${undocumentedIndexes.length} index${undocumentedIndexes.length === 1 ? "" : "es"} ${undocumentedIndexes.length === 1 ? "is" : "are"} missing comments or definitions.`,
+      details: undocumentedIndexes.slice(0, 25)
+    });
+  }
+
+  const relationshipDocGaps = summaryScope.relationships.filter((relationship) => {
+    if (model.project?.viewMode === "Logical View") {
+      return !String(relationship.parentToChildVerbPhrase ?? "").trim() || !String(relationship.childToParentVerbPhrase ?? "").trim();
+    }
+
+    return !String(relationship.description ?? "").trim();
+  });
+  if (relationshipDocGaps.length > 0) {
+    findings.push({
+      id: "relationship-doc-gaps",
+      severity: "medium",
+      text:
+        model.project?.viewMode === "Logical View"
+          ? `[Medium] ${relationshipDocGaps.length} relationship${relationshipDocGaps.length === 1 ? "" : "s"} ${relationshipDocGaps.length === 1 ? "is" : "are"} missing verb phrases.`
+          : `[Medium] ${relationshipDocGaps.length} relationship${relationshipDocGaps.length === 1 ? "" : "s"} ${relationshipDocGaps.length === 1 ? "is" : "are"} missing descriptions.`,
+      details: relationshipDocGaps.map((relationship) => relationship.name ?? relationship.physicalName ?? String(relationship.id))
+    });
+  }
+
+  const wideObjects = objects.filter((entity) => flattenAllFields(entity.fields ?? []).length > 30);
+  if (wideObjects.length > 0) {
+    findings.push({
+      id: "wide-objects",
+      severity: "low",
+      text: `[Low] ${wideObjects.length} object${wideObjects.length === 1 ? "" : "s"} ${wideObjects.length === 1 ? "has" : "have"} more than 30 columns.`,
+      details: wideObjects.map((entity) => `${entity.name ?? entity.physicalName ?? entity.id} (${flattenAllFields(entity.fields ?? []).length})`)
+    });
+  }
+
+  const nameCounts = new Map();
+  objects.forEach((entity) => {
+    const key = String(entity.name ?? entity.physicalName ?? "").trim().toLowerCase();
+    if (!key) {
+      return;
+    }
+    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+  });
+  const duplicateNames = Array.from(nameCounts.entries())
+    .filter(([, count]) => count > 1)
+    .map(([name]) => name);
+  if (duplicateNames.length > 0) {
+    findings.push({
+      id: "duplicate-object-names",
+      severity: "medium",
+      text: `[Medium] ${duplicateNames.length} duplicate object name${duplicateNames.length === 1 ? "" : "s"} detected.`,
+      details: duplicateNames
+    });
+  }
+
+  if (findings.length === 0) {
+    findings.push({
+      id: "no-major-findings",
+      severity: "info",
+      text: "No major structural or documentation issues detected.",
+      details: []
+    });
+  }
+
+  return findings;
+}
+
+function buildSummaryChartSegments(stats) {
+  const palette = [
+    "#57d2d8",
+    "#f9bd47",
+    "#6aa9ff",
+    "#ff7589",
+    "#f5c95e",
+    "#28c45c",
+    "#aa82f1",
+    "#ff9330",
+    "#9fb0c3"
+  ];
+  const items = [
+    { key: "subjectAreas", label: "Subject Areas", value: stats.subjectAreas },
+    { key: "diagrams", label: "Diagrams", value: stats.diagrams },
+    { key: "tables", label: "Tables", value: stats.tables },
+    { key: "views", label: "Views", value: stats.views },
+    { key: "materializedViews", label: "Materialized Views", value: stats.materializedViews },
+    { key: "relationships", label: "Relationships", value: stats.relationships },
+    { key: "columns", label: "Columns", value: stats.columns },
+    { key: "indexes", label: "Indexes", value: stats.indexes },
+    { key: "schemas", label: "Schemas", value: stats.schemas }
+  ].filter((item) => item.value > 0);
+
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  let offset = 0;
+  return {
+    total,
+    segments: items.map((item, index) => {
+      const dash = total > 0 ? (item.value / total) * 100 : 0;
+      const segment = {
+        ...item,
+        color: palette[index % palette.length],
+        dash,
+        offset
+      };
+      offset += dash;
+      return segment;
+    })
+  };
+}
+
 function normalizeModel(rawModel) {
   const baseModel = clone(rawModel ?? sampleModel);
   const normalizedProject = mergeProjectDefaults(baseModel.project);
@@ -2295,6 +2536,11 @@ export default function App() {
   const [isJsonViewerOpen, setIsJsonViewerOpen] = useState(false);
   const [isModelPropertiesOpen, setIsModelPropertiesOpen] = useState(false);
   const [isAiSettingsOpen, setIsAiSettingsOpen] = useState(false);
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [summarySubjectAreaId, setSummarySubjectAreaId] = useState("model");
+  const [summaryInsightsLoading, setSummaryInsightsLoading] = useState(false);
+  const [summaryInsightsCache, setSummaryInsightsCache] = useState({});
+  const [summaryDetExpanded, setSummaryDetExpanded] = useState({});
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [selectedEntityIds, setSelectedEntityIds] = useState(() =>
     initialModel.diagrams[0]?.entities[0]?.id ? [initialModel.diagrams[0].entities[0].id] : []
@@ -2402,6 +2648,23 @@ export default function App() {
     () => findFieldById(selectedEntity?.fields ?? [], selectedAttributeId),
     [selectedEntity, selectedAttributeId]
   );
+  const summaryScope = useMemo(() => summarizeModelForAi(model), [model]);
+  const summarySubjectAreas = summaryScope.subjectAreas;
+  const summarySubjectAreaName =
+    summarySubjectAreas.find((item) => item.id === summarySubjectAreaId)?.name ??
+    summarySubjectAreas[0]?.name ??
+    model.project.subjectArea ??
+    "<model>";
+  const summaryDeterministic = useMemo(
+    () => buildSummaryDeterministicInsights(model, summaryScope),
+    [model, summaryScope]
+  );
+  const summaryStats = summaryScope.stats;
+  const summaryChart = useMemo(() => buildSummaryChartSegments(summaryStats), [summaryStats]);
+  const summaryInsights = summaryInsightsCache[summarySubjectAreaId] ?? {
+    aiSummary: "",
+    aiRecommendations: []
+  };
 
   useEffect(() => {
     window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(model));
@@ -2441,6 +2704,16 @@ export default function App() {
     const timer = window.setInterval(updateElapsed, 1000);
     return () => window.clearInterval(timer);
   }, [aiLoading, aiStartedAt]);
+
+  useEffect(() => {
+    if (!isSummaryOpen) {
+      return;
+    }
+
+    if (!summarySubjectAreas.some((item) => item.id === summarySubjectAreaId)) {
+      setSummarySubjectAreaId(summarySubjectAreas[0]?.id ?? "model");
+    }
+  }, [isSummaryOpen, summarySubjectAreaId, summarySubjectAreas]);
 
   useEffect(() => {
     if (!selectedEntityId) {
@@ -3342,7 +3615,66 @@ export default function App() {
   }
 
   function handleAiSummary() {
-    setStatus("AI Summary is ready for the next implementation step.");
+    setSummarySubjectAreaId(summarySubjectAreas[0]?.id ?? "model");
+    setIsSummaryOpen(true);
+    setStatus("Opened AI summary.");
+  }
+
+  function toggleSummaryDeterministicExpansion(id) {
+    setSummaryDetExpanded((current) => ({
+      ...current,
+      [id]: !current[id]
+    }));
+  }
+
+  async function handleGenerateSummaryInsights() {
+    setSummaryInsightsLoading(true);
+    setStatus("Generating AI summary insights...");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/modeler/ai/summary-insights`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          engine: aiModeler.engine,
+          endpoint: aiModeler.endpoint,
+          apiKey: aiModeler.apiKey,
+          apiVersion: aiModeler.apiVersion,
+          deployment: aiModeler.deployment,
+          database: model.project.database,
+          databaseVersion: model.project.databaseVersion,
+          subjectAreaName: summarySubjectAreaName,
+          summaryStats,
+          deterministic: summaryDeterministic.map((item) => ({
+            id: item.id,
+            text: item.text,
+            details: item.details ?? []
+          }))
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, "AI summary generation failed."));
+      }
+
+      const result = await response.json().catch(() => null);
+      setSummaryInsightsCache((current) => ({
+        ...current,
+        [summarySubjectAreaId]: {
+          aiSummary: String(result?.aiSummary ?? ""),
+          aiRecommendations: Array.isArray(result?.aiRecommendations)
+            ? result.aiRecommendations.map((item) => String(item))
+            : []
+        }
+      }));
+      setStatus("Generated AI summary insights.");
+    } catch (error) {
+      setStatus(`AI summary generation failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    } finally {
+      setSummaryInsightsLoading(false);
+    }
   }
 
   function handleAiTuning() {
@@ -5726,6 +6058,170 @@ export default function App() {
                     <option value="line">line</option>
                   </select>
                 </label>
+              </section>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isSummaryOpen ? (
+        <div
+          className="json-modal-backdrop"
+          onClick={() => setIsSummaryOpen(false)}
+          role="presentation"
+        >
+          <section
+            className="json-modal summary-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="summary-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="json-modal-header">
+              <h2 id="summary-modal-title">Summary</h2>
+              <button
+                type="button"
+                className="icon-button ai-modal-close"
+                onClick={() => setIsSummaryOpen(false)}
+                aria-label="Close Summary"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="json-modal-body summary-modal-body">
+              <label className="field-group summary-subject-field">
+                <span>Subject Area</span>
+                <select
+                  value={summarySubjectAreaId}
+                  onChange={(event) => setSummarySubjectAreaId(event.target.value)}
+                >
+                  {summarySubjectAreas.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <section className="summary-chart-card">
+                <div className="summary-donut-wrap">
+                  <svg viewBox="0 0 160 160" className="summary-donut" aria-hidden="true">
+                    <circle cx="80" cy="80" r="46" className="summary-donut-track" />
+                    {summaryChart.segments.map((segment) => (
+                      <circle
+                        key={segment.key}
+                        cx="80"
+                        cy="80"
+                        r="46"
+                        className="summary-donut-segment"
+                        style={{
+                          stroke: segment.color,
+                          strokeDasharray: `${segment.dash} ${Math.max(100 - segment.dash, 0)}`,
+                          strokeDashoffset: `${25 - segment.offset}`
+                        }}
+                      />
+                    ))}
+                  </svg>
+                  <div className="summary-donut-center">
+                    <span>Total</span>
+                    <strong>{summaryChart.total}</strong>
+                  </div>
+                </div>
+
+                <div className="summary-legend">
+                  {summaryChart.segments.map((segment) => (
+                    <div key={segment.key} className="summary-legend-row">
+                      <span className="summary-legend-dot" style={{ backgroundColor: segment.color }} />
+                      <span>{segment.label}: {segment.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="summary-insights-card">
+                <div className="summary-insights-head">
+                  <h3>AI Insights</h3>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleGenerateSummaryInsights}
+                    disabled={summaryInsightsLoading || aiModeler.validationStatus !== "success"}
+                  >
+                    {summaryInsightsLoading ? "Generating..." : "Generate Insights"}
+                  </button>
+                </div>
+
+                <div className="summary-insights-grid">
+                  <section className="summary-insights-group">
+                    <h4>Deterministic Checks</h4>
+                    <div className="summary-insights-list">
+                      {summaryDeterministic.map((item) => (
+                        <article key={item.id} className="summary-det-row">
+                          <div className="summary-det-main">
+                            <span>{item.text}</span>
+                            {item.details?.length ? (
+                              <button
+                                type="button"
+                                className="icon-button summary-det-toggle"
+                                onClick={() => toggleSummaryDeterministicExpansion(item.id)}
+                                aria-label={summaryDetExpanded[item.id] ? "Collapse details" : "Expand details"}
+                              >
+                                {summaryDetExpanded[item.id] ? "−" : "+"}
+                              </button>
+                            ) : null}
+                          </div>
+                          {summaryDetExpanded[item.id] && item.details?.length ? (
+                            <ul className="summary-det-details">
+                              {item.details.map((detail, index) => (
+                                <li key={`${item.id}-${index}`}>{detail}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="summary-insights-group">
+                    <h4>AI Narrative</h4>
+                    <div className="summary-insights-summary">
+                      {summaryInsights.aiSummary ? (
+                        <>
+                          <p>{summaryInsights.aiSummary}</p>
+                          <div className="summary-recommendations">
+                            <strong>Recommendations</strong>
+                            {summaryInsights.aiRecommendations?.length ? (
+                              <ul className="summary-det-details summary-recommendation-list">
+                                {summaryInsights.aiRecommendations.map((item, index) => (
+                                  <li key={`recommendation-${index}`}>{item}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="summary-insights-empty">No recommendations yet.</p>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="summary-insights-empty">
+                          {aiModeler.validationStatus === "success"
+                            ? "Click Generate Insights to create an AI narrative and recommendations."
+                            : "Validate AI settings to enable narrative insight generation."}
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                </div>
+
+                <div className="summary-footer">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setIsSummaryOpen(false)}
+                  >
+                    Close
+                  </button>
+                </div>
               </section>
             </div>
           </section>

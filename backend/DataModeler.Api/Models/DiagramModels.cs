@@ -217,6 +217,46 @@ public sealed class AiCommentsResponse
     public required IReadOnlyList<AiAttributeCommentResult> AttributeComments { get; init; }
 }
 
+public sealed class AiSummaryInsightsRequest
+{
+    public required string Engine { get; init; }
+    public required string Endpoint { get; init; }
+    public required string ApiKey { get; init; }
+    public required string ApiVersion { get; init; }
+    public required string Deployment { get; init; }
+    public required string Database { get; init; }
+    public string? DatabaseVersion { get; init; }
+    public required string SubjectAreaName { get; init; }
+    public required AiSummaryStats SummaryStats { get; init; }
+    public required IReadOnlyList<AiDeterministicInsightInput> Deterministic { get; init; }
+}
+
+public sealed class AiSummaryStats
+{
+    public int SubjectAreas { get; init; }
+    public int Diagrams { get; init; }
+    public int Tables { get; init; }
+    public int Views { get; init; }
+    public int MaterializedViews { get; init; }
+    public int Relationships { get; init; }
+    public int Columns { get; init; }
+    public int Indexes { get; init; }
+    public int Schemas { get; init; }
+}
+
+public sealed class AiDeterministicInsightInput
+{
+    public required string Id { get; init; }
+    public required string Text { get; init; }
+    public required IReadOnlyList<string> Details { get; init; }
+}
+
+public sealed class AiSummaryInsightsResponse
+{
+    public required string AiSummary { get; init; }
+    public required IReadOnlyList<string> AiRecommendations { get; init; }
+}
+
 public sealed class AiEntityCommentResult
 {
     public required string Id { get; init; }

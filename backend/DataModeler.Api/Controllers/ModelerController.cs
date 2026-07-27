@@ -359,6 +359,68 @@ public class ModelerController : ControllerBase
         }
     }
 
+    [HttpPost("ai/summary-insights")]
+    public async Task<IActionResult> GenerateAiSummaryInsights(
+        [FromBody] AiSummaryInsightsRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.ApiKey))
+            {
+                throw new InvalidOperationException("API key is required.");
+            }
+
+            JsonObject aiPayload;
+            if (string.Equals(request.Engine, "Azure OpenAI", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(request.Endpoint))
+                {
+                    throw new InvalidOperationException("Endpoint is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.ApiVersion))
+                {
+                    throw new InvalidOperationException("API version is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.Deployment))
+                {
+                    throw new InvalidOperationException("API deployment is required.");
+                }
+
+                aiPayload = await RequestAzureOpenAiSummaryInsightsAsync(request, cancellationToken);
+            }
+            else if (string.Equals(request.Engine, "OpenAI", StringComparison.OrdinalIgnoreCase))
+            {
+                aiPayload = await RequestOpenAiSummaryInsightsAsync(request, cancellationToken);
+            }
+            else
+            {
+                throw new InvalidOperationException("Unsupported AI engine.");
+            }
+
+            var aiSummary = aiPayload["aiSummary"]?.GetValue<string>() ?? string.Empty;
+            var aiRecommendations = (aiPayload["aiRecommendations"] as JsonArray ?? [])
+                .Select(item => item?.GetValue<string>() ?? string.Empty)
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .ToList();
+
+            return Ok(new AiSummaryInsightsResponse
+            {
+                AiSummary = aiSummary,
+                AiRecommendations = aiRecommendations
+            });
+        }
+        catch (Exception exception)
+        {
+            return Problem(
+                detail: exception.Message,
+                title: "AI summary generation failed",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
     private static string ExtractAiErrorMessage(string? responseBody)
     {
         if (string.IsNullOrWhiteSpace(responseBody))
@@ -431,6 +493,192 @@ public class ModelerController : ControllerBase
             },
             required = new[] { "entityComments", "attributeComments" }
         };
+
+    private static object BuildAiSummarySchemaDefinition() =>
+        new
+        {
+            type = "object",
+            additionalProperties = false,
+            properties = new
+            {
+                aiSummary = new { type = "string" },
+                aiRecommendations = new
+                {
+                    type = "array",
+                    items = new { type = "string" }
+                }
+            },
+            required = new[] { "aiSummary", "aiRecommendations" }
+        };
+
+    private async Task<JsonObject> RequestAzureOpenAiSummaryInsightsAsync(
+        AiSummaryInsightsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var endpoint = request.Endpoint.Trim().TrimEnd('/');
+        var requestUri =
+            $"{endpoint}/openai/deployments/{Uri.EscapeDataString(request.Deployment.Trim())}/chat/completions?api-version={Uri.EscapeDataString(request.ApiVersion.Trim())}";
+        return await RequestAiSummaryViaChatCompletionsAsync(
+            request,
+            requestUri,
+            "azure",
+            cancellationToken);
+    }
+
+    private async Task<JsonObject> RequestOpenAiSummaryInsightsAsync(
+        AiSummaryInsightsRequest request,
+        CancellationToken cancellationToken)
+    {
+        return await RequestAiSummaryViaChatCompletionsAsync(
+            request,
+            "https://api.openai.com/v1/chat/completions",
+            "openai",
+            cancellationToken);
+    }
+
+    private async Task<JsonObject> RequestAiSummaryViaChatCompletionsAsync(
+        AiSummaryInsightsRequest request,
+        string requestUri,
+        string provider,
+        CancellationToken cancellationToken)
+    {
+        var schema = BuildAiSummarySchemaDefinition();
+        var databaseLabel = string.IsNullOrWhiteSpace(request.Database) ? "PostgreSQL" : request.Database.Trim();
+        var deterministicPayload = request.Deterministic.Select(item => new
+        {
+            id = item.Id,
+            text = item.Text,
+            details = item.Details
+        }).ToArray();
+        var summaryStats = new
+        {
+            request.SummaryStats.SubjectAreas,
+            request.SummaryStats.Diagrams,
+            request.SummaryStats.Tables,
+            request.SummaryStats.Views,
+            request.SummaryStats.MaterializedViews,
+            request.SummaryStats.Relationships,
+            request.SummaryStats.Columns,
+            request.SummaryStats.Indexes,
+            request.SummaryStats.Schemas
+        };
+
+        var httpClient = _httpClientFactory.CreateClient();
+        httpClient.Timeout = TimeSpan.FromSeconds(60);
+
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUri);
+        httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        object payload;
+        if (provider == "azure")
+        {
+            httpRequest.Headers.Add("api-key", request.ApiKey.Trim());
+            payload = new
+            {
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "system",
+                        content =
+                            "You are a senior data model reviewer. Return only JSON matching the provided schema. Use the deterministic findings as source of truth. Write a concise narrative summary and practical recommendations. Do not invent statistics."
+                    },
+                    new
+                    {
+                        role = "user",
+                        content =
+                            $"Review this {databaseLabel} subject area named '{request.SubjectAreaName}'. Database version: {request.DatabaseVersion ?? "unknown"}. Summary stats: {JsonSerializer.Serialize(summaryStats)}. Deterministic findings: {JsonSerializer.Serialize(deterministicPayload)}"
+                    }
+                },
+                temperature = 0.2,
+                max_completion_tokens = 2200,
+                response_format = new
+                {
+                    type = "json_schema",
+                    json_schema = new
+                    {
+                        name = "summary_insights",
+                        strict = true,
+                        schema
+                    }
+                }
+            };
+        }
+        else
+        {
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", request.ApiKey.Trim());
+            payload = new
+            {
+                model = string.IsNullOrWhiteSpace(request.Deployment) ? "gpt-4o" : request.Deployment.Trim(),
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "system",
+                        content =
+                            "You are a senior data model reviewer. Return only JSON matching the provided schema. Use the deterministic findings as source of truth. Write a concise narrative summary and practical recommendations. Do not invent statistics."
+                    },
+                    new
+                    {
+                        role = "user",
+                        content =
+                            $"Review this {databaseLabel} subject area named '{request.SubjectAreaName}'. Database version: {request.DatabaseVersion ?? "unknown"}. Summary stats: {JsonSerializer.Serialize(summaryStats)}. Deterministic findings: {JsonSerializer.Serialize(deterministicPayload)}"
+                    }
+                },
+                temperature = 0.2,
+                max_tokens = 2200,
+                response_format = new
+                {
+                    type = "json_schema",
+                    json_schema = new
+                    {
+                        name = "summary_insights",
+                        strict = true,
+                        schema
+                    }
+                }
+            };
+        }
+
+        httpRequest.Content = new StringContent(
+            JsonSerializer.Serialize(payload),
+            Encoding.UTF8,
+            "application/json");
+
+        using var response = await httpClient.SendAsync(httpRequest, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"{(provider == "azure" ? "Azure OpenAI" : "OpenAI")} summary generation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {ExtractAiErrorMessage(responseBody)}");
+        }
+
+        JsonNode? rootNode;
+        try
+        {
+            rootNode = JsonNode.Parse(responseBody);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException($"{(provider == "azure" ? "Azure OpenAI" : "OpenAI")} returned an unreadable response. {exception.Message}");
+        }
+
+        var contentValue = rootNode?["choices"]?[0]?["message"]?["content"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(contentValue))
+        {
+            throw new InvalidOperationException($"{(provider == "azure" ? "Azure OpenAI" : "OpenAI")} returned no summary insight content.");
+        }
+
+        try
+        {
+            var parsed = JsonNode.Parse(contentValue) as JsonObject;
+            return parsed ?? throw new InvalidOperationException("AI returned JSON in an unexpected shape.");
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException($"AI returned invalid summary insight JSON. {exception.Message}");
+        }
+    }
 
     private async Task<JsonObject> RequestAzureOpenAiCommentsAsync(
         AiCommentsRequest request,
