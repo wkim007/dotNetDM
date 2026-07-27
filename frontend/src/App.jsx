@@ -3195,8 +3195,150 @@ export default function App() {
     }
   }
 
-  function handleAiGenerateComments() {
-    setStatus("AI Generate Comments is ready for the next implementation step.");
+  function flattenFieldsForAi(fields, entityId, parentAttributeId = "", depth = 0) {
+    return (fields ?? []).flatMap((field) => {
+      const current = {
+        entityId: String(entityId),
+        attributeId: String(field.id ?? ""),
+        name: String(field.name ?? ""),
+        physicalName: String(field.physicalName ?? ""),
+        dataType: String(field.dataType ?? ""),
+        comment: String(field.comment ?? ""),
+        definition: String(field.definition ?? ""),
+        parentAttributeId: parentAttributeId || "",
+        depth
+      };
+
+      const children = flattenFieldsForAi(field.children ?? [], entityId, String(field.id ?? ""), depth + 1);
+      return [current, ...children];
+    });
+  }
+
+  function applyAiAttributeDocs(fields, entityId, attributeCommentMap) {
+    return (fields ?? []).map((field) => {
+      const key = `${String(entityId)}::${String(field.id ?? "")}`;
+      const aiDoc = attributeCommentMap.get(key);
+      const hasComment = String(field.comment ?? "").trim().length > 0;
+      const hasDefinition = String(field.definition ?? "").trim().length > 0;
+
+      return {
+        ...field,
+        comment: hasComment || !aiDoc ? field.comment : aiDoc.comment,
+        definition: hasDefinition || !aiDoc ? field.definition : aiDoc.definition,
+        ...(field.children?.length
+          ? {
+              children: applyAiAttributeDocs(field.children, entityId, attributeCommentMap)
+            }
+          : {})
+      };
+    });
+  }
+
+  async function handleAiGenerateComments() {
+    const commentableEntities = (activeDiagram?.entities ?? []).filter((entity) => {
+      const objectType = getEntityObjectType(entity);
+      return objectType === "entity" || objectType === "view" || objectType === "materializedView";
+    });
+
+    if (commentableEntities.length === 0) {
+      setStatus("No entities, views, or materialized views are available for AI documentation.");
+      return;
+    }
+
+    setAiLoading(true);
+    setAiActiveTask("comments");
+    setAiStartedAt(Date.now());
+    setStatus("Generating AI documentation comments...");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/modeler/ai/comments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          engine: aiModeler.engine,
+          endpoint: aiModeler.endpoint,
+          apiKey: aiModeler.apiKey,
+          apiVersion: aiModeler.apiVersion,
+          deployment: aiModeler.deployment,
+          database: model.project.database,
+          databaseVersion: model.project.databaseVersion,
+          schemaDescription: aiModeler.schemaDescription,
+          entities: commentableEntities.map((entity) => ({
+            id: String(entity.id),
+            objectType: getEntityObjectType(entity),
+            name: String(entity.name ?? ""),
+            physicalName: String(entity.physicalName ?? ""),
+            comment: String(entity.comment ?? ""),
+            definition: String(entity.definition ?? ""),
+            attributes: flattenFieldsForAi(entity.fields ?? [], entity.id)
+          }))
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, "AI comments generation failed."));
+      }
+
+      const result = await response.json().catch(() => null);
+      const entityCommentMap = new Map(
+        (result?.entityComments ?? []).map((item) => [
+          String(item.id ?? ""),
+          {
+            comment: String(item.comment ?? ""),
+            definition: String(item.definition ?? "")
+          }
+        ])
+      );
+      const attributeCommentMap = new Map(
+        (result?.attributeComments ?? []).map((item) => [
+          `${String(item.entityId ?? "")}::${String(item.attributeId ?? "")}`,
+          {
+            comment: String(item.comment ?? ""),
+            definition: String(item.definition ?? "")
+          }
+        ])
+      );
+
+      setModel((current) => ({
+        ...current,
+        diagrams: current.diagrams.map((diagram) => {
+          if (diagram.id !== activeDiagram?.id) {
+            return diagram;
+          }
+
+          return {
+            ...diagram,
+            entities: (diagram.entities ?? []).map((entity) => {
+              const objectType = getEntityObjectType(entity);
+              if (!(objectType === "entity" || objectType === "view" || objectType === "materializedView")) {
+                return entity;
+              }
+
+              const aiEntityDoc = entityCommentMap.get(String(entity.id));
+              const hasComment = String(entity.comment ?? "").trim().length > 0;
+              const hasDefinition = String(entity.definition ?? "").trim().length > 0;
+
+              return {
+                ...entity,
+                comment: hasComment || !aiEntityDoc ? entity.comment : aiEntityDoc.comment,
+                definition: hasDefinition || !aiEntityDoc ? entity.definition : aiEntityDoc.definition,
+                fields: applyAiAttributeDocs(entity.fields ?? [], entity.id, attributeCommentMap)
+              };
+            })
+          };
+        })
+      }));
+
+      setStatus(result?.message || "AI documentation generated.");
+    } catch (error) {
+      setStatus(`AI comments generation failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    } finally {
+      setAiLoading(false);
+      setAiActiveTask("");
+      setAiStartedAt(0);
+    }
   }
 
   function handleAiSummary() {

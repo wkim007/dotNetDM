@@ -274,6 +274,91 @@ public class ModelerController : ControllerBase
         }
     }
 
+    [HttpPost("ai/comments")]
+    public async Task<IActionResult> GenerateAiComments(
+        [FromBody] AiCommentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.ApiKey))
+            {
+                throw new InvalidOperationException("API key is required.");
+            }
+
+            if (request.Entities == null || request.Entities.Count == 0)
+            {
+                throw new InvalidOperationException("At least one entity, view, or materialized view is required.");
+            }
+
+            JsonObject aiPayload;
+            if (string.Equals(request.Engine, "Azure OpenAI", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(request.Endpoint))
+                {
+                    throw new InvalidOperationException("Endpoint is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.ApiVersion))
+                {
+                    throw new InvalidOperationException("API version is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.Deployment))
+                {
+                    throw new InvalidOperationException("API deployment is required.");
+                }
+
+                aiPayload = await RequestAzureOpenAiCommentsAsync(request, cancellationToken);
+            }
+            else if (string.Equals(request.Engine, "OpenAI", StringComparison.OrdinalIgnoreCase))
+            {
+                aiPayload = await RequestOpenAiCommentsAsync(request, cancellationToken);
+            }
+            else
+            {
+                throw new InvalidOperationException("Unsupported AI engine.");
+            }
+
+            var entityComments = (aiPayload["entityComments"] as JsonArray ?? [])
+                .OfType<JsonObject>()
+                .Select(item => new AiEntityCommentResult
+                {
+                    Id = item["id"]?.GetValue<string>() ?? string.Empty,
+                    Comment = item["comment"]?.GetValue<string>() ?? string.Empty,
+                    Definition = item["definition"]?.GetValue<string>() ?? string.Empty
+                })
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .ToList();
+
+            var attributeComments = (aiPayload["attributeComments"] as JsonArray ?? [])
+                .OfType<JsonObject>()
+                .Select(item => new AiAttributeCommentResult
+                {
+                    EntityId = item["entityId"]?.GetValue<string>() ?? string.Empty,
+                    AttributeId = item["attributeId"]?.GetValue<string>() ?? string.Empty,
+                    Comment = item["comment"]?.GetValue<string>() ?? string.Empty,
+                    Definition = item["definition"]?.GetValue<string>() ?? string.Empty
+                })
+                .Where(item => !string.IsNullOrWhiteSpace(item.EntityId) && !string.IsNullOrWhiteSpace(item.AttributeId))
+                .ToList();
+
+            return Ok(new AiCommentsResponse
+            {
+                Message = "AI documentation comments generated.",
+                EntityComments = entityComments,
+                AttributeComments = attributeComments
+            });
+        }
+        catch (Exception exception)
+        {
+            return Problem(
+                detail: exception.Message,
+                title: "AI comments generation failed",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
     private static string ExtractAiErrorMessage(string? responseBody)
     {
         if (string.IsNullOrWhiteSpace(responseBody))
@@ -301,6 +386,226 @@ public class ModelerController : ControllerBase
         }
 
         return responseBody.Length > 300 ? responseBody[..300] : responseBody;
+    }
+
+    private static object BuildAiCommentsSchemaDefinition() =>
+        new
+        {
+            type = "object",
+            additionalProperties = false,
+            properties = new
+            {
+                entityComments = new
+                {
+                    type = "array",
+                    items = new
+                    {
+                        type = "object",
+                        additionalProperties = false,
+                        properties = new
+                        {
+                            id = new { type = "string" },
+                            comment = new { type = "string" },
+                            definition = new { type = "string" }
+                        },
+                        required = new[] { "id", "comment", "definition" }
+                    }
+                },
+                attributeComments = new
+                {
+                    type = "array",
+                    items = new
+                    {
+                        type = "object",
+                        additionalProperties = false,
+                        properties = new
+                        {
+                            entityId = new { type = "string" },
+                            attributeId = new { type = "string" },
+                            comment = new { type = "string" },
+                            definition = new { type = "string" }
+                        },
+                        required = new[] { "entityId", "attributeId", "comment", "definition" }
+                    }
+                }
+            },
+            required = new[] { "entityComments", "attributeComments" }
+        };
+
+    private async Task<JsonObject> RequestAzureOpenAiCommentsAsync(
+        AiCommentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var endpoint = request.Endpoint.Trim().TrimEnd('/');
+        var requestUri =
+            $"{endpoint}/openai/deployments/{Uri.EscapeDataString(request.Deployment.Trim())}/chat/completions?api-version={Uri.EscapeDataString(request.ApiVersion.Trim())}";
+        return await RequestAiCommentsViaChatCompletionsAsync(
+            request,
+            requestUri,
+            "azure",
+            cancellationToken);
+    }
+
+    private async Task<JsonObject> RequestOpenAiCommentsAsync(
+        AiCommentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        return await RequestAiCommentsViaChatCompletionsAsync(
+            request,
+            "https://api.openai.com/v1/chat/completions",
+            "openai",
+            cancellationToken);
+    }
+
+    private async Task<JsonObject> RequestAiCommentsViaChatCompletionsAsync(
+        AiCommentsRequest request,
+        string requestUri,
+        string provider,
+        CancellationToken cancellationToken)
+    {
+        var schema = BuildAiCommentsSchemaDefinition();
+        var databaseLabel = string.IsNullOrWhiteSpace(request.Database) ? "PostgreSQL" : request.Database.Trim();
+        var schemaContext = string.IsNullOrWhiteSpace(request.SchemaDescription)
+            ? "No extra schema description was supplied."
+            : request.SchemaDescription.Trim();
+
+        var entityPayload = request.Entities.Select(entity => new
+        {
+            id = entity.Id,
+            objectType = entity.ObjectType,
+            name = entity.Name,
+            physicalName = entity.PhysicalName,
+            comment = entity.Comment,
+            definition = entity.Definition,
+            attributes = entity.Attributes.Select(attribute => new
+            {
+                entityId = attribute.EntityId,
+                attributeId = attribute.AttributeId,
+                name = attribute.Name,
+                physicalName = attribute.PhysicalName,
+                dataType = attribute.DataType,
+                comment = attribute.Comment,
+                definition = attribute.Definition,
+                parentAttributeId = attribute.ParentAttributeId ?? string.Empty,
+                depth = attribute.Depth
+            }).ToArray()
+        }).ToArray();
+
+        var httpClient = _httpClientFactory.CreateClient();
+        httpClient.Timeout = TimeSpan.FromSeconds(60);
+
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUri);
+        httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        object payload;
+        if (provider == "azure")
+        {
+            httpRequest.Headers.Add("api-key", request.ApiKey.Trim());
+            payload = new
+            {
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "system",
+                        content =
+                            "You are a data documentation assistant. Return only JSON matching the provided schema. Generate concise, business-friendly comments and definitions for database objects. Provide output only for objects or attributes with missing comments or definitions."
+                    },
+                    new
+                    {
+                        role = "user",
+                        content =
+                            $"Generate documentation comments and definitions for this {databaseLabel} data model. Use this optional schema description as context: {schemaContext}. Return entityComments for entities, views, and materialized views. Return attributeComments for attributes. Existing comments and definitions should be treated as already complete and do not need replacement. Model payload: {JsonSerializer.Serialize(entityPayload)}"
+                    }
+                },
+                temperature = 0.2,
+                max_completion_tokens = 4000,
+                response_format = new
+                {
+                    type = "json_schema",
+                    json_schema = new
+                    {
+                        name = "documentation_comments",
+                        strict = true,
+                        schema
+                    }
+                }
+            };
+        }
+        else
+        {
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", request.ApiKey.Trim());
+            payload = new
+            {
+                model = string.IsNullOrWhiteSpace(request.Deployment) ? "gpt-4o" : request.Deployment.Trim(),
+                messages = new object[]
+                {
+                    new
+                    {
+                        role = "system",
+                        content =
+                            "You are a data documentation assistant. Return only JSON matching the provided schema. Generate concise, business-friendly comments and definitions for database objects. Provide output only for objects or attributes with missing comments or definitions."
+                    },
+                    new
+                    {
+                        role = "user",
+                        content =
+                            $"Generate documentation comments and definitions for this {databaseLabel} data model. Use this optional schema description as context: {schemaContext}. Return entityComments for entities, views, and materialized views. Return attributeComments for attributes. Existing comments and definitions should be treated as already complete and do not need replacement. Model payload: {JsonSerializer.Serialize(entityPayload)}"
+                    }
+                },
+                temperature = 0.2,
+                max_tokens = 4000,
+                response_format = new
+                {
+                    type = "json_schema",
+                    json_schema = new
+                    {
+                        name = "documentation_comments",
+                        strict = true,
+                        schema
+                    }
+                }
+            };
+        }
+
+        httpRequest.Content = new StringContent(
+            JsonSerializer.Serialize(payload),
+            Encoding.UTF8,
+            "application/json");
+
+        using var response = await httpClient.SendAsync(httpRequest, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"{(provider == "azure" ? "Azure OpenAI" : "OpenAI")} comments generation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {ExtractAiErrorMessage(responseBody)}");
+        }
+
+        JsonNode? rootNode;
+        try
+        {
+            rootNode = JsonNode.Parse(responseBody);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException($"{(provider == "azure" ? "Azure OpenAI" : "OpenAI")} returned an unreadable response. {exception.Message}");
+        }
+
+        var contentValue = rootNode?["choices"]?[0]?["message"]?["content"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(contentValue))
+        {
+            throw new InvalidOperationException($"{(provider == "azure" ? "Azure OpenAI" : "OpenAI")} returned no documentation content.");
+        }
+
+        try
+        {
+            var parsed = JsonNode.Parse(contentValue) as JsonObject;
+            return parsed ?? throw new InvalidOperationException("AI returned JSON in an unexpected shape.");
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException($"AI returned invalid documentation JSON. {exception.Message}");
+        }
     }
 
     private async Task<JsonObject> RequestAzureOpenAiSchemaAsync(

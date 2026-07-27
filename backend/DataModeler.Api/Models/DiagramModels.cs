@@ -172,3 +172,62 @@ public sealed class AiGenerateResponse
     public required string Message { get; init; }
     public required string ModelJson { get; init; }
 }
+
+public sealed class AiCommentsRequest
+{
+    public required string Engine { get; init; }
+    public required string Endpoint { get; init; }
+    public required string ApiKey { get; init; }
+    public required string ApiVersion { get; init; }
+    public required string Deployment { get; init; }
+    public required string Database { get; init; }
+    public string? DatabaseVersion { get; init; }
+    public string? SchemaDescription { get; init; }
+    public required IReadOnlyList<AiCommentsEntityInput> Entities { get; init; }
+}
+
+public sealed class AiCommentsEntityInput
+{
+    public required string Id { get; init; }
+    public required string ObjectType { get; init; }
+    public required string Name { get; init; }
+    public required string PhysicalName { get; init; }
+    public required string Comment { get; init; }
+    public required string Definition { get; init; }
+    public required IReadOnlyList<AiCommentsAttributeInput> Attributes { get; init; }
+}
+
+public sealed class AiCommentsAttributeInput
+{
+    public required string EntityId { get; init; }
+    public required string AttributeId { get; init; }
+    public required string Name { get; init; }
+    public required string PhysicalName { get; init; }
+    public required string DataType { get; init; }
+    public required string Comment { get; init; }
+    public required string Definition { get; init; }
+    public string? ParentAttributeId { get; init; }
+    public required int Depth { get; init; }
+}
+
+public sealed class AiCommentsResponse
+{
+    public required string Message { get; init; }
+    public required IReadOnlyList<AiEntityCommentResult> EntityComments { get; init; }
+    public required IReadOnlyList<AiAttributeCommentResult> AttributeComments { get; init; }
+}
+
+public sealed class AiEntityCommentResult
+{
+    public required string Id { get; init; }
+    public required string Comment { get; init; }
+    public required string Definition { get; init; }
+}
+
+public sealed class AiAttributeCommentResult
+{
+    public required string EntityId { get; init; }
+    public required string AttributeId { get; init; }
+    public required string Comment { get; init; }
+    public required string Definition { get; init; }
+}
