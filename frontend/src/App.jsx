@@ -6067,7 +6067,6 @@ export default function App() {
       {isSummaryOpen ? (
         <div
           className="json-modal-backdrop"
-          onClick={() => setIsSummaryOpen(false)}
           role="presentation"
         >
           <section
