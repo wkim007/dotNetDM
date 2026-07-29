@@ -244,7 +244,9 @@ body.panel-resizing {
 }
 
 .summary-modal {
-  width: min(980px, 100%);
+  width: min(980px, calc(100vw - 48px));
+  height: min(90vh, 980px);
+  max-height: min(90vh, 980px);
 }
 
 .model-properties-body {
@@ -254,12 +256,16 @@ body.panel-resizing {
 }
 
 .summary-modal-body {
+  flex: 1 1 auto;
   padding: 0;
   display: grid;
   gap: 18px;
-  overflow: visible;
+  overflow: auto;
   background: transparent;
   border: 0;
+  min-height: 0;
+  padding-right: 4px;
+  padding-bottom: 8px;
 }
 
 .summary-subject-field {
@@ -272,6 +278,7 @@ body.panel-resizing {
   border-radius: 16px;
   background: rgba(15, 23, 35, 0.92);
   padding: 18px;
+  min-width: 0;
 }
 
 .summary-chart-card {
@@ -361,20 +368,26 @@ body.panel-resizing {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
+  min-width: 0;
+  align-items: stretch;
 }
 
 .summary-insights-group {
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .summary-insights-list,
 .summary-insights-summary {
   min-height: 280px;
+  max-height: min(36vh, 360px);
   padding: 14px;
   border: 1px solid rgba(124, 155, 188, 0.18);
   border-radius: 14px;
   background: rgba(11, 18, 28, 0.8);
+  overflow: auto;
+  min-width: 0;
 }
 
 .summary-insights-summary p {
@@ -433,6 +446,14 @@ body.panel-resizing {
   display: flex;
   justify-content: flex-start;
   margin-top: 6px;
+}
+
+.summary-footer-sticky {
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding-top: 4px;
+  padding-right: 4px;
+  background: linear-gradient(180deg, rgba(24, 35, 47, 0), rgba(16, 25, 36, 0.96) 22%);
 }
 
 .ai-tuning-modal {

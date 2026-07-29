@@ -6502,17 +6502,17 @@ export default function App() {
                     </div>
                   </section>
                 </div>
-
-                <div className="summary-footer">
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => setIsSummaryOpen(false)}
-                  >
-                    Close
-                  </button>
-                </div>
               </section>
+            </div>
+
+            <div className="summary-footer summary-footer-sticky">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setIsSummaryOpen(false)}
+              >
+                Close
+              </button>
             </div>
           </section>
         </div>
