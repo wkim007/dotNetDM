@@ -5,7 +5,12 @@ import DiagramCanvas from "./components/DiagramCanvas";
 import RightInspector from "./components/RightInspector";
 import { sampleModel } from "./data/sampleModel";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "https://localhost:7248";
+const DEFAULT_LOCAL_API_BASE_URL =
+  typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ? "http://localhost:5248"
+    : "https://localhost:7248";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_LOCAL_API_BASE_URL;
 const LOCAL_STORAGE_KEY = "dotnetdm-model";
 const PANEL_STORAGE_KEY = "dotnetdm-panel-widths";
 const JSON_DRAFT_STORAGE_KEY = "dotnetdm-json-draft";
@@ -2242,6 +2247,37 @@ async function readErrorMessage(response, fallbackMessage) {
   }
 }
 
+function buildBackendFetchFailureMessage(actionLabel, error, apiBaseUrl = API_BASE_URL) {
+  const fallback = `${actionLabel} failed. Verify the ASP.NET backend is running and reachable.`;
+  const message = error instanceof Error ? String(error.message ?? "").trim() : "";
+  const normalizedBaseUrl = String(apiBaseUrl ?? "").trim();
+  const isLocalHttpsBackend = /^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalizedBaseUrl);
+  const isFetchFailure =
+    message === "Failed to fetch" ||
+    message === "NetworkError when attempting to fetch resource." ||
+    message.includes("NetworkError");
+
+  if (!isFetchFailure) {
+    return message || fallback;
+  }
+
+  if (isLocalHttpsBackend) {
+    return [
+      `${actionLabel} failed because the browser rejected the local HTTPS certificate for ${normalizedBaseUrl}.`,
+      "Fix one of these:",
+      "1. Trust the ASP.NET dev certificate: `dotnet dev-certs https --trust`",
+      "2. Restart the backend and browser after trusting the certificate.",
+      "3. Or use the local HTTP backend URL instead, for example `http://localhost:5248` via `VITE_API_BASE_URL`."
+    ].join(" ");
+  }
+
+  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalizedBaseUrl)) {
+    return `${actionLabel} failed because the frontend could not reach ${normalizedBaseUrl}. Make sure the ASP.NET backend is running on that port.`;
+  }
+
+  return fallback;
+}
+
 function flattenAllFields(fields, depth = 0, parentId = "") {
   return (fields ?? []).flatMap((field) => {
     const current = {
@@ -3198,8 +3234,10 @@ export default function App() {
 
       const data = await response.json();
       setProviders(data);
-    } catch {
-      setStatus("Backend unavailable, using built-in provider list.");
+    } catch (error) {
+      setStatus(
+        `${buildBackendFetchFailureMessage("Provider loading", error)} Using built-in provider list.`
+      );
     }
   }
 
@@ -3228,8 +3266,10 @@ export default function App() {
       setSelectedEntityIds(normalizedActiveDiagram?.entities[0]?.id ? [normalizedActiveDiagram.entities[0].id] : []);
       setSelectedRelationshipId(null);
       setStatus("Loaded model from ASP.NET Core Web API and applied auto-layout.");
-    } catch {
-      setStatus("Backend unavailable, showing local sample model.");
+    } catch (error) {
+      setStatus(
+        `${buildBackendFetchFailureMessage("Diagram loading", error)} Showing local sample model.`
+      );
     }
   }
 
@@ -3505,7 +3545,10 @@ export default function App() {
       }));
       setStatus(successMessage);
     } catch (error) {
-      const failureMessage = error instanceof Error ? error.message : "AI settings validation failed.";
+      const failureMessage = buildBackendFetchFailureMessage(
+        `${engineLabel} validation`,
+        error
+      );
       setAiModeler((current) => ({
         ...current,
         isValidating: false,
