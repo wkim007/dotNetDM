@@ -75,11 +75,15 @@ export default function LeftSidebar({
   const normalizedDatabase = String(project.database ?? "").toLowerCase();
   const reverseEngineeringProvider = normalizedDatabase.includes("sql server") || normalizedDatabase.includes("mssql")
     ? "sqlserver"
+    : normalizedDatabase.includes("postgres")
+      ? "postgresql"
     : normalizedDatabase.includes("mongo")
       ? "mongodb"
       : "other";
   const reverseEngineeringSupportsConnection =
-    reverseEngineeringProvider === "mongodb" || reverseEngineeringProvider === "sqlserver";
+    reverseEngineeringProvider === "mongodb" ||
+    reverseEngineeringProvider === "sqlserver" ||
+    reverseEngineeringProvider === "postgresql";
 
   useEffect(() => {
     if (!isDrawingPaletteOpen) {

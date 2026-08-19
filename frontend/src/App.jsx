@@ -1008,7 +1008,7 @@ function normalizeDbEngine(databaseName) {
 function getReverseEngineeringLabels(provider) {
   const normalized = normalizeDbEngine(provider);
 
-  if (normalized === "sqlserver") {
+  if (normalized === "sqlserver" || normalized === "postgresql") {
     return {
       databaseObjectLabel: "tables",
       databaseObjectSingular: "table",

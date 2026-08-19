@@ -44,6 +44,7 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
         return provider switch
         {
             "sqlserver" => await DiscoverSqlServerDatabasesAsync(request, cancellationToken),
+            "postgresql" => await DiscoverPostgreSqlDatabasesAsync(request, cancellationToken),
             "mongodb" => await DiscoverMongoDbDatabasesAsync(request, cancellationToken),
             _ => throw new InvalidOperationException($"Reverse engineering is not yet supported for provider '{request.Provider}'.")
         };
@@ -58,6 +59,7 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
         return provider switch
         {
             "sqlserver" => await DiscoverSqlServerTablesAsync(request, cancellationToken),
+            "postgresql" => await DiscoverPostgreSqlTablesAsync(request, cancellationToken),
             "mongodb" => await DiscoverMongoDbCollectionsAsync(request, cancellationToken),
             _ => throw new InvalidOperationException($"Reverse engineering collection discovery is not yet supported for provider '{request.Provider}'.")
         };
@@ -72,6 +74,7 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
         return provider switch
         {
             "sqlserver" => await ReverseEngineerSqlServerAsync(request, cancellationToken),
+            "postgresql" => await ReverseEngineerPostgreSqlAsync(request, cancellationToken),
             "mongodb" => await ReverseEngineerMongoDbAsync(request, cancellationToken),
             _ => throw new InvalidOperationException($"Reverse engineering run is not yet supported for provider '{request.Provider}'.")
         };
@@ -260,6 +263,45 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
         };
     }
 
+    private static async Task<ReverseEngineeringResponse> DiscoverPostgreSqlDatabasesAsync(
+        ReverseEngineeringRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new NpgsqlConnection(BuildPostgreSqlConnectionString(request.ConnectionString, "postgres"));
+        await connection.OpenAsync(cancellationToken);
+
+        const string sql = """
+            SELECT datname
+            FROM pg_database
+            WHERE datistemplate = false
+              AND datallowconn = true
+            ORDER BY datname;
+            """;
+
+        var databases = new List<ReverseEngineeringDatabaseInfo>();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var databaseName = reader.GetString(0);
+            var tableCount = await CountPostgreSqlTablesAsync(request.ConnectionString, databaseName, cancellationToken);
+            databases.Add(new ReverseEngineeringDatabaseInfo
+            {
+                Name = databaseName,
+                CollectionCount = tableCount,
+                CollectionLabel = "tables"
+            });
+        }
+
+        return new ReverseEngineeringResponse
+        {
+            Provider = "postgresql",
+            Summary = $"PostgreSQL connection verified. Found {databases.Count} databases.",
+            Databases = databases
+        };
+    }
+
     private static async Task<ReverseEngineeringCollectionsResponse> DiscoverMongoDbCollectionsAsync(
         ReverseEngineeringCollectionsRequest request,
         CancellationToken cancellationToken)
@@ -344,6 +386,58 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
         return new ReverseEngineeringCollectionsResponse
         {
             Provider = "sqlserver",
+            DatabaseName = request.DatabaseName,
+            Summary = $"Loaded {collections.Count} tables from '{request.DatabaseName}'.",
+            Collections = collections
+        };
+    }
+
+    private static async Task<ReverseEngineeringCollectionsResponse> DiscoverPostgreSqlTablesAsync(
+        ReverseEngineeringCollectionsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.DatabaseName))
+        {
+            throw new InvalidOperationException("A database name is required before loading tables.");
+        }
+
+        await using var connection = new NpgsqlConnection(BuildPostgreSqlConnectionString(request.ConnectionString, request.DatabaseName));
+        await connection.OpenAsync(cancellationToken);
+
+        const string sql = """
+            SELECT t.table_schema,
+                   t.table_name,
+                   COUNT(c.column_name) AS column_count
+            FROM information_schema.tables t
+            LEFT JOIN information_schema.columns c
+              ON c.table_schema = t.table_schema
+             AND c.table_name = t.table_name
+            WHERE t.table_type = 'BASE TABLE'
+              AND t.table_schema NOT IN ('pg_catalog', 'information_schema')
+            GROUP BY t.table_schema, t.table_name
+            ORDER BY t.table_schema, t.table_name;
+            """;
+
+        var collections = new List<ReverseEngineeringCollectionInfo>();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var schema = reader.GetString(0);
+            var table = reader.GetString(1);
+            var columnCount = Convert.ToInt32(reader.GetInt64(2));
+            collections.Add(new ReverseEngineeringCollectionInfo
+            {
+                Name = $"{schema}.{table}",
+                DocumentCount = columnCount,
+                DocumentLabel = "columns"
+            });
+        }
+
+        return new ReverseEngineeringCollectionsResponse
+        {
+            Provider = "postgresql",
             DatabaseName = request.DatabaseName,
             Summary = $"Loaded {collections.Count} tables from '{request.DatabaseName}'.",
             Collections = collections
@@ -735,6 +829,199 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
         };
     }
 
+    private static async Task<ReverseEngineeringRunResponse> ReverseEngineerPostgreSqlAsync(
+        ReverseEngineeringRunRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.DatabaseName))
+        {
+            throw new InvalidOperationException("A database name is required before running reverse engineering.");
+        }
+
+        var selectedTableKeys = request.CollectionNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(ParsePostgreSqlTableKey)
+            .Distinct()
+            .OrderBy(item => item.Schema, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (selectedTableKeys.Count == 0)
+        {
+            throw new InvalidOperationException("Select at least one table before running reverse engineering.");
+        }
+
+        await using var connection = new NpgsqlConnection(BuildPostgreSqlConnectionString(request.ConnectionString, request.DatabaseName));
+        await connection.OpenAsync(cancellationToken);
+
+        var idAllocator = new SequentialIdAllocator();
+        var entityPayloads = new List<object>();
+        var entityShapePayloads = new List<object>();
+        var entityIdsByTableKey = new Dictionary<SqlServerTableKey, string>();
+
+        foreach (var tableKey in selectedTableKeys)
+        {
+            entityIdsByTableKey[tableKey] = idAllocator.Next();
+        }
+
+        var foreignKeys = await LoadPostgreSqlForeignKeysAsync(connection, cancellationToken);
+        var selectedTableKeySet = selectedTableKeys.ToHashSet();
+        var includedForeignKeys = foreignKeys
+            .Where(foreignKey =>
+                selectedTableKeySet.Contains(foreignKey.ParentTable) &&
+                selectedTableKeySet.Contains(foreignKey.ChildTable))
+            .ToList();
+
+        var relationshipRefsByEntityId = entityIdsByTableKey.Values.ToDictionary(
+            entityId => entityId,
+            _ => new RelationshipRefs());
+        var relationshipPayloads = new List<object>();
+        var relationshipShapePayloads = new List<object>();
+
+        foreach (var foreignKey in includedForeignKeys)
+        {
+            var relationshipId = idAllocator.Next();
+            relationshipPayloads.Add(new
+            {
+                id = relationshipId,
+                name = foreignKey.Name,
+                physicalName = foreignKey.Name,
+                definition = "",
+                comment = "",
+                description = $"References {foreignKey.ParentTable.Schema}.{foreignKey.ParentTable.Name}",
+                parent = entityIdsByTableKey[foreignKey.ParentTable],
+                child = entityIdsByTableKey[foreignKey.ChildTable],
+                parentAttribute = foreignKey.ParentColumn,
+                childAttribute = foreignKey.ChildColumn,
+                cardinality = "1:N",
+                relationshipType = "7",
+                physicalOnly = false,
+                logicalOnly = false,
+                parentToChildVerbPhrase = "",
+                childToParentVerbPhrase = ""
+            });
+            relationshipShapePayloads.Add(new
+            {
+                id = relationshipId,
+                name = foreignKey.Name,
+                physicalName = foreignKey.Name
+            });
+
+            relationshipRefsByEntityId[entityIdsByTableKey[foreignKey.ParentTable]].ChildIds.Add(relationshipId);
+            relationshipRefsByEntityId[entityIdsByTableKey[foreignKey.ChildTable]].ParentIds.Add(relationshipId);
+        }
+
+        for (var index = 0; index < selectedTableKeys.Count; index++)
+        {
+            var tableKey = selectedTableKeys[index];
+            var entityId = entityIdsByTableKey[tableKey];
+            var columns = await LoadPostgreSqlTableColumnsAsync(connection, tableKey, cancellationToken);
+            var refs = relationshipRefsByEntityId[entityId];
+
+            entityPayloads.Add(new
+            {
+                id = entityId,
+                name = tableKey.Name,
+                physicalName = $"{tableKey.Schema}.{tableKey.Name}",
+                definition = "",
+                comment = "",
+                physicalOnly = false,
+                logicalOnly = false,
+                props = new
+                {
+                    pSchemaRef = tableKey.Schema,
+                    pParentRelationshipsRef = refs.ParentIds,
+                    pChildRelationshipsRef = refs.ChildIds
+                },
+                attributes = columns,
+                indexes = Array.Empty<object>()
+            });
+
+            entityShapePayloads.Add(new
+            {
+                id = entityId,
+                name = tableKey.Name,
+                physicalName = $"{tableKey.Schema}.{tableKey.Name}",
+                displayLevelLogical = "-1",
+                displayLevelPhysical = "-1",
+                x = 160 + (index % 3) * 340,
+                y = 120 + (index / 3) * 260,
+                width = 280,
+                height = 0
+            });
+        }
+
+        var workspacePayload = new
+        {
+            meta = new
+            {
+                db = "1075859235",
+                dbMajorVersion = await LoadPostgreSqlMajorVersionAsync(connection, cancellationToken),
+                dbMinorVersion = "0",
+                modelType = "3",
+                viewMode = "physical",
+                activeSubjectAreaId = "1",
+                activeDiagramId = "1",
+                nextDiagramSeq = 2,
+                nextSubjectAreaSeq = 2
+            },
+            workspace = new
+            {
+                entities = entityPayloads,
+                views = Array.Empty<object>(),
+                cachedViews = Array.Empty<object>(),
+                relationships = relationshipPayloads,
+                schemas = selectedTableKeys
+                    .Select(tableKey => tableKey.Schema)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(schema => new { id = schema, name = schema, comment = "" })
+                    .ToList(),
+                databases = Array.Empty<object>(),
+                catalogs = Array.Empty<object>(),
+                subjectAreas = new[]
+                {
+                    new
+                    {
+                        id = "1",
+                        name = "<model>",
+                        locked = true,
+                        diagrams = new[]
+                        {
+                            new
+                            {
+                                id = "1",
+                                name = "ER_Diagram_1",
+                                definition = "",
+                                displayLevelLogical = "1",
+                                displayLevelPhysical = "1",
+                                modelShapes = new
+                                {
+                                    entities = entityShapePayloads,
+                                    views = Array.Empty<object>(),
+                                    cachedViews = Array.Empty<object>(),
+                                    relationships = relationshipShapePayloads
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        return new ReverseEngineeringRunResponse
+        {
+            Provider = "postgresql",
+            DatabaseName = request.DatabaseName,
+            Summary = $"Reverse engineered {selectedTableKeys.Count} tables from '{request.DatabaseName}'.",
+            ModelJson = JsonSerializer.Serialize(
+                workspacePayload,
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                })
+        };
+    }
+
     private static async Task<IntrospectionResponse> BuildRelationalResponseAsync(
         string provider,
         string summary,
@@ -877,6 +1164,16 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
         return builder.ConnectionString;
     }
 
+    private static string BuildPostgreSqlConnectionString(string connectionString, string databaseName)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Database = databaseName
+        };
+
+        return builder.ConnectionString;
+    }
+
     private static async Task<int> CountSqlServerTablesAsync(
         string connectionString,
         string databaseName,
@@ -897,6 +1194,26 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
         return result is int count ? count : Convert.ToInt32(result);
     }
 
+    private static async Task<int> CountPostgreSqlTablesAsync(
+        string connectionString,
+        string databaseName,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new NpgsqlConnection(BuildPostgreSqlConnectionString(connectionString, databaseName));
+        await connection.OpenAsync(cancellationToken);
+
+        const string sql = """
+            SELECT COUNT(*)
+            FROM information_schema.tables
+            WHERE table_type = 'BASE TABLE'
+              AND table_schema NOT IN ('pg_catalog', 'information_schema');
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is int count ? count : Convert.ToInt32(result);
+    }
+
     private static SqlServerTableKey ParseSqlServerTableKey(string value)
     {
         var trimmed = value.Trim();
@@ -906,12 +1223,30 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
             : new SqlServerTableKey("dbo", trimmed);
     }
 
+    private static SqlServerTableKey ParsePostgreSqlTableKey(string value)
+    {
+        var trimmed = value.Trim();
+        var parts = trimmed.Split('.', 2, StringSplitOptions.TrimEntries);
+        return parts.Length == 2
+            ? new SqlServerTableKey(parts[0], parts[1])
+            : new SqlServerTableKey("public", trimmed);
+    }
+
     private static async Task<string> LoadSqlServerMajorVersionAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         const string sql = "SELECT CAST(SERVERPROPERTY('ProductMajorVersion') AS nvarchar(20));";
         await using var command = new SqlCommand(sql, connection);
         var value = await command.ExecuteScalarAsync(cancellationToken);
         return Convert.ToString(value) ?? "1";
+    }
+
+    private static async Task<string> LoadPostgreSqlMajorVersionAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    {
+        const string sql = "SHOW server_version;";
+        await using var command = new NpgsqlCommand(sql, connection);
+        var value = Convert.ToString(await command.ExecuteScalarAsync(cancellationToken)) ?? "1";
+        var major = value.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+        return string.IsNullOrWhiteSpace(major) ? "1" : major;
     }
 
     private static async Task<IReadOnlyList<object>> LoadSqlServerTableColumnsAsync(
@@ -948,6 +1283,65 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
                 reader.GetString(1),
                 reader.IsDBNull(2) ? null : reader.GetInt32(2),
                 reader.IsDBNull(3) ? null : Convert.ToInt32(reader.GetByte(3)),
+                reader.IsDBNull(4) ? null : Convert.ToInt32(reader.GetInt32(4)));
+
+            attributes.Add(new
+            {
+                id = $"{tableKey.Schema}.{tableKey.Name}.{columnName}",
+                name = columnName,
+                physicalName = columnName,
+                definition = "",
+                datatype = dataType,
+                comment = "",
+                isPrimary = primaryKeyColumns.Contains(columnName),
+                isFK = foreignKeyColumns.Contains(columnName),
+                isNullable = string.Equals(reader.GetString(5), "YES", StringComparison.OrdinalIgnoreCase),
+                physicalOnly = false,
+                logicalOnly = false
+            });
+        }
+
+        return attributes
+            .OrderBy(item => GetSqlAttributeOrder(item))
+            .ToList();
+    }
+
+    private static async Task<IReadOnlyList<object>> LoadPostgreSqlTableColumnsAsync(
+        NpgsqlConnection connection,
+        SqlServerTableKey tableKey,
+        CancellationToken cancellationToken)
+    {
+        var primaryKeyColumns = await LoadPostgreSqlKeyColumnsAsync(connection, tableKey, "PRIMARY KEY", cancellationToken);
+        var foreignKeyColumns = await LoadPostgreSqlKeyColumnsAsync(connection, tableKey, "FOREIGN KEY", cancellationToken);
+
+        const string sql = """
+            SELECT column_name,
+                   data_type,
+                   character_maximum_length,
+                   numeric_precision,
+                   numeric_scale,
+                   is_nullable,
+                   udt_name
+            FROM information_schema.columns
+            WHERE table_schema = @schema
+              AND table_name = @table
+            ORDER BY ordinal_position;
+            """;
+
+        var attributes = new List<object>();
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@schema", tableKey.Schema);
+        command.Parameters.AddWithValue("@table", tableKey.Name);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var columnName = reader.GetString(0);
+            var dataType = FormatPostgreSqlDatatype(
+                reader.GetString(1),
+                reader.IsDBNull(6) ? null : reader.GetString(6),
+                reader.IsDBNull(2) ? null : reader.GetInt32(2),
+                reader.IsDBNull(3) ? null : Convert.ToInt32(reader.GetInt32(3)),
                 reader.IsDBNull(4) ? null : Convert.ToInt32(reader.GetInt32(4)));
 
             attributes.Add(new
@@ -1010,6 +1404,40 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
         return columnNames;
     }
 
+    private static async Task<HashSet<string>> LoadPostgreSqlKeyColumnsAsync(
+        NpgsqlConnection connection,
+        SqlServerTableKey tableKey,
+        string constraintType,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT kcu.column_name
+            FROM information_schema.table_constraints tc
+            INNER JOIN information_schema.key_column_usage kcu
+                ON tc.constraint_name = kcu.constraint_name
+               AND tc.constraint_schema = kcu.constraint_schema
+               AND tc.table_schema = kcu.table_schema
+               AND tc.table_name = kcu.table_name
+            WHERE tc.table_schema = @schema
+              AND tc.table_name = @table
+              AND tc.constraint_type = @constraintType;
+            """;
+
+        var columnNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@schema", tableKey.Schema);
+        command.Parameters.AddWithValue("@table", tableKey.Name);
+        command.Parameters.AddWithValue("@constraintType", constraintType);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            columnNames.Add(reader.GetString(0));
+        }
+
+        return columnNames;
+    }
+
     private static string FormatSqlServerDatatype(
         string dataType,
         int? characterMaximumLength,
@@ -1025,6 +1453,28 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
             "decimal" or "numeric"
                 when numericPrecision.HasValue && numericScale.HasValue
                 => $"{normalized}({numericPrecision.Value},{numericScale.Value})",
+            _ => normalized
+        };
+    }
+
+    private static string FormatPostgreSqlDatatype(
+        string dataType,
+        string? udtName,
+        int? characterMaximumLength,
+        int? numericPrecision,
+        int? numericScale)
+    {
+        var normalized = dataType.ToLowerInvariant();
+        return normalized switch
+        {
+            "character varying" or "varchar" when characterMaximumLength.HasValue
+                => $"varchar({characterMaximumLength.Value})",
+            "character" or "char" when characterMaximumLength.HasValue
+                => $"char({characterMaximumLength.Value})",
+            "numeric" or "decimal" when numericPrecision.HasValue && numericScale.HasValue
+                => $"numeric({numericPrecision.Value},{numericScale.Value})",
+            "array" when !string.IsNullOrWhiteSpace(udtName)
+                => $"{udtName.TrimStart('_').ToLowerInvariant()}[]",
             _ => normalized
         };
     }
@@ -1063,6 +1513,46 @@ public sealed class SchemaIntrospectionService : ISchemaIntrospectionService
 
         var foreignKeys = new List<SqlServerForeignKeyInfo>();
         await using var command = new SqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            foreignKeys.Add(new SqlServerForeignKeyInfo(
+                reader.GetString(0),
+                new SqlServerTableKey(reader.GetString(1), reader.GetString(2)),
+                reader.GetString(3),
+                new SqlServerTableKey(reader.GetString(4), reader.GetString(5)),
+                reader.GetString(6)));
+        }
+
+        return foreignKeys;
+    }
+
+    private static async Task<IReadOnlyList<SqlServerForeignKeyInfo>> LoadPostgreSqlForeignKeysAsync(
+        NpgsqlConnection connection,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT tc.constraint_name,
+                   ccu.table_schema AS parent_schema,
+                   ccu.table_name AS parent_table,
+                   ccu.column_name AS parent_column,
+                   kcu.table_schema AS child_schema,
+                   kcu.table_name AS child_table,
+                   kcu.column_name AS child_column
+            FROM information_schema.table_constraints tc
+            INNER JOIN information_schema.key_column_usage kcu
+                ON tc.constraint_name = kcu.constraint_name
+               AND tc.constraint_schema = kcu.constraint_schema
+            INNER JOIN information_schema.constraint_column_usage ccu
+                ON ccu.constraint_name = tc.constraint_name
+               AND ccu.constraint_schema = tc.constraint_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+            ORDER BY tc.constraint_name, kcu.ordinal_position;
+            """;
+
+        var foreignKeys = new List<SqlServerForeignKeyInfo>();
+        await using var command = new NpgsqlCommand(sql, connection);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         while (await reader.ReadAsync(cancellationToken))
