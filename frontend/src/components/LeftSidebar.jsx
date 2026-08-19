@@ -89,6 +89,7 @@ export default function LeftSidebar({
   const databasePlaceholder = reverseEngineeringProvider === "postgresql" ? "postgres" : "master";
   const userNamePlaceholder = reverseEngineeringProvider === "postgresql" ? "postgres" : "sa";
   const serverPlaceholder = reverseEngineeringProvider === "postgresql" ? "localhost" : "localhost";
+  const portPlaceholder = reverseEngineeringProvider === "postgresql" ? "5432" : "";
 
   useEffect(() => {
     if (!isDrawingPaletteOpen) {
@@ -408,6 +409,17 @@ export default function LeftSidebar({
                     placeholder={databasePlaceholder}
                   />
                 </label>
+
+                {reverseEngineeringProvider === "postgresql" ? (
+                  <label className="field-group">
+                    <span>Port</span>
+                    <input
+                      value={reverseEngineering?.port ?? ""}
+                      onChange={(event) => onReverseEngineeringChange("port", event.target.value)}
+                      placeholder={portPlaceholder}
+                    />
+                  </label>
+                ) : null}
 
                 <label className="field-group">
                   <span>User Name</span>

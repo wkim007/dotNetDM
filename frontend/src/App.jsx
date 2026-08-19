@@ -1051,6 +1051,7 @@ function buildReverseEngineeringConnectionString(provider, reverseEngineering) {
 
   if (normalized === "postgresql") {
     const server = String(reverseEngineering.server ?? "").trim();
+    const port = String(reverseEngineering.port ?? "").trim() || "5432";
     const database = String(reverseEngineering.databaseNameInput ?? "").trim() || "postgres";
     const userName = String(reverseEngineering.userName ?? "").trim();
     const password = String(reverseEngineering.password ?? "");
@@ -1058,6 +1059,7 @@ function buildReverseEngineeringConnectionString(provider, reverseEngineering) {
 
     return [
       `Host=${server}`,
+      `Port=${port}`,
       `Database=${database}`,
       `Username=${userName}`,
       `Password=${password}`,
@@ -2734,6 +2736,7 @@ export default function App() {
     dialogStep: "databases",
     connectionString: "",
     server: "",
+    port: "5432",
     databaseNameInput: "master",
     userName: "",
     password: "",
