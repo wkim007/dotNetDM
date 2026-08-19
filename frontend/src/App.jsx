@@ -1049,6 +1049,23 @@ function buildReverseEngineeringConnectionString(provider, reverseEngineering) {
     ].join(";");
   }
 
+  if (normalized === "postgresql") {
+    const server = String(reverseEngineering.server ?? "").trim();
+    const database = String(reverseEngineering.databaseNameInput ?? "").trim() || "postgres";
+    const userName = String(reverseEngineering.userName ?? "").trim();
+    const password = String(reverseEngineering.password ?? "");
+    const encrypt = Boolean(reverseEngineering.useEncryptedConnection);
+
+    return [
+      `Host=${server}`,
+      `Database=${database}`,
+      `Username=${userName}`,
+      `Password=${password}`,
+      `SSL Mode=${encrypt ? "Require" : "Disable"}`,
+      `Trust Server Certificate=True`
+    ].join(";");
+  }
+
   return String(reverseEngineering.connectionString ?? "").trim();
 }
 
@@ -5822,7 +5839,7 @@ export default function App() {
     const provider = normalizeDbEngine(model.project?.database);
     const connectionString = buildReverseEngineeringConnectionString(provider, reverseEngineering);
 
-    if (provider === "sqlserver") {
+    if (provider === "sqlserver" || provider === "postgresql") {
       if (!String(reverseEngineering.server ?? "").trim()) {
         setStatus("Enter a server name before connecting.");
         return;

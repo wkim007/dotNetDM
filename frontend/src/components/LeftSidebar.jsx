@@ -84,6 +84,11 @@ export default function LeftSidebar({
     reverseEngineeringProvider === "mongodb" ||
     reverseEngineeringProvider === "sqlserver" ||
     reverseEngineeringProvider === "postgresql";
+  const usesStructuredReverseEngineeringForm =
+    reverseEngineeringProvider === "sqlserver" || reverseEngineeringProvider === "postgresql";
+  const databasePlaceholder = reverseEngineeringProvider === "postgresql" ? "postgres" : "master";
+  const userNamePlaceholder = reverseEngineeringProvider === "postgresql" ? "postgres" : "sa";
+  const serverPlaceholder = reverseEngineeringProvider === "postgresql" ? "localhost" : "localhost";
 
   useEffect(() => {
     if (!isDrawingPaletteOpen) {
@@ -384,14 +389,14 @@ export default function LeftSidebar({
               <input value={project.database} readOnly />
             </div>
 
-            {reverseEngineeringProvider === "sqlserver" ? (
+            {usesStructuredReverseEngineeringForm ? (
               <>
                 <label className="field-group">
                   <span>Server</span>
                   <input
                     value={reverseEngineering?.server ?? ""}
                     onChange={(event) => onReverseEngineeringChange("server", event.target.value)}
-                    placeholder="localhost"
+                    placeholder={serverPlaceholder}
                   />
                 </label>
 
@@ -400,7 +405,7 @@ export default function LeftSidebar({
                   <input
                     value={reverseEngineering?.databaseNameInput ?? ""}
                     onChange={(event) => onReverseEngineeringChange("databaseNameInput", event.target.value)}
-                    placeholder="master"
+                    placeholder={databasePlaceholder}
                   />
                 </label>
 
@@ -409,7 +414,7 @@ export default function LeftSidebar({
                   <input
                     value={reverseEngineering?.userName ?? ""}
                     onChange={(event) => onReverseEngineeringChange("userName", event.target.value)}
-                    placeholder="sa"
+                    placeholder={userNamePlaceholder}
                   />
                 </label>
 
@@ -455,7 +460,7 @@ export default function LeftSidebar({
             </div>
 
             {!reverseEngineeringSupportsConnection ? (
-              <p className="empty-state">Reverse engineering UI is currently implemented for MongoDB and MS SQL Server.</p>
+              <p className="empty-state">Reverse engineering UI is currently implemented for MongoDB, PostgreSQL, and MS SQL Server.</p>
             ) : null}
 
           </div>
