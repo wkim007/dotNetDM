@@ -43,6 +43,7 @@ export default function LeftSidebar({
   reverseEngineering,
   onJsonDraftChange,
   onOpenModelProperties,
+  onOpenThemeSettings,
   onOpenAiSettings,
   onAutoLayout,
   onAddEntity,
@@ -263,6 +264,10 @@ export default function LeftSidebar({
 
         <button type="button" className="secondary-button full-width-button" onClick={onOpenModelProperties}>
           Model Properties
+        </button>
+
+        <button type="button" className="secondary-button full-width-button" onClick={onOpenThemeSettings}>
+          Theme Settings
         </button>
 
         <section className="panel ai-modeler-panel">

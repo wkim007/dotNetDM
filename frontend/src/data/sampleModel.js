@@ -10,7 +10,16 @@ export const sampleModel = {
     displayLevel: "Column",
     logicalNotation: "IDEF1x",
     physicalNotation: "IDEF1x",
-    lineStyle: "curve"
+    lineStyle: "curve",
+    theme: {
+      defaultFont: "Outfit",
+      diagramFill: "#0d1520",
+      entityFont: "Outfit",
+      entityFill: "#202b3a",
+      attributeFont: "Outfit",
+      fkColumnColor: "#8ec0ff",
+      pkColumnColor: "#ffd26b"
+    }
   },
   activeDiagramId: "er-diagram-1",
   diagrams: [

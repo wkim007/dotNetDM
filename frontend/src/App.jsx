@@ -133,6 +133,23 @@ const DISPLAY_LEVEL_OPTIONS_LOGICAL = [
 const LOGICAL_NOTATION_OPTIONS = ["IDEF1x", "Information Engineering"];
 const PHYSICAL_NOTATION_OPTIONS = ["IDEF1x", "Information Engineering", "Data Warehousing", "Graph"];
 const AI_ENGINE_OPTIONS = ["Azure OpenAI", "OpenAI"];
+const THEME_FONT_OPTIONS = [
+  "Outfit",
+  "Source Serif 4",
+  "Inter",
+  "Georgia",
+  "Arial",
+  "Courier New"
+];
+const DEFAULT_THEME_SETTINGS = {
+  defaultFont: "Outfit",
+  diagramFill: "#0d1520",
+  entityFont: "Outfit",
+  entityFill: "#202b3a",
+  attributeFont: "Outfit",
+  fkColumnColor: "#8ec0ff",
+  pkColumnColor: "#ffd26b"
+};
 const GENERIC_TYPES = ["integer", "bigint", "numeric", "varchar", "text", "boolean", "date", "timestamp"];
 const ORACLE_TYPES = [
   "number",
@@ -686,8 +703,29 @@ function syncProjectWithActiveDiagram(modelLike, nextProject = modelLike.project
 function mergeProjectDefaults(project) {
   return {
     ...sampleModel.project,
-    ...(project ?? {})
+    ...(project ?? {}),
+    theme: {
+      ...DEFAULT_THEME_SETTINGS,
+      ...(sampleModel.project?.theme ?? {}),
+      ...(project?.theme ?? {})
+    }
   };
+}
+
+function toRgba(hex, alpha) {
+  const normalized = String(hex ?? "").trim().replace("#", "");
+  const expanded = normalized.length === 3
+    ? normalized.split("").map((char) => `${char}${char}`).join("")
+    : normalized;
+
+  if (!/^[\da-fA-F]{6}$/.test(expanded)) {
+    return `rgba(255,255,255,${alpha})`;
+  }
+
+  const red = parseInt(expanded.slice(0, 2), 16);
+  const green = parseInt(expanded.slice(2, 4), 16);
+  const blue = parseInt(expanded.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
 function CopyIcon() {
@@ -2692,6 +2730,7 @@ export default function App() {
   const [jsonDraft, setJsonDraft] = useState(() => readJsonDraft());
   const [isJsonViewerOpen, setIsJsonViewerOpen] = useState(false);
   const [isModelPropertiesOpen, setIsModelPropertiesOpen] = useState(false);
+  const [isThemeSettingsOpen, setIsThemeSettingsOpen] = useState(false);
   const [isAiSettingsOpen, setIsAiSettingsOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [isAiTuningOpen, setIsAiTuningOpen] = useState(false);
@@ -2759,6 +2798,10 @@ export default function App() {
       ...(savedAiModelerSettings ?? {})
     })
   );
+  const [themeDraft, setThemeDraft] = useState(() => ({
+    ...DEFAULT_THEME_SETTINGS,
+    ...(initialModel.project?.theme ?? {})
+  }));
   const [aiLoading, setAiLoading] = useState(false);
   const [aiActiveTask, setAiActiveTask] = useState("");
   const [aiStartedAt, setAiStartedAt] = useState(0);
@@ -2768,6 +2811,27 @@ export default function App() {
   const activeDiagram = useMemo(
     () => model.diagrams.find((diagram) => diagram.id === model.activeDiagramId) ?? model.diagrams[0],
     [model]
+  );
+  const resolvedTheme = useMemo(
+    () => ({
+      ...DEFAULT_THEME_SETTINGS,
+      ...(model.project?.theme ?? {})
+    }),
+    [model.project?.theme]
+  );
+  const themeCssVars = useMemo(
+    () => ({
+      "--default-font": `"${resolvedTheme.defaultFont}", sans-serif`,
+      "--entity-font": `"${resolvedTheme.entityFont}", sans-serif`,
+      "--attribute-font": `"${resolvedTheme.attributeFont}", sans-serif`,
+      "--diagram-fill": resolvedTheme.diagramFill,
+      "--entity-fill": toRgba(resolvedTheme.entityFill, 0.95),
+      "--pk-color": resolvedTheme.pkColumnColor,
+      "--pk-color-soft": toRgba(resolvedTheme.pkColumnColor, 0.18),
+      "--fk-color": resolvedTheme.fkColumnColor,
+      "--fk-color-soft": toRgba(resolvedTheme.fkColumnColor, 0.22)
+    }),
+    [resolvedTheme]
   );
   const visibleDiagramEntities = useMemo(
     () =>
@@ -2875,6 +2939,15 @@ export default function App() {
       setSummarySubjectAreaId(summarySubjectAreas[0]?.id ?? "model");
     }
   }, [isSummaryOpen, summarySubjectAreaId, summarySubjectAreas]);
+
+  useEffect(() => {
+    if (!isThemeSettingsOpen) {
+      setThemeDraft({
+        ...DEFAULT_THEME_SETTINGS,
+        ...(model.project?.theme ?? {})
+      });
+    }
+  }, [isThemeSettingsOpen, model.project?.theme]);
 
   useEffect(() => {
     if (!selectedEntityId) {
@@ -3408,6 +3481,48 @@ export default function App() {
     if (field === "lineStyle") {
       setStatus(`Changed line style to ${value}.`);
     }
+  }
+
+  function handleThemeDraftChange(field, value) {
+    setThemeDraft((current) => ({
+      ...current,
+      [field]: value
+    }));
+  }
+
+  function handleOpenThemeSettings() {
+    setThemeDraft({
+      ...DEFAULT_THEME_SETTINGS,
+      ...(model.project?.theme ?? {})
+    });
+    setIsThemeSettingsOpen(true);
+  }
+
+  function handleApplyThemeSettings() {
+    setModel((current) => ({
+      ...current,
+      project: {
+        ...current.project,
+        theme: {
+          ...DEFAULT_THEME_SETTINGS,
+          ...themeDraft
+        }
+      }
+    }));
+    setIsThemeSettingsOpen(false);
+    setStatus("Applied theme settings.");
+  }
+
+  function handleResetThemeSettings() {
+    setThemeDraft({ ...DEFAULT_THEME_SETTINGS });
+  }
+
+  function handleCancelThemeSettings() {
+    setThemeDraft({
+      ...DEFAULT_THEME_SETTINGS,
+      ...(model.project?.theme ?? {})
+    });
+    setIsThemeSettingsOpen(false);
   }
 
   function handleAddSchema() {
@@ -6122,9 +6237,10 @@ export default function App() {
       style={
         isDesktopLayout
           ? {
-              gridTemplateColumns: `${panelWidths.left}px 10px minmax(760px, 1fr) 10px ${panelWidths.right}px`
+              gridTemplateColumns: `${panelWidths.left}px 10px minmax(760px, 1fr) 10px ${panelWidths.right}px`,
+              ...themeCssVars
             }
-          : undefined
+          : themeCssVars
       }
     >
       <input
@@ -6159,6 +6275,7 @@ export default function App() {
         reverseEngineering={reverseEngineering}
         onJsonDraftChange={setJsonDraft}
         onOpenModelProperties={() => setIsModelPropertiesOpen(true)}
+        onOpenThemeSettings={handleOpenThemeSettings}
         onOpenAiSettings={() => setIsAiSettingsOpen(true)}
         onAutoLayout={handleAutoLayout}
         onAddEntity={handleAddEntity}
@@ -6413,6 +6530,118 @@ export default function App() {
                   </select>
                 </label>
               </section>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isThemeSettingsOpen ? (
+        <div className="json-modal-backdrop" role="presentation">
+          <section
+            className="json-modal model-properties-modal theme-settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="theme-settings-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="json-modal-header">
+              <h2 id="theme-settings-title">Theme Settings</h2>
+            </div>
+
+            <div className="json-modal-body model-properties-body theme-settings-body">
+              <section className="panel theme-settings-panel">
+                <div className="panel-label">Theme</div>
+
+                <label className="field-group">
+                  <span>Default Font</span>
+                  <select
+                    value={themeDraft.defaultFont}
+                    onChange={(event) => handleThemeDraftChange("defaultFont", event.target.value)}
+                  >
+                    {THEME_FONT_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field-group">
+                  <span>Diagram Fill</span>
+                  <input
+                    type="color"
+                    value={themeDraft.diagramFill}
+                    onChange={(event) => handleThemeDraftChange("diagramFill", event.target.value)}
+                  />
+                </label>
+
+                <label className="field-group">
+                  <span>Entity Font</span>
+                  <select
+                    value={themeDraft.entityFont}
+                    onChange={(event) => handleThemeDraftChange("entityFont", event.target.value)}
+                  >
+                    {THEME_FONT_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field-group">
+                  <span>Entity Fill</span>
+                  <input
+                    type="color"
+                    value={themeDraft.entityFill}
+                    onChange={(event) => handleThemeDraftChange("entityFill", event.target.value)}
+                  />
+                </label>
+
+                <label className="field-group">
+                  <span>Attribute Font</span>
+                  <select
+                    value={themeDraft.attributeFont}
+                    onChange={(event) => handleThemeDraftChange("attributeFont", event.target.value)}
+                  >
+                    {THEME_FONT_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field-group">
+                  <span>FK Column Color</span>
+                  <input
+                    type="color"
+                    value={themeDraft.fkColumnColor}
+                    onChange={(event) => handleThemeDraftChange("fkColumnColor", event.target.value)}
+                  />
+                </label>
+
+                <label className="field-group">
+                  <span>PK Column Color</span>
+                  <input
+                    type="color"
+                    value={themeDraft.pkColumnColor}
+                    onChange={(event) => handleThemeDraftChange("pkColumnColor", event.target.value)}
+                  />
+                </label>
+              </section>
+            </div>
+
+            <div className="button-row theme-settings-actions">
+              <button type="button" className="secondary-button" onClick={handleResetThemeSettings}>
+                Reset
+              </button>
+              <button type="button" className="secondary-button" onClick={handleApplyThemeSettings}>
+                Close
+              </button>
+              <button type="button" className="secondary-button" onClick={handleCancelThemeSettings}>
+                Cancel
+              </button>
             </div>
           </section>
         </div>
