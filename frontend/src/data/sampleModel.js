@@ -17,6 +17,9 @@ export const sampleModel = {
       entityFont: "Outfit",
       entityFill: "#202b3a",
       attributeFont: "Outfit",
+      relationshipTextFont: "Outfit",
+      relationshipLineColor: "#42d9d4",
+      relationshipLineWidth: "2.5",
       fkColumnColor: "#8ec0ff",
       pkColumnColor: "#ffd26b"
     }

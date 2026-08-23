@@ -15,6 +15,9 @@
   --default-font: "Outfit", sans-serif;
   --entity-font: "Outfit", sans-serif;
   --attribute-font: "Outfit", sans-serif;
+  --relationship-font: "Outfit", sans-serif;
+  --relationship-line-color: #42d9d4;
+  --relationship-line-width: 2.5;
   --diagram-fill: #0d1520;
   --entity-fill: rgba(32, 43, 58, 0.95);
   --pk-color: #ffd26b;
@@ -1297,8 +1300,8 @@ body.panel-resizing {
 
 .diagram-link {
   fill: none;
-  stroke: var(--accent);
-  stroke-width: 2.5px;
+  stroke: var(--relationship-line-color);
+  stroke-width: calc(var(--relationship-line-width) * 1px);
   opacity: 0.95;
   cursor: pointer;
 }
@@ -1358,15 +1361,15 @@ body.panel-resizing {
 .diagram-link-parent-bar,
 .diagram-link-ie-prong {
   fill: none;
-  stroke: #93a6bd;
-  stroke-width: 2px;
+  stroke: var(--relationship-line-color);
+  stroke-width: calc((var(--relationship-line-width) * 0.8 + 0.6) * 1px);
   stroke-linecap: round;
 }
 
 .diagram-link-ie-circle {
   fill: rgba(12, 19, 30, 0.98);
-  stroke: #d8e1ec;
-  stroke-width: 1.8px;
+  stroke: var(--relationship-line-color);
+  stroke-width: calc((var(--relationship-line-width) * 0.72) * 1px);
 }
 
 .diagram-link-notation.selected .diagram-link-parent-bar,
@@ -1381,9 +1384,9 @@ body.panel-resizing {
 }
 
 .diagram-link-graph-arrow {
-  fill: #93a6bd;
-  stroke: #d8e1ec;
-  stroke-width: 1.2px;
+  fill: var(--relationship-line-color);
+  stroke: var(--relationship-line-color);
+  stroke-width: calc((var(--relationship-line-width) * 0.48) * 1px);
   stroke-linejoin: round;
 }
 
@@ -1395,8 +1398,8 @@ body.panel-resizing {
 
 .diagram-link-subcategory-marker {
   fill: rgba(12, 19, 30, 0.98);
-  stroke: var(--accent);
-  stroke-width: 2px;
+  stroke: var(--relationship-line-color);
+  stroke-width: calc((var(--relationship-line-width) * 0.8) * 1px);
   cursor: pointer;
 }
 
@@ -1522,6 +1525,7 @@ body.panel-resizing {
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.04em;
+  font-family: var(--relationship-font);
   pointer-events: none;
 }
 
@@ -1530,6 +1534,7 @@ body.panel-resizing {
   font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.02em;
+  font-family: var(--relationship-font);
   pointer-events: none;
 }
 

@@ -147,6 +147,9 @@ const DEFAULT_THEME_SETTINGS = {
   entityFont: "Outfit",
   entityFill: "#202b3a",
   attributeFont: "Outfit",
+  relationshipTextFont: "Outfit",
+  relationshipLineColor: "#42d9d4",
+  relationshipLineWidth: "2.5",
   fkColumnColor: "#8ec0ff",
   pkColumnColor: "#ffd26b"
 };
@@ -2824,6 +2827,9 @@ export default function App() {
       "--default-font": `"${resolvedTheme.defaultFont}", sans-serif`,
       "--entity-font": `"${resolvedTheme.entityFont}", sans-serif`,
       "--attribute-font": `"${resolvedTheme.attributeFont}", sans-serif`,
+      "--relationship-font": `"${resolvedTheme.relationshipTextFont}", sans-serif`,
+      "--relationship-line-color": resolvedTheme.relationshipLineColor,
+      "--relationship-line-width": String(resolvedTheme.relationshipLineWidth ?? "2.5"),
       "--diagram-fill": resolvedTheme.diagramFill,
       "--entity-fill": toRgba(resolvedTheme.entityFill, 0.95),
       "--pk-color": resolvedTheme.pkColumnColor,
@@ -6610,6 +6616,41 @@ export default function App() {
                       </option>
                     ))}
                   </select>
+                </label>
+
+                <label className="field-group">
+                  <span>Relationship Text Font</span>
+                  <select
+                    value={themeDraft.relationshipTextFont}
+                    onChange={(event) => handleThemeDraftChange("relationshipTextFont", event.target.value)}
+                  >
+                    {THEME_FONT_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field-group">
+                  <span>Relationship Line Color</span>
+                  <input
+                    type="color"
+                    value={themeDraft.relationshipLineColor}
+                    onChange={(event) => handleThemeDraftChange("relationshipLineColor", event.target.value)}
+                  />
+                </label>
+
+                <label className="field-group">
+                  <span>Relationship Line Width</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="8"
+                    step="0.5"
+                    value={themeDraft.relationshipLineWidth}
+                    onChange={(event) => handleThemeDraftChange("relationshipLineWidth", event.target.value)}
+                  />
                 </label>
 
                 <label className="field-group">
