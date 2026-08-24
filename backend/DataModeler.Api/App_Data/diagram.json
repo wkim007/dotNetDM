@@ -11,9 +11,19 @@
   },
   "tabs": [
     {
-      "id": "er-diagram-1",
-      "label": "ER_Diagram_1",
+      "id": "369",
+      "label": "Drawing Objects",
       "active": true
+    },
+    {
+      "id": "371",
+      "label": "Physical with Views",
+      "active": false
+    },
+    {
+      "id": "373",
+      "label": "Attribute/Column Display",
+      "active": false
     }
   ],
   "entities": [
@@ -22,7 +32,7 @@
       "name": "EMPLOYEE",
       "physicalName": "EMP",
       "comment": "EMPLOYEE is a person that works for the VIDEO STORE",
-      "x": 528,
+      "x": 521,
       "y": 790,
       "fields": [
         {
@@ -98,7 +108,7 @@
       "name": "MOVIE",
       "physicalName": "MOVIE",
       "comment": "A MOVIE is any video that can be rented\uFFFD for the entity \uFFFDMOVIE",
-      "x": 58,
+      "x": 51,
       "y": 1546,
       "fields": [
         {
@@ -174,7 +184,7 @@
       "name": "STORE",
       "physicalName": "STORE",
       "comment": "A STORE is one of the MOVIE STORES where a customer can rent a movie",
-      "x": 58,
+      "x": 51,
       "y": 2546,
       "fields": [
         {
@@ -232,7 +242,7 @@
       "name": "MOVIE RENTAL RECORD",
       "physicalName": "MO_RENT_REC",
       "comment": "A MOVIE RENTAL RECORD is a record that  is kept on every MOVIE in the STORE  on who and when a MOVIE is rented",
-      "x": 58,
+      "x": 51,
       "y": 48,
       "fields": [
         {
@@ -314,7 +324,7 @@
       "name": "MOVIE COPY",
       "physicalName": "MOVIE_COPY",
       "comment": "A MOVIE COPY is a single copy of a MOVIE",
-      "x": 58,
+      "x": 51,
       "y": 2098,
       "fields": [
         {
@@ -348,8 +358,8 @@
       "name": "CUSTOMER",
       "physicalName": "CUST",
       "comment": "A CUSTOMER is a person or organization who has rented a movie within the past year.",
-      "x": 678,
-      "y": 66,
+      "x": 642,
+      "y": 69,
       "fields": [
         {
           "id": "244",
@@ -406,8 +416,8 @@
       "name": "CUSTOMER CREDIT",
       "physicalName": "CUST_CREDIT",
       "comment": "CUSTOMER CREDIT is the status of available credit for a CUSTOMER",
-      "x": 528,
-      "y": 504,
+      "x": 774,
+      "y": 544,
       "fields": [
         {
           "id": "264",
@@ -440,7 +450,7 @@
       "name": "MOVIE_STORE",
       "physicalName": "MOVIE_STORE",
       "comment": "",
-      "x": 58,
+      "x": 51,
       "y": 2360,
       "fields": [
         {
@@ -462,7 +472,7 @@
       "name": "PAYMENT",
       "physicalName": "PAYMENT",
       "comment": "",
-      "x": 528,
+      "x": 521,
       "y": 1342,
       "fields": [
         {
@@ -562,7 +572,7 @@
       "name": "CUSTOMER_INVOICE",
       "physicalName": "CUSTOMER_INVOICE",
       "comment": "",
-      "x": 58,
+      "x": 51,
       "y": 638,
       "fields": [
         {
@@ -698,7 +708,7 @@
       "name": "OVERDUE_NOTICE",
       "physicalName": "OVERDUE_NOTICE",
       "comment": "",
-      "x": 528,
+      "x": 521,
       "y": 2046,
       "fields": [
         {
