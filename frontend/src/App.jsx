@@ -192,6 +192,20 @@ function normalizeThemeLibrary(project) {
     theme: normalizeThemeSettings(activeTheme?.settings)
   };
 }
+
+function getDiagramThemeId(diagram, project) {
+  const requestedThemeId = String(
+    diagram?.themeId ??
+      diagram?.["theme-id"] ??
+      project?.activeThemeId ??
+      DEFAULT_THEME_ID
+  );
+  const normalizedThemeLibrary = normalizeThemeLibrary(project);
+
+  return normalizedThemeLibrary.themes.some((theme) => theme.id === requestedThemeId)
+    ? requestedThemeId
+    : normalizedThemeLibrary.activeThemeId;
+}
 const GENERIC_TYPES = ["integer", "bigint", "numeric", "varchar", "text", "boolean", "date", "timestamp"];
 const ORACLE_TYPES = [
   "number",
@@ -730,12 +744,18 @@ function getDatatypeOptionsForEngine(engine) {
 function syncProjectWithActiveDiagram(modelLike, nextProject = modelLike.project, nextActiveDiagramId = modelLike.activeDiagramId) {
   const activeDiagram =
     modelLike.diagrams.find((diagram) => diagram.id === nextActiveDiagramId) ?? modelLike.diagrams[0];
+  const normalizedThemeLibrary = normalizeThemeLibrary(nextProject);
+  const activeThemeId = getDiagramThemeId(activeDiagram, normalizedThemeLibrary);
+  const activeTheme =
+    normalizedThemeLibrary.themes.find((theme) => theme.id === activeThemeId) ?? normalizedThemeLibrary.themes[0];
 
   return {
     ...modelLike,
     activeDiagramId: nextActiveDiagramId,
     project: {
       ...nextProject,
+      activeThemeId,
+      theme: normalizeThemeSettings(activeTheme?.settings),
       diagramDefinition: activeDiagram?.definition ?? "",
       displayLevel: getDisplayLevelValueForViewMode(nextProject.viewMode, getDiagramDisplayLevelValue(activeDiagram, nextProject.viewMode))
     }
@@ -1813,6 +1833,7 @@ function exportModelToWorkspaceJson(model) {
           id: String(diagram.id),
           name: diagram.name,
           definition: diagram.definition ?? model.project?.diagramDefinition ?? "",
+          "theme-id": String(getDiagramThemeId(diagram, model.project)),
           displayLevelLogical: String(
             diagram.displayLevelLogical ??
               getDisplayLevelValueForViewMode("Logical View", getDefaultDisplayLevelForViewMode("Logical View"))
@@ -1984,6 +2005,21 @@ function importWorkspaceModel(payload) {
   const cachedViewMap = toIdMap(workspace.cachedViews ?? []);
   const activeDiagramId = String(payload?.meta?.activeDiagramId ?? activeSubjectArea.diagrams[0]?.id ?? "");
   const dbMeta = resolveDbMetaFromPayloadMeta(payload?.meta);
+  const importedThemes = Array.isArray(workspace?.themes)
+    ? workspace.themes.map((theme, index) => ({
+        id: String(theme?.id ?? `theme-${index + 1}`),
+        name: String(theme?.name ?? `Theme ${index + 1}`),
+        settings: normalizeThemeSettings(theme?.settings ?? theme)
+      }))
+    : [];
+  const importedActiveThemeId =
+    String(
+      payload?.meta?.activeThemeId ??
+        workspace?.activeThemeId ??
+        workspace?.themes?.find?.((theme) => theme?.isActive)?.id ??
+        importedThemes[0]?.id ??
+        DEFAULT_THEME_ID
+    );
   const shouldCollapseDocumentHelpers = isDocumentDatabase(dbMeta.label);
   const nestedFieldNames = shouldCollapseDocumentHelpers
     ? [...(workspace.entities ?? []), ...(workspace.views ?? []), ...(workspace.cachedViews ?? [])].reduce(
@@ -2199,6 +2235,7 @@ function importWorkspaceModel(payload) {
       id: String(diagram.id),
       name: diagram.name ?? `ER_Diagram_${diagramIndex + 1}`,
       definition: diagram.definition ?? "",
+      themeId: String(diagram?.themeId ?? diagram?.["theme-id"] ?? importedActiveThemeId ?? DEFAULT_THEME_ID),
       displayLevelLogical: String(diagram.displayLevelLogical ?? "1"),
       displayLevelPhysical: String(diagram.displayLevelPhysical ?? "1"),
       entities: [...entities, ...drawingEntities, ...annotationEntities],
@@ -2210,21 +2247,6 @@ function importWorkspaceModel(payload) {
   const viewMode = String(payload?.meta?.viewMode ?? "physical").toLowerCase() === "logical"
     ? "Logical View"
     : "Physical View";
-  const importedThemes = Array.isArray(workspace?.themes)
-    ? workspace.themes.map((theme, index) => ({
-        id: String(theme?.id ?? `theme-${index + 1}`),
-        name: String(theme?.name ?? `Theme ${index + 1}`),
-        settings: normalizeThemeSettings(theme?.settings ?? theme)
-      }))
-    : [];
-  const importedActiveThemeId =
-    String(
-      payload?.meta?.activeThemeId ??
-        workspace?.activeThemeId ??
-        workspace?.themes?.find?.((theme) => theme?.isActive)?.id ??
-        importedThemes[0]?.id ??
-        DEFAULT_THEME_ID
-    );
 
   return {
     project: {
@@ -2767,6 +2789,7 @@ function normalizeModel(rawModel) {
       project: normalizedProject,
       diagrams: baseModel.diagrams.map((diagram) => ({
         ...diagram,
+        themeId: getDiagramThemeId(diagram, normalizedProject),
         displayLevelLogical: String(
           diagram.displayLevelLogical ??
             getDisplayLevelValueForViewMode("Logical View", getDefaultDisplayLevelForViewMode("Logical View"))
@@ -2790,6 +2813,7 @@ function normalizeModel(rawModel) {
       {
         id: diagramId,
         name: "ER_Diagram_1",
+        themeId: normalizedProject.activeThemeId ?? DEFAULT_THEME_ID,
         entities: baseModel.entities ?? [],
         relationships: baseModel.relationships ?? []
       }
@@ -2874,8 +2898,12 @@ export default function App() {
     })
   );
   const [themeLibraryDraft, setThemeLibraryDraft] = useState(() => normalizeThemeLibrary(initialModel.project).themes);
-  const [selectedThemeDraftId, setSelectedThemeDraftId] = useState(
-    () => normalizeThemeLibrary(initialModel.project).activeThemeId
+  const [selectedThemeDraftId, setSelectedThemeDraftId] = useState(() =>
+    getDiagramThemeId(
+      (initialModel.diagrams ?? []).find((diagram) => diagram.id === initialModel.activeDiagramId) ??
+        initialModel.diagrams?.[0],
+      initialModel.project
+    )
   );
   const [aiLoading, setAiLoading] = useState(false);
   const [aiActiveTask, setAiActiveTask] = useState("");
@@ -3026,9 +3054,9 @@ export default function App() {
     if (!isThemeSettingsOpen) {
       const normalizedThemeLibrary = normalizeThemeLibrary(model.project);
       setThemeLibraryDraft(normalizedThemeLibrary.themes);
-      setSelectedThemeDraftId(normalizedThemeLibrary.activeThemeId);
+      setSelectedThemeDraftId(getDiagramThemeId(activeDiagram, model.project));
     }
-  }, [isThemeSettingsOpen, model.project?.themes, model.project?.activeThemeId]);
+  }, [isThemeSettingsOpen, model.project?.themes, model.project?.activeThemeId, activeDiagram, model.project]);
 
   useEffect(() => {
     if (!selectedEntityId) {
@@ -3259,6 +3287,7 @@ export default function App() {
       id: `er-diagram-${Date.now()}`,
       name: "ER_Diagram_1",
       definition: "",
+      themeId: model.project?.activeThemeId ?? DEFAULT_THEME_ID,
       displayLevelLogical: getDisplayLevelValueForViewMode(
         "Logical View",
         getDefaultDisplayLevelForViewMode("Logical View")
@@ -3628,7 +3657,7 @@ export default function App() {
   function handleOpenThemeSettings() {
     const normalizedThemeLibrary = normalizeThemeLibrary(model.project);
     setThemeLibraryDraft(normalizedThemeLibrary.themes);
-    setSelectedThemeDraftId(normalizedThemeLibrary.activeThemeId);
+    setSelectedThemeDraftId(getDiagramThemeId(activeDiagram, model.project));
     setIsThemeSettingsOpen(true);
   }
 
@@ -3641,15 +3670,35 @@ export default function App() {
     const activeTheme =
       normalizedThemes.find((theme) => theme.id === selectedThemeDraftId) ?? normalizedThemes[0] ?? null;
 
-    setModel((current) => ({
-      ...current,
-      project: {
-        ...current.project,
-        activeThemeId: activeTheme?.id ?? DEFAULT_THEME_ID,
-        themes: normalizedThemes,
-        theme: normalizeThemeSettings(activeTheme?.settings)
-      }
-    }));
+    setModel((current) =>
+      syncProjectWithActiveDiagram(
+        {
+          ...current,
+          project: {
+            ...current.project,
+            activeThemeId: activeTheme?.id ?? DEFAULT_THEME_ID,
+            themes: normalizedThemes
+          },
+          diagrams: current.diagrams.map((diagram) => ({
+            ...diagram,
+            themeId:
+              diagram.id === current.activeDiagramId
+                ? activeTheme?.id ?? DEFAULT_THEME_ID
+                : getDiagramThemeId(diagram, {
+                    ...current.project,
+                    activeThemeId: activeTheme?.id ?? DEFAULT_THEME_ID,
+                    themes: normalizedThemes
+                  })
+          }))
+        },
+        {
+          ...current.project,
+          activeThemeId: activeTheme?.id ?? DEFAULT_THEME_ID,
+          themes: normalizedThemes
+        },
+        current.activeDiagramId
+      )
+    );
     setIsThemeSettingsOpen(false);
     setStatus(`Applied theme settings${activeTheme?.name ? `: ${activeTheme.name}` : ""}.`);
   }
@@ -3670,7 +3719,7 @@ export default function App() {
   function handleCancelThemeSettings() {
     const normalizedThemeLibrary = normalizeThemeLibrary(model.project);
     setThemeLibraryDraft(normalizedThemeLibrary.themes);
-    setSelectedThemeDraftId(normalizedThemeLibrary.activeThemeId);
+    setSelectedThemeDraftId(getDiagramThemeId(activeDiagram, model.project));
     setIsThemeSettingsOpen(false);
   }
 
@@ -5545,6 +5594,7 @@ export default function App() {
       id: `er-diagram-${Date.now()}`,
       name: `ER_Diagram_${nextNumber}`,
       definition: "",
+      themeId: getDiagramThemeId(activeDiagram, model.project),
       displayLevelLogical: getDisplayLevelValueForViewMode("Logical View", getDefaultDisplayLevelForViewMode("Logical View")),
       displayLevelPhysical: getDisplayLevelValueForViewMode("Physical View", getDefaultDisplayLevelForViewMode("Physical View")),
       entities: [],
