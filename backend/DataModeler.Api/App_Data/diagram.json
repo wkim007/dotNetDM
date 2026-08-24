@@ -11,19 +11,9 @@
   },
   "tabs": [
     {
-      "id": "369",
-      "label": "Drawing Objects",
+      "id": "er-diagram-1",
+      "label": "ER_Diagram_1",
       "active": true
-    },
-    {
-      "id": "371",
-      "label": "Physical with Views",
-      "active": false
-    },
-    {
-      "id": "373",
-      "label": "Attribute/Column Display",
-      "active": false
     }
   ],
   "entities": [
@@ -32,8 +22,8 @@
       "name": "EMPLOYEE",
       "physicalName": "EMP",
       "comment": "EMPLOYEE is a person that works for the VIDEO STORE",
-      "x": 705,
-      "y": 700,
+      "x": 621,
+      "y": 790,
       "fields": [
         {
           "id": "145",
@@ -108,8 +98,8 @@
       "name": "MOVIE",
       "physicalName": "MOVIE",
       "comment": "A MOVIE is any video that can be rented\uFFFD for the entity \uFFFDMOVIE",
-      "x": 48,
-      "y": 1357,
+      "x": 151,
+      "y": 1546,
       "fields": [
         {
           "id": "156",
@@ -184,8 +174,8 @@
       "name": "STORE",
       "physicalName": "STORE",
       "comment": "A STORE is one of the MOVIE STORES where a customer can rent a movie",
-      "x": 48,
-      "y": 2248,
+      "x": 151,
+      "y": 2546,
       "fields": [
         {
           "id": "148",
@@ -242,8 +232,8 @@
       "name": "MOVIE RENTAL RECORD",
       "physicalName": "MO_RENT_REC",
       "comment": "A MOVIE RENTAL RECORD is a record that  is kept on every MOVIE in the STORE  on who and when a MOVIE is rented",
-      "x": 48,
-      "y": 48,
+      "x": 56,
+      "y": 36,
       "fields": [
         {
           "id": "162",
@@ -324,8 +314,8 @@
       "name": "MOVIE COPY",
       "physicalName": "MOVIE_COPY",
       "comment": "A MOVIE COPY is a single copy of a MOVIE",
-      "x": 48,
-      "y": 1830,
+      "x": 151,
+      "y": 2098,
       "fields": [
         {
           "id": "169",
@@ -358,8 +348,8 @@
       "name": "CUSTOMER",
       "physicalName": "CUST",
       "comment": "A CUSTOMER is a person or organization who has rented a movie within the past year.",
-      "x": 518,
-      "y": 66,
+      "x": 821,
+      "y": 61,
       "fields": [
         {
           "id": "244",
@@ -416,8 +406,8 @@
       "name": "CUSTOMER CREDIT",
       "physicalName": "CUST_CREDIT",
       "comment": "CUSTOMER CREDIT is the status of available credit for a CUSTOMER",
-      "x": 518,
-      "y": 440,
+      "x": 795,
+      "y": 518,
       "fields": [
         {
           "id": "264",
@@ -450,8 +440,8 @@
       "name": "MOVIE_STORE",
       "physicalName": "MOVIE_STORE",
       "comment": "",
-      "x": 48,
-      "y": 2072,
+      "x": 151,
+      "y": 2360,
       "fields": [
         {
           "id": "330",
@@ -472,8 +462,8 @@
       "name": "PAYMENT",
       "physicalName": "PAYMENT",
       "comment": "",
-      "x": 518,
-      "y": 1155,
+      "x": 621,
+      "y": 1342,
       "fields": [
         {
           "id": "340",
@@ -572,8 +562,8 @@
       "name": "CUSTOMER_INVOICE",
       "physicalName": "CUSTOMER_INVOICE",
       "comment": "",
-      "x": 48,
-      "y": 554,
+      "x": 151,
+      "y": 638,
       "fields": [
         {
           "id": "279",
@@ -708,8 +698,8 @@
       "name": "OVERDUE_NOTICE",
       "physicalName": "OVERDUE_NOTICE",
       "comment": "",
-      "x": 518,
-      "y": 1760,
+      "x": 621,
+      "y": 2046,
       "fields": [
         {
           "id": "303",

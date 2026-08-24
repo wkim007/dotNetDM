@@ -11,6 +11,7 @@ export const sampleModel = {
     logicalNotation: "IDEF1x",
     physicalNotation: "IDEF1x",
     lineStyle: "curve",
+    activeThemeId: "default-theme",
     theme: {
       defaultFont: "Outfit",
       diagramFill: "#0d1520",
@@ -22,7 +23,25 @@ export const sampleModel = {
       relationshipLineWidth: "2.5",
       fkColumnColor: "#8ec0ff",
       pkColumnColor: "#ffd26b"
-    }
+    },
+    themes: [
+      {
+        id: "default-theme",
+        name: "Default Theme",
+        settings: {
+          defaultFont: "Outfit",
+          diagramFill: "#0d1520",
+          entityFont: "Outfit",
+          entityFill: "#202b3a",
+          attributeFont: "Outfit",
+          relationshipTextFont: "Outfit",
+          relationshipLineColor: "#42d9d4",
+          relationshipLineWidth: "2.5",
+          fkColumnColor: "#8ec0ff",
+          pkColumnColor: "#ffd26b"
+        }
+      }
+    ]
   },
   activeDiagramId: "er-diagram-1",
   diagrams: [

@@ -153,6 +153,45 @@ const DEFAULT_THEME_SETTINGS = {
   fkColumnColor: "#8ec0ff",
   pkColumnColor: "#ffd26b"
 };
+const DEFAULT_THEME_ID = "default-theme";
+
+function normalizeThemeSettings(settings) {
+  return {
+    ...DEFAULT_THEME_SETTINGS,
+    ...(settings ?? {})
+  };
+}
+
+function normalizeThemeLibrary(project) {
+  const legacyThemeSettings = normalizeThemeSettings({
+    ...(sampleModel.project?.theme ?? {}),
+    ...(project?.theme ?? {})
+  });
+  const sourceThemes = Array.isArray(project?.themes) && project.themes.length > 0
+    ? project.themes
+    : [
+        {
+          id: project?.activeThemeId ?? DEFAULT_THEME_ID,
+          name: "Default Theme",
+          settings: legacyThemeSettings
+        }
+      ];
+  const themes = sourceThemes.map((theme, index) => ({
+    id: String(theme?.id ?? `theme-${index + 1}`),
+    name: String(theme?.name ?? `Theme ${index + 1}`),
+    settings: normalizeThemeSettings(theme?.settings ?? theme)
+  }));
+  const activeThemeId = themes.some((theme) => theme.id === project?.activeThemeId)
+    ? String(project.activeThemeId)
+    : themes[0]?.id ?? DEFAULT_THEME_ID;
+  const activeTheme = themes.find((theme) => theme.id === activeThemeId) ?? themes[0];
+
+  return {
+    themes,
+    activeThemeId,
+    theme: normalizeThemeSettings(activeTheme?.settings)
+  };
+}
 const GENERIC_TYPES = ["integer", "bigint", "numeric", "varchar", "text", "boolean", "date", "timestamp"];
 const ORACLE_TYPES = [
   "number",
@@ -704,14 +743,11 @@ function syncProjectWithActiveDiagram(modelLike, nextProject = modelLike.project
 }
 
 function mergeProjectDefaults(project) {
+  const normalizedThemes = normalizeThemeLibrary(project);
   return {
     ...sampleModel.project,
     ...(project ?? {}),
-    theme: {
-      ...DEFAULT_THEME_SETTINGS,
-      ...(sampleModel.project?.theme ?? {}),
-      ...(project?.theme ?? {})
-    }
+    ...normalizedThemes
   };
 }
 
@@ -2801,10 +2837,15 @@ export default function App() {
       ...(savedAiModelerSettings ?? {})
     })
   );
-  const [themeDraft, setThemeDraft] = useState(() => ({
-    ...DEFAULT_THEME_SETTINGS,
-    ...(initialModel.project?.theme ?? {})
-  }));
+  const [themeLibraryDraft, setThemeLibraryDraft] = useState(() =>
+    (initialModel.project?.themes ?? []).map((theme) => ({
+      ...theme,
+      settings: normalizeThemeSettings(theme.settings)
+    }))
+  );
+  const [selectedThemeDraftId, setSelectedThemeDraftId] = useState(
+    () => initialModel.project?.activeThemeId ?? initialModel.project?.themes?.[0]?.id ?? DEFAULT_THEME_ID
+  );
   const [aiLoading, setAiLoading] = useState(false);
   const [aiActiveTask, setAiActiveTask] = useState("");
   const [aiStartedAt, setAiStartedAt] = useState(0);
@@ -2821,6 +2862,10 @@ export default function App() {
       ...(model.project?.theme ?? {})
     }),
     [model.project?.theme]
+  );
+  const selectedThemeDraft = useMemo(
+    () => themeLibraryDraft.find((theme) => theme.id === selectedThemeDraftId) ?? themeLibraryDraft[0] ?? null,
+    [themeLibraryDraft, selectedThemeDraftId]
   );
   const themeCssVars = useMemo(
     () => ({
@@ -2948,12 +2993,15 @@ export default function App() {
 
   useEffect(() => {
     if (!isThemeSettingsOpen) {
-      setThemeDraft({
-        ...DEFAULT_THEME_SETTINGS,
-        ...(model.project?.theme ?? {})
-      });
+      setThemeLibraryDraft(
+        (model.project?.themes ?? []).map((theme) => ({
+          ...theme,
+          settings: normalizeThemeSettings(theme.settings)
+        }))
+      );
+      setSelectedThemeDraftId(model.project?.activeThemeId ?? model.project?.themes?.[0]?.id ?? DEFAULT_THEME_ID);
     }
-  }, [isThemeSettingsOpen, model.project?.theme]);
+  }, [isThemeSettingsOpen, model.project?.themes, model.project?.activeThemeId]);
 
   useEffect(() => {
     if (!selectedEntityId) {
@@ -3490,44 +3538,120 @@ export default function App() {
   }
 
   function handleThemeDraftChange(field, value) {
-    setThemeDraft((current) => ({
-      ...current,
-      [field]: value
-    }));
+    setThemeLibraryDraft((current) =>
+      current.map((theme) =>
+        theme.id === selectedThemeDraftId
+          ? {
+              ...theme,
+              settings: {
+                ...normalizeThemeSettings(theme.settings),
+                [field]: value
+              }
+            }
+          : theme
+      )
+    );
+  }
+
+  function handleThemeNameChange(value) {
+    setThemeLibraryDraft((current) =>
+      current.map((theme) =>
+        theme.id === selectedThemeDraftId
+          ? {
+              ...theme,
+              name: value
+            }
+          : theme
+      )
+    );
+  }
+
+  function handleSelectThemeDraft(themeId) {
+    setSelectedThemeDraftId(themeId);
+  }
+
+  function handleAddThemeDraft() {
+    const nextIndex = themeLibraryDraft.length + 1;
+    const nextThemeId = `theme-${Date.now()}`;
+    const baseSettings = normalizeThemeSettings(selectedThemeDraft?.settings ?? DEFAULT_THEME_SETTINGS);
+    const nextTheme = {
+      id: nextThemeId,
+      name: `Theme ${nextIndex}`,
+      settings: baseSettings
+    };
+
+    setThemeLibraryDraft((current) => [...current, nextTheme]);
+    setSelectedThemeDraftId(nextThemeId);
+  }
+
+  function handleDeleteThemeDraft() {
+    if (themeLibraryDraft.length <= 1) {
+      return;
+    }
+
+    const selectedIndex = themeLibraryDraft.findIndex((theme) => theme.id === selectedThemeDraftId);
+    const remainingThemes = themeLibraryDraft.filter((theme) => theme.id !== selectedThemeDraftId);
+    const fallbackTheme =
+      remainingThemes[Math.min(selectedIndex, Math.max(remainingThemes.length - 1, 0))] ?? remainingThemes[0] ?? null;
+
+    setThemeLibraryDraft(remainingThemes);
+    setSelectedThemeDraftId(fallbackTheme?.id ?? DEFAULT_THEME_ID);
   }
 
   function handleOpenThemeSettings() {
-    setThemeDraft({
-      ...DEFAULT_THEME_SETTINGS,
-      ...(model.project?.theme ?? {})
-    });
+    setThemeLibraryDraft(
+      (model.project?.themes ?? []).map((theme) => ({
+        ...theme,
+        settings: normalizeThemeSettings(theme.settings)
+      }))
+    );
+    setSelectedThemeDraftId(model.project?.activeThemeId ?? model.project?.themes?.[0]?.id ?? DEFAULT_THEME_ID);
     setIsThemeSettingsOpen(true);
   }
 
   function handleApplyThemeSettings() {
+    const normalizedThemes = themeLibraryDraft.map((theme) => ({
+      ...theme,
+      name: String(theme.name ?? "").trim() || "Untitled Theme",
+      settings: normalizeThemeSettings(theme.settings)
+    }));
+    const activeTheme =
+      normalizedThemes.find((theme) => theme.id === selectedThemeDraftId) ?? normalizedThemes[0] ?? null;
+
     setModel((current) => ({
       ...current,
       project: {
         ...current.project,
-        theme: {
-          ...DEFAULT_THEME_SETTINGS,
-          ...themeDraft
-        }
+        activeThemeId: activeTheme?.id ?? DEFAULT_THEME_ID,
+        themes: normalizedThemes,
+        theme: normalizeThemeSettings(activeTheme?.settings)
       }
     }));
     setIsThemeSettingsOpen(false);
-    setStatus("Applied theme settings.");
+    setStatus(`Applied theme settings${activeTheme?.name ? `: ${activeTheme.name}` : ""}.`);
   }
 
   function handleResetThemeSettings() {
-    setThemeDraft({ ...DEFAULT_THEME_SETTINGS });
+    setThemeLibraryDraft((current) =>
+      current.map((theme) =>
+        theme.id === selectedThemeDraftId
+          ? {
+              ...theme,
+              settings: { ...DEFAULT_THEME_SETTINGS }
+            }
+          : theme
+      )
+    );
   }
 
   function handleCancelThemeSettings() {
-    setThemeDraft({
-      ...DEFAULT_THEME_SETTINGS,
-      ...(model.project?.theme ?? {})
-    });
+    setThemeLibraryDraft(
+      (model.project?.themes ?? []).map((theme) => ({
+        ...theme,
+        settings: normalizeThemeSettings(theme.settings)
+      }))
+    );
+    setSelectedThemeDraftId(model.project?.activeThemeId ?? model.project?.themes?.[0]?.id ?? DEFAULT_THEME_ID);
     setIsThemeSettingsOpen(false);
   }
 
@@ -6555,122 +6679,164 @@ export default function App() {
             </div>
 
             <div className="json-modal-body model-properties-body theme-settings-body">
-              <section className="panel theme-settings-panel">
-                <div className="panel-label">Theme</div>
-
-                <label className="field-group">
-                  <span>Default Font</span>
-                  <select
-                    value={themeDraft.defaultFont}
-                    onChange={(event) => handleThemeDraftChange("defaultFont", event.target.value)}
-                  >
-                    {THEME_FONT_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
+              <div className="theme-settings-layout">
+                <section className="panel theme-list-panel">
+                  <div className="panel-label">Themes</div>
+                  <div className="theme-list-toolbar">
+                    <button type="button" className="secondary-button" onClick={handleAddThemeDraft}>
+                      Add Theme
+                    </button>
+                    <button
+                      type="button"
+                      className="danger-button subtle-danger-button"
+                      onClick={handleDeleteThemeDraft}
+                      disabled={themeLibraryDraft.length <= 1}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <div className="theme-list-control" role="list" aria-label="Theme list">
+                    {themeLibraryDraft.map((theme) => (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        className={`theme-list-item ${theme.id === selectedThemeDraft?.id ? "selected" : ""}`}
+                        onClick={() => handleSelectThemeDraft(theme.id)}
+                      >
+                        <span className="theme-list-item-name">{theme.name}</span>
+                      </button>
                     ))}
-                  </select>
-                </label>
+                  </div>
+                </section>
 
-                <label className="field-group">
-                  <span>Diagram Fill</span>
-                  <input
-                    type="color"
-                    value={themeDraft.diagramFill}
-                    onChange={(event) => handleThemeDraftChange("diagramFill", event.target.value)}
-                  />
-                </label>
+                {selectedThemeDraft ? (
+                  <section className="panel theme-settings-panel">
+                    <div className="panel-label">Theme</div>
 
-                <label className="field-group">
-                  <span>Entity Font</span>
-                  <select
-                    value={themeDraft.entityFont}
-                    onChange={(event) => handleThemeDraftChange("entityFont", event.target.value)}
-                  >
-                    {THEME_FONT_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <label className="field-group">
+                      <span>Name</span>
+                      <input
+                        type="text"
+                        value={selectedThemeDraft.name}
+                        onChange={(event) => handleThemeNameChange(event.target.value)}
+                      />
+                    </label>
 
-                <label className="field-group">
-                  <span>Entity Fill</span>
-                  <input
-                    type="color"
-                    value={themeDraft.entityFill}
-                    onChange={(event) => handleThemeDraftChange("entityFill", event.target.value)}
-                  />
-                </label>
+                    <label className="field-group">
+                      <span>Default Font</span>
+                      <select
+                        value={selectedThemeDraft.settings.defaultFont}
+                        onChange={(event) => handleThemeDraftChange("defaultFont", event.target.value)}
+                      >
+                        {THEME_FONT_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-                <label className="field-group">
-                  <span>Attribute Font</span>
-                  <select
-                    value={themeDraft.attributeFont}
-                    onChange={(event) => handleThemeDraftChange("attributeFont", event.target.value)}
-                  >
-                    {THEME_FONT_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <label className="field-group">
+                      <span>Diagram Fill</span>
+                      <input
+                        type="color"
+                        value={selectedThemeDraft.settings.diagramFill}
+                        onChange={(event) => handleThemeDraftChange("diagramFill", event.target.value)}
+                      />
+                    </label>
 
-                <label className="field-group">
-                  <span>Relationship Text Font</span>
-                  <select
-                    value={themeDraft.relationshipTextFont}
-                    onChange={(event) => handleThemeDraftChange("relationshipTextFont", event.target.value)}
-                  >
-                    {THEME_FONT_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <label className="field-group">
+                      <span>Entity Font</span>
+                      <select
+                        value={selectedThemeDraft.settings.entityFont}
+                        onChange={(event) => handleThemeDraftChange("entityFont", event.target.value)}
+                      >
+                        {THEME_FONT_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-                <label className="field-group">
-                  <span>Relationship Line Color</span>
-                  <input
-                    type="color"
-                    value={themeDraft.relationshipLineColor}
-                    onChange={(event) => handleThemeDraftChange("relationshipLineColor", event.target.value)}
-                  />
-                </label>
+                    <label className="field-group">
+                      <span>Entity Fill</span>
+                      <input
+                        type="color"
+                        value={selectedThemeDraft.settings.entityFill}
+                        onChange={(event) => handleThemeDraftChange("entityFill", event.target.value)}
+                      />
+                    </label>
 
-                <label className="field-group">
-                  <span>Relationship Line Width</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="8"
-                    step="0.5"
-                    value={themeDraft.relationshipLineWidth}
-                    onChange={(event) => handleThemeDraftChange("relationshipLineWidth", event.target.value)}
-                  />
-                </label>
+                    <label className="field-group">
+                      <span>Attribute Font</span>
+                      <select
+                        value={selectedThemeDraft.settings.attributeFont}
+                        onChange={(event) => handleThemeDraftChange("attributeFont", event.target.value)}
+                      >
+                        {THEME_FONT_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-                <label className="field-group">
-                  <span>FK Column Color</span>
-                  <input
-                    type="color"
-                    value={themeDraft.fkColumnColor}
-                    onChange={(event) => handleThemeDraftChange("fkColumnColor", event.target.value)}
-                  />
-                </label>
+                    <label className="field-group">
+                      <span>Relationship Text Font</span>
+                      <select
+                        value={selectedThemeDraft.settings.relationshipTextFont}
+                        onChange={(event) => handleThemeDraftChange("relationshipTextFont", event.target.value)}
+                      >
+                        {THEME_FONT_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-                <label className="field-group">
-                  <span>PK Column Color</span>
-                  <input
-                    type="color"
-                    value={themeDraft.pkColumnColor}
-                    onChange={(event) => handleThemeDraftChange("pkColumnColor", event.target.value)}
-                  />
-                </label>
-              </section>
+                    <label className="field-group">
+                      <span>Relationship Line Color</span>
+                      <input
+                        type="color"
+                        value={selectedThemeDraft.settings.relationshipLineColor}
+                        onChange={(event) => handleThemeDraftChange("relationshipLineColor", event.target.value)}
+                      />
+                    </label>
+
+                    <label className="field-group">
+                      <span>Relationship Line Width</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="8"
+                        step="0.5"
+                        value={selectedThemeDraft.settings.relationshipLineWidth}
+                        onChange={(event) => handleThemeDraftChange("relationshipLineWidth", event.target.value)}
+                      />
+                    </label>
+
+                    <label className="field-group">
+                      <span>FK Column Color</span>
+                      <input
+                        type="color"
+                        value={selectedThemeDraft.settings.fkColumnColor}
+                        onChange={(event) => handleThemeDraftChange("fkColumnColor", event.target.value)}
+                      />
+                    </label>
+
+                    <label className="field-group">
+                      <span>PK Column Color</span>
+                      <input
+                        type="color"
+                        value={selectedThemeDraft.settings.pkColumnColor}
+                        onChange={(event) => handleThemeDraftChange("pkColumnColor", event.target.value)}
+                      />
+                    </label>
+                  </section>
+                ) : null}
+              </div>
             </div>
 
             <div className="button-row theme-settings-actions">
