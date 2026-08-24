@@ -1788,6 +1788,20 @@ function exportModelToWorkspaceJson(model) {
           name: schema.name ?? dbMeta.schema,
           comment: schema.comment ?? ""
         })),
+    themes: (model.project?.themes?.length > 0
+      ? model.project.themes
+      : [
+          {
+            id: model.project?.activeThemeId ?? DEFAULT_THEME_ID,
+            name: "Default Theme",
+            settings: normalizeThemeSettings(model.project?.theme)
+          }
+        ]).map((theme) => ({
+          id: String(theme.id),
+          name: String(theme.name ?? "Theme"),
+          isActive: String(theme.id) === String(model.project?.activeThemeId ?? DEFAULT_THEME_ID),
+          settings: normalizeThemeSettings(theme.settings)
+        })),
     databases: [],
     catalogs: [],
     subjectAreas: [
@@ -1945,6 +1959,7 @@ function exportModelToWorkspaceJson(model) {
         ? "logical"
         : "physical",
       activeSubjectAreaId,
+      activeThemeId: String(model.project?.activeThemeId ?? DEFAULT_THEME_ID),
       activeDiagramId: String(model.activeDiagramId ?? model.diagrams[0]?.id ?? "1"),
       nextDiagramSeq: highestDiagramSeq + 1,
       nextSubjectAreaSeq: 1
@@ -2195,6 +2210,21 @@ function importWorkspaceModel(payload) {
   const viewMode = String(payload?.meta?.viewMode ?? "physical").toLowerCase() === "logical"
     ? "Logical View"
     : "Physical View";
+  const importedThemes = Array.isArray(workspace?.themes)
+    ? workspace.themes.map((theme, index) => ({
+        id: String(theme?.id ?? `theme-${index + 1}`),
+        name: String(theme?.name ?? `Theme ${index + 1}`),
+        settings: normalizeThemeSettings(theme?.settings ?? theme)
+      }))
+    : [];
+  const importedActiveThemeId =
+    String(
+      payload?.meta?.activeThemeId ??
+        workspace?.activeThemeId ??
+        workspace?.themes?.find?.((theme) => theme?.isActive)?.id ??
+        importedThemes[0]?.id ??
+        DEFAULT_THEME_ID
+    );
 
   return {
     project: {
@@ -2210,6 +2240,12 @@ function importWorkspaceModel(payload) {
         name: schema.name ?? "",
         comment: schema.comment ?? ""
       })),
+      activeThemeId: importedActiveThemeId,
+      themes: importedThemes,
+      theme: normalizeThemeSettings(
+        importedThemes.find((theme) => theme.id === importedActiveThemeId)?.settings ??
+          sampleModel.project?.theme
+      ),
       subjectArea: activeSubjectArea.name ?? "<model>",
       definition: "Drag entities, define attributes, and wire relationships.",
       diagramDefinition: activeDiagram?.definition ?? "",
@@ -2837,14 +2873,9 @@ export default function App() {
       ...(savedAiModelerSettings ?? {})
     })
   );
-  const [themeLibraryDraft, setThemeLibraryDraft] = useState(() =>
-    (initialModel.project?.themes ?? []).map((theme) => ({
-      ...theme,
-      settings: normalizeThemeSettings(theme.settings)
-    }))
-  );
+  const [themeLibraryDraft, setThemeLibraryDraft] = useState(() => normalizeThemeLibrary(initialModel.project).themes);
   const [selectedThemeDraftId, setSelectedThemeDraftId] = useState(
-    () => initialModel.project?.activeThemeId ?? initialModel.project?.themes?.[0]?.id ?? DEFAULT_THEME_ID
+    () => normalizeThemeLibrary(initialModel.project).activeThemeId
   );
   const [aiLoading, setAiLoading] = useState(false);
   const [aiActiveTask, setAiActiveTask] = useState("");
@@ -2993,13 +3024,9 @@ export default function App() {
 
   useEffect(() => {
     if (!isThemeSettingsOpen) {
-      setThemeLibraryDraft(
-        (model.project?.themes ?? []).map((theme) => ({
-          ...theme,
-          settings: normalizeThemeSettings(theme.settings)
-        }))
-      );
-      setSelectedThemeDraftId(model.project?.activeThemeId ?? model.project?.themes?.[0]?.id ?? DEFAULT_THEME_ID);
+      const normalizedThemeLibrary = normalizeThemeLibrary(model.project);
+      setThemeLibraryDraft(normalizedThemeLibrary.themes);
+      setSelectedThemeDraftId(normalizedThemeLibrary.activeThemeId);
     }
   }, [isThemeSettingsOpen, model.project?.themes, model.project?.activeThemeId]);
 
@@ -3599,13 +3626,9 @@ export default function App() {
   }
 
   function handleOpenThemeSettings() {
-    setThemeLibraryDraft(
-      (model.project?.themes ?? []).map((theme) => ({
-        ...theme,
-        settings: normalizeThemeSettings(theme.settings)
-      }))
-    );
-    setSelectedThemeDraftId(model.project?.activeThemeId ?? model.project?.themes?.[0]?.id ?? DEFAULT_THEME_ID);
+    const normalizedThemeLibrary = normalizeThemeLibrary(model.project);
+    setThemeLibraryDraft(normalizedThemeLibrary.themes);
+    setSelectedThemeDraftId(normalizedThemeLibrary.activeThemeId);
     setIsThemeSettingsOpen(true);
   }
 
@@ -3645,13 +3668,9 @@ export default function App() {
   }
 
   function handleCancelThemeSettings() {
-    setThemeLibraryDraft(
-      (model.project?.themes ?? []).map((theme) => ({
-        ...theme,
-        settings: normalizeThemeSettings(theme.settings)
-      }))
-    );
-    setSelectedThemeDraftId(model.project?.activeThemeId ?? model.project?.themes?.[0]?.id ?? DEFAULT_THEME_ID);
+    const normalizedThemeLibrary = normalizeThemeLibrary(model.project);
+    setThemeLibraryDraft(normalizedThemeLibrary.themes);
+    setSelectedThemeDraftId(normalizedThemeLibrary.activeThemeId);
     setIsThemeSettingsOpen(false);
   }
 
@@ -4287,10 +4306,8 @@ export default function App() {
   }
 
   function handleViewJson() {
-    if (!jsonDraft.trim()) {
-      const exportedJson = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
-      setJsonDraft(exportedJson);
-    }
+    const exportedJson = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
+    setJsonDraft(exportedJson);
     setIsJsonViewerOpen(true);
     setStatus("Opened the model JSON viewer.");
   }
@@ -4323,12 +4340,11 @@ export default function App() {
   }
 
   async function handleCopyJson() {
-    const contentToCopy = jsonDraft.trim()
-      ? jsonDraft
-      : JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
+    const contentToCopy = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
 
     try {
       await navigator.clipboard.writeText(contentToCopy);
+      setJsonDraft(contentToCopy);
       setStatus("Copied model JSON to the clipboard.");
     } catch {
       setStatus("Copy failed. Your browser blocked clipboard access.");
@@ -4336,9 +4352,7 @@ export default function App() {
   }
 
   async function handleSaveJsonToFile() {
-    const contentToSave = jsonDraft.trim()
-      ? jsonDraft
-      : JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
+    const contentToSave = JSON.stringify(exportModelToWorkspaceJson(model), null, 2);
     const suggestedName = `${activeDiagram?.name ?? "ER_Diagram_1"}.json`;
 
     try {
@@ -4357,6 +4371,7 @@ export default function App() {
         const writable = await handle.createWritable();
         await writable.write(contentToSave);
         await writable.close();
+        setJsonDraft(contentToSave);
         setStatus("Saved model JSON to a file.");
         return;
       }
@@ -4378,6 +4393,7 @@ export default function App() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+    setJsonDraft(contentToSave);
     setStatus("Downloaded model JSON.");
   }
 
