@@ -27,6 +27,7 @@ export default function LeftSidebar({
   aiLoading,
   aiActiveTask,
   aiElapsedSec,
+  selectedAiTuningObjectCount,
   entityCount,
   viewCount,
   materializedViewCount,
@@ -360,7 +361,7 @@ export default function LeftSidebar({
               ) : (
                 <>
                   <TuningIcon />
-                  <span>AI Tuning</span>
+                  <span>{`AI Tuning${selectedAiTuningObjectCount > 0 ? ` (${selectedAiTuningObjectCount})` : ""}`}</span>
                 </>
               )}
             </button>

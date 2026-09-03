@@ -2673,7 +2673,7 @@ function buildSummaryChartSegments(stats) {
   };
 }
 
-function buildAiTuningObjects(model, summaryScope) {
+function buildAiTuningObjects(model, summaryScope, selectedObjectIds = {}) {
   const flattenEntityFields = (entity) =>
     flattenAllFields(entity.fields ?? []).map((field) => ({
       objectType: "attribute",
@@ -2689,7 +2689,21 @@ function buildAiTuningObjects(model, summaryScope) {
       description: ""
     }));
 
-  const entityObjects = summaryScope.entities.flatMap((entity) => {
+  const selectedEntityIds = new Set(
+    (selectedObjectIds.entityIds ?? []).map((entityId) => String(entityId))
+  );
+  const selectedRelationshipIds = new Set(
+    (selectedObjectIds.relationshipIds ?? []).map((relationshipId) => String(relationshipId))
+  );
+  const hasSelection = selectedEntityIds.size > 0 || selectedRelationshipIds.size > 0;
+  const entitiesToTune = hasSelection
+    ? summaryScope.entities.filter((entity) => selectedEntityIds.has(String(entity.id)))
+    : summaryScope.entities;
+  const relationshipsToTune = hasSelection
+    ? summaryScope.relationships.filter((relationship) => selectedRelationshipIds.has(String(relationship.id)))
+    : summaryScope.relationships;
+
+  const entityObjects = entitiesToTune.flatMap((entity) => {
     const objectType = getEntityObjectType(entity);
     return [
       {
@@ -2720,7 +2734,7 @@ function buildAiTuningObjects(model, summaryScope) {
     ];
   });
 
-  const relationshipObjects = summaryScope.relationships.map((relationship) => ({
+  const relationshipObjects = relationshipsToTune.map((relationship) => ({
     objectType: "relationship",
     objectId: String(relationship.id ?? ""),
     label: `Relationship: ${relationship.name ?? relationship.physicalName ?? relationship.id}`,
@@ -2756,6 +2770,15 @@ function buildAiTuningObjects(model, summaryScope) {
     description: ""
   }));
 
+  const selectedObjects = [
+    ...entityObjects,
+    ...relationshipObjects
+  ];
+
+  if (hasSelection) {
+    return selectedObjects;
+  }
+
   return [
     {
       objectType: "subjectArea",
@@ -2769,8 +2792,7 @@ function buildAiTuningObjects(model, summaryScope) {
       description: ""
     },
     ...diagramObjects,
-    ...entityObjects,
-    ...relationshipObjects,
+    ...selectedObjects,
     ...schemaObjects
   ];
 }
@@ -2979,6 +3001,20 @@ export default function App() {
     () => activeDiagram?.relationships.find((relationship) => relationship.id === selectedRelationshipId) ?? null,
     [activeDiagram, selectedRelationshipId]
   );
+  const selectedAiTuningEntityIds = useMemo(
+    () =>
+      (activeDiagram?.entities ?? [])
+        .filter(
+          (entity) =>
+            selectedEntityIds.includes(entity.id) &&
+            !["drawing", "annotation"].includes(getEntityObjectType(entity))
+        )
+        .map((entity) => entity.id),
+    [activeDiagram, selectedEntityIds]
+  );
+  const selectedAiTuningRelationshipIds = selectedRelationship ? [selectedRelationship.id] : [];
+  const selectedAiTuningObjectCount =
+    selectedAiTuningEntityIds.length + selectedAiTuningRelationshipIds.length;
   const selectedAttribute = useMemo(
     () => findFieldById(selectedEntity?.fields ?? [], selectedAttributeId),
     [selectedEntity, selectedAttributeId]
@@ -4159,10 +4195,15 @@ export default function App() {
   }
 
   async function handleAiTuning() {
+    const isSelectedObjectScan = selectedAiTuningObjectCount > 0;
     setAiLoading(true);
     setAiActiveTask("tuning");
     setAiStartedAt(Date.now());
-    setStatus("AI tuning scan started...");
+    setStatus(
+      isSelectedObjectScan
+        ? `AI tuning scan started for ${selectedAiTuningObjectCount} selected ${selectedAiTuningObjectCount === 1 ? "object" : "objects"}...`
+        : "AI tuning scan started for all model objects..."
+    );
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/modeler/ai/tuning`, {
@@ -4178,7 +4219,10 @@ export default function App() {
           deployment: aiModeler.deployment,
           database: model.project.database,
           databaseVersion: model.project.databaseVersion,
-          objects: buildAiTuningObjects(model, summaryScope)
+          objects: buildAiTuningObjects(model, summaryScope, {
+            entityIds: selectedAiTuningEntityIds,
+            relationshipIds: selectedAiTuningRelationshipIds
+          })
         })
       });
 
@@ -6453,6 +6497,7 @@ export default function App() {
         aiLoading={aiLoading}
         aiActiveTask={aiActiveTask}
         aiElapsedSec={aiElapsedSec}
+        selectedAiTuningObjectCount={selectedAiTuningObjectCount}
         entityCount={activeDiagram?.entities.filter((entity) => getEntityObjectType(entity) === "entity").length ?? 0}
         viewCount={activeDiagram?.entities.filter((entity) => getEntityObjectType(entity) === "view").length ?? 0}
         materializedViewCount={
