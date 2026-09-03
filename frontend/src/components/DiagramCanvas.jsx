@@ -14,6 +14,10 @@ const WORLD_WIDTH = 1600;
 const WORLD_HEIGHT = 1200;
 const WORLD_PADDING = 220;
 
+function isMultiSelectModifier(event) {
+  return event.metaKey || event.ctrlKey;
+}
+
 function estimateTextWidth(text, factor = 9.2) {
   return String(text ?? "").length * factor;
 }
@@ -1022,6 +1026,9 @@ function DrawingLine({
             onPointerDown={(event) => onPointerDown(event, entity.id)}
             onClick={(event) => {
               event.stopPropagation();
+              if (isMultiSelectModifier(event)) {
+                return;
+              }
               onSelect(entity.id, {
                 additive: false,
                 toggle: false
@@ -1034,6 +1041,9 @@ function DrawingLine({
             onPointerDown={(event) => onPointerDown(event, entity.id)}
             onClick={(event) => {
               event.stopPropagation();
+              if (isMultiSelectModifier(event)) {
+                return;
+              }
               onSelect(entity.id, {
                 additive: false,
                 toggle: false
@@ -1049,6 +1059,9 @@ function DrawingLine({
             onPointerDown={(event) => onPointerDown(event, entity.id)}
             onClick={(event) => {
               event.stopPropagation();
+              if (isMultiSelectModifier(event)) {
+                return;
+              }
               onSelect(entity.id, {
                 additive: false,
                 toggle: false
@@ -1061,6 +1074,9 @@ function DrawingLine({
             onPointerDown={(event) => onPointerDown(event, entity.id)}
             onClick={(event) => {
               event.stopPropagation();
+              if (isMultiSelectModifier(event)) {
+                return;
+              }
               onSelect(entity.id, {
                 additive: false,
                 toggle: false
@@ -1275,6 +1291,9 @@ function DrawingCard({
       onPointerDown={(event) => onPointerDown(event, entity.id)}
       onClick={(event) => {
         event.stopPropagation();
+        if (isMultiSelectModifier(event)) {
+          return;
+        }
         onSelect(entity.id, {
           additive: false,
           toggle: false
@@ -1349,6 +1368,9 @@ function AnnotationCard({
       onPointerDown={(event) => onPointerDown(event, entity.id)}
       onClick={(event) => {
         event.stopPropagation();
+        if (isMultiSelectModifier(event)) {
+          return;
+        }
         onSelect(entity.id, {
           additive: false,
           toggle: false
@@ -1469,7 +1491,7 @@ function EntityCard({
       style={{ left: entity.x, top: entity.y, width, height: cardHeight }}
       onPointerDown={(event) => onPointerDown(event, entity.id)}
       onClick={(event) => {
-        if (event.metaKey) {
+        if (isMultiSelectModifier(event)) {
           return;
         }
 
@@ -2029,7 +2051,7 @@ export default function DiagramCanvas({
     const entity = entityMap[entityId];
     const currentSelection = selectedEntityIds.includes(entityId) ? selectedEntityIds : [entityId];
 
-    if (event.metaKey) {
+    if (isMultiSelectModifier(event)) {
       onSelectEntity(entityId, { toggle: true });
       return;
     }
@@ -2556,11 +2578,11 @@ export default function DiagramCanvas({
     interactionState.current = {
       mode: "select",
       start,
-      additive: event.metaKey,
-      baseSelection: event.metaKey ? selectedEntityIds : []
+      additive: isMultiSelectModifier(event),
+      baseSelection: isMultiSelectModifier(event) ? selectedEntityIds : []
     };
 
-    if (!event.metaKey) {
+    if (!isMultiSelectModifier(event)) {
       onSelectRelationship(null);
     }
   }
