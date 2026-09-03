@@ -3015,6 +3015,20 @@ export default function App() {
   const selectedAiTuningRelationshipIds = selectedRelationship ? [selectedRelationship.id] : [];
   const selectedAiTuningObjectCount =
     selectedAiTuningEntityIds.length + selectedAiTuningRelationshipIds.length;
+  const selectedAiCommentEntityIds = useMemo(
+    () =>
+      (activeDiagram?.entities ?? [])
+        .filter((entity) => {
+          const objectType = getEntityObjectType(entity);
+          return (
+            selectedEntityIds.includes(entity.id) &&
+            ["entity", "view", "materializedView"].includes(objectType)
+          );
+        })
+        .map((entity) => entity.id),
+    [activeDiagram, selectedEntityIds]
+  );
+  const selectedAiCommentObjectCount = selectedAiCommentEntityIds.length;
   const selectedAttribute = useMemo(
     () => findFieldById(selectedEntity?.fields ?? [], selectedAttributeId),
     [selectedEntity, selectedAttributeId]
@@ -4025,10 +4039,15 @@ export default function App() {
   }
 
   async function handleAiGenerateComments() {
-    const commentableEntities = (activeDiagram?.entities ?? []).filter((entity) => {
+    const allCommentableEntities = (activeDiagram?.entities ?? []).filter((entity) => {
       const objectType = getEntityObjectType(entity);
       return objectType === "entity" || objectType === "view" || objectType === "materializedView";
     });
+    const isSelectedObjectScan = selectedAiCommentObjectCount > 0;
+    const selectedEntityIdSet = new Set(selectedAiCommentEntityIds);
+    const commentableEntities = isSelectedObjectScan
+      ? allCommentableEntities.filter((entity) => selectedEntityIdSet.has(entity.id))
+      : allCommentableEntities;
 
     if (commentableEntities.length === 0) {
       setStatus("No entities, views, or materialized views are available for AI documentation.");
@@ -4038,7 +4057,11 @@ export default function App() {
     setAiLoading(true);
     setAiActiveTask("comments");
     setAiStartedAt(Date.now());
-    setStatus("Generating AI documentation comments...");
+    setStatus(
+      isSelectedObjectScan
+        ? `Generating AI documentation comments for ${selectedAiCommentObjectCount} selected ${selectedAiCommentObjectCount === 1 ? "object" : "objects"}...`
+        : "Generating AI documentation comments for all model objects..."
+    );
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/modeler/ai/comments`, {
@@ -6498,6 +6521,7 @@ export default function App() {
         aiActiveTask={aiActiveTask}
         aiElapsedSec={aiElapsedSec}
         selectedAiTuningObjectCount={selectedAiTuningObjectCount}
+        selectedAiCommentObjectCount={selectedAiCommentObjectCount}
         entityCount={activeDiagram?.entities.filter((entity) => getEntityObjectType(entity) === "entity").length ?? 0}
         viewCount={activeDiagram?.entities.filter((entity) => getEntityObjectType(entity) === "view").length ?? 0}
         materializedViewCount={

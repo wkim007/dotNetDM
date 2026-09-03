@@ -28,6 +28,7 @@ export default function LeftSidebar({
   aiActiveTask,
   aiElapsedSec,
   selectedAiTuningObjectCount,
+  selectedAiCommentObjectCount,
   entityCount,
   viewCount,
   materializedViewCount,
@@ -334,7 +335,7 @@ export default function LeftSidebar({
               ) : (
                 <>
                   <CommentsIcon />
-                  <span>Generate Comments</span>
+                  <span>{`Generate Comments${selectedAiCommentObjectCount > 0 ? ` (${selectedAiCommentObjectCount})` : ""}`}</span>
                 </>
               )}
             </button>
