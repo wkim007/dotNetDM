@@ -184,6 +184,7 @@ public sealed class AiCommentsRequest
     public string? DatabaseVersion { get; init; }
     public string? SchemaDescription { get; init; }
     public required IReadOnlyList<AiCommentsEntityInput> Entities { get; init; }
+    public required IReadOnlyList<AiCommentsRelationshipInput> Relationships { get; init; }
 }
 
 public sealed class AiCommentsEntityInput
@@ -210,11 +211,20 @@ public sealed class AiCommentsAttributeInput
     public required int Depth { get; init; }
 }
 
+public sealed class AiCommentsRelationshipInput
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public required string PhysicalName { get; init; }
+    public required string Description { get; init; }
+}
+
 public sealed class AiCommentsResponse
 {
     public required string Message { get; init; }
     public required IReadOnlyList<AiEntityCommentResult> EntityComments { get; init; }
     public required IReadOnlyList<AiAttributeCommentResult> AttributeComments { get; init; }
+    public required IReadOnlyList<AiRelationshipDescriptionResult> RelationshipDescriptions { get; init; }
 }
 
 public sealed class AiSummaryInsightsRequest
@@ -321,4 +331,10 @@ public sealed class AiAttributeCommentResult
     public required string AttributeId { get; init; }
     public required string Comment { get; init; }
     public required string Definition { get; init; }
+}
+
+public sealed class AiRelationshipDescriptionResult
+{
+    public required string Id { get; init; }
+    public required string Description { get; init; }
 }

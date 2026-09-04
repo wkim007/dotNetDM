@@ -2385,6 +2385,11 @@ function normalizeRelationship(relationship) {
   };
 }
 
+function hasMeaningfulRelationshipDescription(value) {
+  const description = String(value ?? "").trim();
+  return description.length > 0 && description.toLowerCase() !== "relates_to";
+}
+
 async function readErrorMessage(response, fallbackMessage) {
   try {
     const contentType = response.headers.get("content-type") ?? "";
@@ -3028,7 +3033,9 @@ export default function App() {
         .map((entity) => entity.id),
     [activeDiagram, selectedEntityIds]
   );
-  const selectedAiCommentObjectCount = selectedAiCommentEntityIds.length;
+  const selectedAiCommentRelationshipIds = selectedRelationship ? [selectedRelationship.id] : [];
+  const selectedAiCommentObjectCount =
+    selectedAiCommentEntityIds.length + selectedAiCommentRelationshipIds.length;
   const selectedAttribute = useMemo(
     () => findFieldById(selectedEntity?.fields ?? [], selectedAttributeId),
     [selectedEntity, selectedAttributeId]
@@ -4045,12 +4052,17 @@ export default function App() {
     });
     const isSelectedObjectScan = selectedAiCommentObjectCount > 0;
     const selectedEntityIdSet = new Set(selectedAiCommentEntityIds);
+    const selectedRelationshipIdSet = new Set(selectedAiCommentRelationshipIds);
     const commentableEntities = isSelectedObjectScan
       ? allCommentableEntities.filter((entity) => selectedEntityIdSet.has(entity.id))
       : allCommentableEntities;
+    const allCommentableRelationships = activeDiagram?.relationships ?? [];
+    const commentableRelationships = isSelectedObjectScan
+      ? allCommentableRelationships.filter((relationship) => selectedRelationshipIdSet.has(relationship.id))
+      : allCommentableRelationships;
 
-    if (commentableEntities.length === 0) {
-      setStatus("No entities, views, or materialized views are available for AI documentation.");
+    if (commentableEntities.length === 0 && commentableRelationships.length === 0) {
+      setStatus("No entities, views, materialized views, or relationships are available for AI documentation.");
       return;
     }
 
@@ -4086,6 +4098,14 @@ export default function App() {
             comment: String(entity.comment ?? ""),
             definition: String(entity.definition ?? ""),
             attributes: flattenFieldsForAi(entity.fields ?? [], entity.id)
+          })),
+          relationships: commentableRelationships.map((relationship) => ({
+            id: String(relationship.id),
+            name: String(relationship.name ?? ""),
+            physicalName: String(relationship.physicalName ?? ""),
+            description: hasMeaningfulRelationshipDescription(relationship.description)
+              ? String(relationship.description)
+              : ""
           }))
         })
       });
@@ -4113,6 +4133,12 @@ export default function App() {
           }
         ])
       );
+      const relationshipDescriptionMap = new Map(
+        (result?.relationshipDescriptions ?? []).map((item) => [
+          String(item.id ?? ""),
+          String(item.description ?? "")
+        ])
+      );
 
       setModel((current) => ({
         ...current,
@@ -4138,6 +4164,15 @@ export default function App() {
                 comment: hasComment || !aiEntityDoc ? entity.comment : aiEntityDoc.comment,
                 definition: hasDefinition || !aiEntityDoc ? entity.definition : aiEntityDoc.definition,
                 fields: applyAiAttributeDocs(entity.fields ?? [], entity.id, attributeCommentMap)
+              };
+            }),
+            relationships: (diagram.relationships ?? []).map((relationship) => {
+              const aiDescription = relationshipDescriptionMap.get(String(relationship.id));
+              const hasDescription = hasMeaningfulRelationshipDescription(relationship.description);
+
+              return {
+                ...relationship,
+                description: hasDescription || !aiDescription ? relationship.description : aiDescription
               };
             })
           };

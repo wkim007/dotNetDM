@@ -286,9 +286,10 @@ public class ModelerController : ControllerBase
                 throw new InvalidOperationException("API key is required.");
             }
 
-            if (request.Entities == null || request.Entities.Count == 0)
+            if ((request.Entities == null || request.Entities.Count == 0) &&
+                (request.Relationships == null || request.Relationships.Count == 0))
             {
-                throw new InvalidOperationException("At least one entity, view, or materialized view is required.");
+                throw new InvalidOperationException("At least one entity, view, materialized view, or relationship is required.");
             }
 
             JsonObject aiPayload;
@@ -343,11 +344,22 @@ public class ModelerController : ControllerBase
                 .Where(item => !string.IsNullOrWhiteSpace(item.EntityId) && !string.IsNullOrWhiteSpace(item.AttributeId))
                 .ToList();
 
+            var relationshipDescriptions = (aiPayload["relationshipDescriptions"] as JsonArray ?? [])
+                .OfType<JsonObject>()
+                .Select(item => new AiRelationshipDescriptionResult
+                {
+                    Id = item["id"]?.GetValue<string>() ?? string.Empty,
+                    Description = item["description"]?.GetValue<string>() ?? string.Empty
+                })
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .ToList();
+
             return Ok(new AiCommentsResponse
             {
                 Message = "AI documentation comments generated.",
                 EntityComments = entityComments,
-                AttributeComments = attributeComments
+                AttributeComments = attributeComments,
+                RelationshipDescriptions = relationshipDescriptions
             });
         }
         catch (Exception exception)
@@ -578,9 +590,24 @@ public class ModelerController : ControllerBase
                         },
                         required = new[] { "entityId", "attributeId", "comment", "definition" }
                     }
+                },
+                relationshipDescriptions = new
+                {
+                    type = "array",
+                    items = new
+                    {
+                        type = "object",
+                        additionalProperties = false,
+                        properties = new
+                        {
+                            id = new { type = "string" },
+                            description = new { type = "string" }
+                        },
+                        required = new[] { "id", "description" }
+                    }
                 }
             },
-            required = new[] { "entityComments", "attributeComments" }
+            required = new[] { "entityComments", "attributeComments", "relationshipDescriptions" }
         };
 
     private static object BuildAiSummarySchemaDefinition() =>
@@ -1018,7 +1045,7 @@ public class ModelerController : ControllerBase
             ? "No extra schema description was supplied."
             : request.SchemaDescription.Trim();
 
-        var entityPayload = request.Entities.Select(entity => new
+        var entityPayload = (request.Entities ?? []).Select(entity => new
         {
             id = entity.Id,
             objectType = entity.ObjectType,
@@ -1039,6 +1066,13 @@ public class ModelerController : ControllerBase
                 depth = attribute.Depth
             }).ToArray()
         }).ToArray();
+        var relationshipPayload = (request.Relationships ?? []).Select(relationship => new
+        {
+            id = relationship.Id,
+            name = relationship.Name,
+            physicalName = relationship.PhysicalName,
+            description = relationship.Description
+        }).ToArray();
 
         var httpClient = _httpClientFactory.CreateClient();
         httpClient.Timeout = TimeSpan.FromSeconds(60);
@@ -1058,13 +1092,13 @@ public class ModelerController : ControllerBase
                     {
                         role = "system",
                         content =
-                            "You are a data documentation assistant. Return only JSON matching the provided schema. Generate concise, business-friendly comments and definitions for database objects. Provide output only for objects or attributes with missing comments or definitions."
+                            "You are a data documentation assistant. Return only JSON matching the provided schema. Generate concise, business-friendly comments and definitions for database objects, plus clear verb-phrase descriptions for relationships. Provide output only for missing documentation."
                     },
                     new
                     {
                         role = "user",
                         content =
-                            $"Generate documentation comments and definitions for this {databaseLabel} data model. Use this optional schema description as context: {schemaContext}. Return entityComments for entities, views, and materialized views. Return attributeComments for attributes. Existing comments and definitions should be treated as already complete and do not need replacement. Model payload: {JsonSerializer.Serialize(entityPayload)}"
+                            $"Generate documentation comments and definitions for this {databaseLabel} data model. Use this optional schema description as context: {schemaContext}. Return entityComments for entities, views, and materialized views; attributeComments for attributes; and relationshipDescriptions for relationships without descriptions. Existing documentation should be treated as complete and not replaced. Model payload: {JsonSerializer.Serialize(new { entities = entityPayload, relationships = relationshipPayload })}"
                     }
                 },
                 temperature = 0.2,
@@ -1093,13 +1127,13 @@ public class ModelerController : ControllerBase
                     {
                         role = "system",
                         content =
-                            "You are a data documentation assistant. Return only JSON matching the provided schema. Generate concise, business-friendly comments and definitions for database objects. Provide output only for objects or attributes with missing comments or definitions."
+                            "You are a data documentation assistant. Return only JSON matching the provided schema. Generate concise, business-friendly comments and definitions for database objects, plus clear verb-phrase descriptions for relationships. Provide output only for missing documentation."
                     },
                     new
                     {
                         role = "user",
                         content =
-                            $"Generate documentation comments and definitions for this {databaseLabel} data model. Use this optional schema description as context: {schemaContext}. Return entityComments for entities, views, and materialized views. Return attributeComments for attributes. Existing comments and definitions should be treated as already complete and do not need replacement. Model payload: {JsonSerializer.Serialize(entityPayload)}"
+                            $"Generate documentation comments and definitions for this {databaseLabel} data model. Use this optional schema description as context: {schemaContext}. Return entityComments for entities, views, and materialized views; attributeComments for attributes; and relationshipDescriptions for relationships without descriptions. Existing documentation should be treated as complete and not replaced. Model payload: {JsonSerializer.Serialize(new { entities = entityPayload, relationships = relationshipPayload })}"
                     }
                 },
                 temperature = 0.2,
